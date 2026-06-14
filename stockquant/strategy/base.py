@@ -319,3 +319,48 @@ class BaseStrategy(ABC):
         """内部调用：设置 _current_bars 后调用 on_bar"""
         self._current_bars = bars
         self.on_bar(bars)
+
+    # ------------------------------------------------------------------
+    # 指标可视化
+    # ------------------------------------------------------------------
+
+    def plot_indicator(
+        self,
+        proxy,
+        name: Optional[str] = None,
+        title: Optional[str] = None,
+    ):
+        """
+        在策略中绘制指标曲线。
+
+        参数
+        ----
+        proxy : IndicatorProxy 或 dict
+            单条曲线传入 IndicatorProxy；多输出指标（MACD/BOLL/KDJ）可传 dict。
+        name : str, 可选
+            图例名称（仅单条曲线时有效）。
+        title : str, 可选
+            图表标题。
+
+        Returns
+        -------
+        返回 plotly Figure 或 matplotlib Figure。
+        """
+        import logging
+
+        logger = logging.getLogger("stockquant.strategy")
+
+        if isinstance(proxy, dict):
+            # 多输出指标：绘制每条曲线
+            for k, v in proxy.items():
+                if isinstance(v, IndicatorProxy):
+                    logger.info(f"[plot_indicator] {self.name}: plotting '{k}'")
+                    v.plot(title=title or f"{self.name} - {k}")
+            return None
+
+        if isinstance(proxy, IndicatorProxy):
+            logger.info(f"[plot_indicator] {self.name}: plotting '{name or proxy._name}'")
+            return proxy.plot(title=title)
+
+        logger.warning(f"[plot_indicator] {self.name}: 不支持的类型 {type(proxy)}")
+        return None
