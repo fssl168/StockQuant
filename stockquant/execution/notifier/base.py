@@ -62,3 +62,15 @@ class Notifier(ABC):
             else:
                 lines.append(f"  {k}: {v}")
         return self.send("\n".join(lines), title="回测完成")
+
+    def send_ai_signal(self, signal_data: Dict[str, Any]) -> bool:
+        """发送 AI 交易信号（默认空实现，子类可覆盖）"""
+        return False
+
+    def send_daily_report(self, report: Dict[str, Any]) -> bool:
+        """发送每日收盘总结（默认空实现，子类可覆盖）"""
+        return False
+
+    def send_risk_alert(self, alert_data: Dict[str, Any]) -> bool:
+        """发送风控告警（默认空实现，子类可覆盖）"""
+        return False

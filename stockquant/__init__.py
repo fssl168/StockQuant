@@ -23,7 +23,10 @@ from stockquant.engine import (
 
 # 策略
 from stockquant.strategy.base import BaseStrategy
-from stockquant.strategy.signal import Signal, SignalSide, SignalSource, SignalManager
+from stockquant.strategy.signal import (
+    Signal, SignalSide, SignalSource, SignalManager,
+    SignalAuditLog, convert_ai_to_strategy,
+)
 from stockquant.strategy.templates import (
     DualMACrossoverStrategy,
     RSIReversalStrategy,
@@ -48,7 +51,10 @@ from stockquant.data import DataFeed, DataCache, CSVFeed
 from stockquant.data.providers import BaoStockFeed
 
 # AI
-from stockquant.ai import BacktestAgent
+from stockquant.ai import (
+    BacktestAgent, IndicatorAgent, RiskAgent,
+    MarketState, DynamicRiskParams, MarketEnvironment,
+)
 
 # 报表
 from stockquant.analytics import ReportGenerator
@@ -82,7 +88,8 @@ __all__ = [
     # 数据
     "DataFeed", "DataCache", "CSVFeed", "BaoStockFeed",
     # AI
-    "BacktestAgent",
+    "BacktestAgent", "IndicatorAgent", "RiskAgent",
+    "MarketState", "DynamicRiskParams", "MarketEnvironment",
     # 报表
     "ReportGenerator",
     # 通知器

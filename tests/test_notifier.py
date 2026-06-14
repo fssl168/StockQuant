@@ -175,3 +175,47 @@ class TestTelegramNotifier:
             )
             result = notifier.send("测试消息")
             assert result is False
+
+    def test_send_ai_signal(self):
+        """AI 信号推送"""
+        with patch("stockquant.execution.notifier.telegram.requests.post") as mock_post:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {"ok": True}
+            mock_post.return_value = mock_resp
+
+            from stockquant.execution.notifier.telegram import TelegramNotifier
+
+            notifier = TelegramNotifier(
+                bot_token="123456:ABC-DEF",
+                chat_id="-1001234567890",
+            )
+            result = notifier.send_ai_signal({
+                "symbol": "sh600519",
+                "side": "BUY",
+                "confidence": 0.75,
+                "reasoning": ["MACD 金叉", "情绪转好"],
+            })
+            assert result is True
+
+    def test_send_risk_alert(self):
+        """风控告警推送"""
+        with patch("stockquant.execution.notifier.telegram.requests.post") as mock_post:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {"ok": True}
+            mock_post.return_value = mock_resp
+
+            from stockquant.execution.notifier.telegram import TelegramNotifier
+
+            notifier = TelegramNotifier(
+                bot_token="123456:ABC-DEF",
+                chat_id="-1001234567890",
+            )
+            result = notifier.send_risk_alert({
+                "symbol": "sh600519",
+                "rule": "max_daily_loss",
+                "severity": "warning",
+                "action": "暂停开仓",
+            })
+            assert result is True

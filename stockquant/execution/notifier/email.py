@@ -75,3 +75,54 @@ class EmailNotifier:
         except Exception as e:
             logger.error(f"Email send failed: {e}", exc_info=True)
             return False
+
+    def send_ai_signal(self, signal_data: dict) -> bool:
+        """发送 AI 交易信号"""
+        symbol = signal_data.get("symbol", "?")
+        side = signal_data.get("side", "?")
+        confidence = signal_data.get("confidence", 0)
+        reasoning = signal_data.get("reasoning", [])
+
+        subject = f"AI 信号: {symbol} {'买入' if side == 'BUY' else '卖出'}"
+        html = f"""
+        <h3>AI 交易信号建议</h3>
+        <table border="1" cellpadding="5">
+        <tr><td><b>标的</b></td><td>{symbol}</td></tr>
+        <tr><td><b>方向</b></td><td>{'买入' if side == 'BUY' else '卖出'}</td></tr>
+        <tr><td><b>置信度</b></td><td>{confidence:.1%}</td></tr>
+        """
+        if signal_data.get("target_price"):
+            html += f"<tr><td><b>目标价</b></td><td>{signal_data['target_price']:.2f}</td></tr>"
+        if signal_data.get("target_quantity"):
+            html += f"<tr><td><b>数量</b></td><td>{signal_data['target_quantity']}</td></tr>"
+        if reasoning:
+            html += "<tr><td><b>推理链</b></td><td><ol>"
+            for r in reasoning:
+                html += f"<li>{r}</li>"
+            html += "</ol></td></tr>"
+        html += "</table>"
+        return self.send(html, title=subject)
+
+    def send_daily_report(self, report: dict) -> bool:
+        """发送每日收盘总结"""
+        date = report.get("date", "")
+        strategies = report.get("strategies", [])
+        top_signals = report.get("top_signals", [])
+        risk_status = report.get("risk_status", "正常")
+
+        subject = f"StockQuant 日终报告 {date}"
+        html = f"<h3>StockQuant 日终报告 — {date}</h3>"
+        html += f"<p>风控状态: <b>{risk_status}</b></p>"
+        if strategies:
+            html += "<h4>策略表现</h4><table border='1' cellpadding='5'>"
+            html += "<tr><th>策略</th><th>收益率</th><th>夏普</th><th>回撤</th></tr>"
+            for s in strategies:
+                html += f"<tr><td>{s.get('name','?')}</td><td>{s.get('return','?')}</td>"
+                html += f"<td>{s.get('sharpe','?')}</td><td>{s.get('drawdown','?')}</td></tr>"
+            html += "</table>"
+        if top_signals:
+            html += "<h4>今日 AI 信号</h4><ul>"
+            for sig in top_signals:
+                html += f"<li>{sig.get('symbol','?')} {sig.get('side','?')} conf={sig.get('confidence',0):.0%}</li>"
+            html += "</ul>"
+        return self.send(html, title=subject)

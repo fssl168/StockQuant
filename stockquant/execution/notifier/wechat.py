@@ -68,3 +68,15 @@ class WeChatNotifier:
         except Exception as e:
             logger.error(f"WeChat send failed: {e}", exc_info=True)
             return False
+
+    def send_ai_signal(self, signal_data: dict) -> bool:
+        """发送 AI 交易信号"""
+        symbol = signal_data.get("symbol", "?")
+        side = signal_data.get("side", "?")
+        confidence = signal_data.get("confidence", 0)
+        reasoning = signal_data.get("reasoning", [])
+
+        content = f"[AI信号] {symbol} {'买入' if side == 'BUY' else '卖出'} 置信度:{confidence:.0%}"
+        if reasoning:
+            content += f"\n推理: " + " | ".join(reasoning[:3])
+        return self.send(content)

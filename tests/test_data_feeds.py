@@ -7,6 +7,7 @@ import tempfile
 import numpy as np
 import pytest
 
+from stockquant.data.providers.parquet_feed import ParquetFeed
 from stockquant.data.providers.sqlite_feed import SQLiteFeed
 
 # Parquet requires pyarrow which is optional

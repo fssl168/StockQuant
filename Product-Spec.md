@@ -6,7 +6,7 @@
 > **更新日期**：2026-06-14（项目经理复核，修复 14 个问题）
 > **状态**：Ready for Development
 
----
+***
 
 ## 1. 产品概述
 
@@ -20,11 +20,11 @@ StockQuant 2.0 是一个面向**专业量化开发者**的**AI 原生机构级**
 
 ### 1.2 目标用户
 
-| 角色 | 描述 | 核心诉求 |
-|------|------|----------|
-| 资深个人量化开发者 | 有多年实盘经验，从入门工具进阶 | 策略框架成熟、执行稳定、数据可靠、上手快速 |
-| 专业量化研究员 | 在私募/券商自营/基金工作 | 回测可信、多策略并行、风控合规 |
-| 金融工程学生/从业者 | 学术研究+实战 | 接口清晰、文档完善、指标全面 |
+| 角色         | 描述              | 核心诉求                  |
+| ---------- | --------------- | --------------------- |
+| 资深个人量化开发者  | 有多年实盘经验，从入门工具进阶 | 策略框架成熟、执行稳定、数据可靠、上手快速 |
+| 专业量化研究员    | 在私募/券商自营/基金工作   | 回测可信、多策略并行、风控合规       |
+| 金融工程学生/从业者 | 学术研究+实战         | 接口清晰、文档完善、指标全面        |
 
 > **渐进式平台定位**：StockQuant 2.0 既支持入门用户通过自然语言快速开始（5 分钟第一个回测），也支持专业用户通过完整 API 构建机构级策略。简单场景简单用，复杂场景深度用。
 
@@ -42,17 +42,17 @@ StockQuant 2.0 以 AI 为中枢，覆盖量化交易全流程：
     └──────────────────── 反馈闭环 ───────────────────────────────────────────────┘
 ```
 
-| 阶段 | 传统量化 | StockQuant 2.0 AI 增强 |
-|------|---------|----------------------|
+| 阶段   | 传统量化      | StockQuant 2.0 AI 增强                |
+| ---- | --------- | ----------------------------------- |
 | 数据采集 | 被动获取结构化数据 | AI Agent 主动爬取新闻、公告、研报、社交媒体，结构化存入数据湖 |
-| 指标计算 | 手工编写技术指标 | AI 自动推荐最优指标组合，生成并回测候选指标 |
-| 策略配置 | 手动编写策略代码 | AI 对话式生成策略、自然语言描述策略意图、自动参数调优 |
-| 回测验证 | 回测后看报表 | AI 自动解读回测结果，指出问题，给出优化建议 |
-| 实时盯盘 | 手动设置条件单 | AI 实时分析行情 + 新闻 + 资金流，主动推送机会/风险 |
-| 辅助决策 | 依赖技术指标 | AI 综合技术面 + 基本面 + 消息面，生成交易信号建议 |
-| 风控执行 | 硬编码规则 | AI 动态调整风控参数，根据市场环境自适应 |
+| 指标计算 | 手工编写技术指标  | AI 自动推荐最优指标组合，生成并回测候选指标             |
+| 策略配置 | 手动编写策略代码  | AI 对话式生成策略、自然语言描述策略意图、自动参数调优        |
+| 回测验证 | 回测后看报表    | AI 自动解读回测结果，指出问题，给出优化建议             |
+| 实时盯盘 | 手动设置条件单   | AI 实时分析行情 + 新闻 + 资金流，主动推送机会/风险      |
+| 辅助决策 | 依赖技术指标    | AI 综合技术面 + 基本面 + 消息面，生成交易信号建议       |
+| 风控执行 | 硬编码规则     | AI 动态调整风控参数，根据市场环境自适应               |
 
----
+***
 
 ## 2. 核心设计理念
 
@@ -92,26 +92,26 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 ### 2.2 与 v1 的根本差异
 
-| 维度 | v1（现状） | v2（目标） |
-|------|-----------|-----------|
-| 回测引擎 | 手动逐 Bar 循环 | 事件驱动引擎（EventEngine + EventQueue） |
-| 订单管理 | 直接写 CSV | 完整 OMS，5 种订单类型，生命周期管理 |
-| 投资组合 | 单标的、单方向 | 多资产、多空双向、仓位聚合 |
-| 策略抽象 | 无基类，自由写类 | BaseStrategy + 生命周期钩子 + AI 策略生成 |
-| 回测指标 | 4 个（收益/回撤/胜率/利润） | 30+ 指标 + AI 自动解读 |
-| 佣金/滑点 | 零建模 | 完整 A 股费用模型（印花税 0.05% + 佣金 + 过户费 + 滑点） |
-| 实盘交易 | easytrader 同花顺 GUI 自动化 | 券商官方 API（中泰 XTP / CTP） + 模拟盘 |
-| 数据层 | 硬编码多个数据源 | DataFeed 抽象接口 + 本地缓存 + AI 数据采集 |
-| 可视化 | matplotlib 简单曲线 | Plotly 交互式 + HTML 报表 + Streamlit Dashboard + AI 图表解读 |
-| AI 能力 | 无 | AI Agent 全流程覆盖（采集/指标/策略/回测/监控/风控） |
-| 测试 | 无 | pytest 全覆盖 + CI/CD |
-| 部署 | pip install | Docker + Helm |
-| AI 记忆系统 | 无 | 三级记忆架构（L1/L2/L3） |
-| AI 反幻觉 | 无 | 五步纠正 + 幻觉数据库 |
-| AI 数据存储 | 无 | SQLite/PostgreSQL + ChromaDB 向量库 |
-| AI 配置机制 | 无 | YAML 配置驱动 |
+| 维度      | v1（现状）                 | v2（目标）                                               |
+| ------- | ---------------------- | ---------------------------------------------------- |
+| 回测引擎    | 手动逐 Bar 循环             | 事件驱动引擎（EventEngine + EventQueue）                     |
+| 订单管理    | 直接写 CSV                | 完整 OMS，5 种订单类型，生命周期管理                                |
+| 投资组合    | 单标的、单方向                | 多资产、多空双向、仓位聚合                                        |
+| 策略抽象    | 无基类，自由写类               | BaseStrategy + 生命周期钩子 + AI 策略生成                      |
+| 回测指标    | 4 个（收益/回撤/胜率/利润）       | 30+ 指标 + AI 自动解读                                     |
+| 佣金/滑点   | 零建模                    | 完整 A 股费用模型（印花税 0.05% + 佣金 + 过户费 + 滑点）                |
+| 实盘交易    | easytrader 同花顺 GUI 自动化 | 券商官方 API（中泰 XTP / CTP） + 模拟盘                         |
+| 数据层     | 硬编码多个数据源               | DataFeed 抽象接口 + 本地缓存 + AI 数据采集                       |
+| 可视化     | matplotlib 简单曲线        | Plotly 交互式 + HTML 报表 + Streamlit Dashboard + AI 图表解读 |
+| AI 能力   | 无                      | AI Agent 全流程覆盖（采集/指标/策略/回测/监控/风控）                    |
+| 测试      | 无                      | pytest 全覆盖 + CI/CD                                   |
+| 部署      | pip install            | Docker + Helm                                        |
+| AI 记忆系统 | 无                      | 三级记忆架构（L1/L2/L3）                                     |
+| AI 反幻觉  | 无                      | 五步纠正 + 幻觉数据库                                         |
+| AI 数据存储 | 无                      | SQLite/PostgreSQL + ChromaDB 向量库                     |
+| AI 配置机制 | 无                      | YAML 配置驱动                                            |
 
----
+***
 
 ## 3. 功能需求
 
@@ -128,6 +128,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 回测进度条 + 进度百分比实时显示
 
 **验收标准**：
+
 - 回测速度：日线 10 年数据，5 只股票，单核 ≥ 5000 Bar/秒
 - 支持 1min 数据回测，10 年数据量 ≥ 500 Bar/秒
 - 事件派发零丢失（通过集成测试验证）
@@ -147,6 +148,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 支持涨跌停板限制（主板 10%、创业板/科创板 20%）
 
 **验收标准**：
+
 - 限价单按价格优先、时间优先原则撮合
 - 市价单按当前 Bar 收盘价撮合（可配置）
 - 止损单在触发后自动转限价单
@@ -167,6 +169,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 支持多策略共享同一个 Portfolio
 
 **验收标准**：
+
 - 单笔买入 100 股，价格 50 元，佣金 0.025%，过户费 0.001%，冻结资金 = 50 × 100 × (1 + 0.025% + 0.001%) + 0.001%
 - 全部卖出后权益变化与手工计算一致（误差 < 0.01 元）
 - 多策略并发下单不出现资金超买
@@ -186,6 +189,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 日志：`self.log()` 记录策略运行日志
 
 **验收标准**：
+
 - MA 交叉策略：EMA(5) 上穿 EMA(20) 买入，下穿卖出，回测结果与手工计算一致
 - 参数优化时策略自动以不同参数运行
 - 策略生命周期钩子按正确顺序调用
@@ -198,12 +202,15 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 **功能描述**：
 
 **收益类指标**：
+
 - 累计收益率、年化收益率、超额收益率（相对基准）
 
 **风险类指标**：
+
 - 最大回撤、最大回撤持续时间、平均回撤、回撤恢复时间
 
 **风险调整后收益**：
+
 - Sharpe Ratio（无风险利率可配置，默认 2.5% 存款利率）
 - Sortino Ratio
 - Calmar Ratio
@@ -212,11 +219,13 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - Treynor Ratio
 
 **交易统计**：
+
 - 总交易次数、胜率、平均盈利/亏损、盈亏比
 - 最长连盈/连亏次数
 - 平均每笔收益、总手续费、总滑点
 
 **其他指标**：
+
 - SQN（System Quality Number）
 - Kelly %
 - 月度/年度收益表
@@ -225,6 +234,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 波动率（日/周/年）
 
 **验收标准**：
+
 - Sharpe Ratio 计算结果与 numpy/pandas 手工计算一致（误差 < 1e-4）
 - 报告包含所有 30+ 指标
 - 支持自定义基准（默认沪深 300）
@@ -242,6 +252,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 三种 Broker 共享相同接口：`place_order()`、`cancel_order()`、`get_positions()`、`get_balance()`、`get_history()`
 
 **验收标准**：
+
 - 同一策略在 BacktestBroker 和 PaperBroker 下生成的交易记录一致（允许滑点差异）
 - 切换 Broker 只需修改一行配置代码
 
@@ -263,6 +274,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 费用在成交时自动扣除
 
 **验收标准**：
+
 - 买入 10000 元股票，扣除后实际成交 = 10000 × (1 + 0.025% + 0.001%)
 - 卖出 10000 元股票，扣除后实际收入 = 10000 × (1 - 0.025% - 0.05% - 0.001%)
 - 滑点模型在回测中正确应用
@@ -281,6 +293,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 支持 Walk-Forward 分析（滚动窗口优化）
 
 **验收标准**：
+
 - 100 组参数在 4 核机器上的优化时间 < 单组时间的 4 倍（证明并行有效）
 - 输出结果包含所有参数组合的完整指标
 - Walk-Forward 正确划分训练/测试窗口
@@ -304,6 +317,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 支持全局熔断：市场单日跌幅超过 5% 暂停所有交易
 
 **验收标准**：
+
 - 违反任一风控规则时订单被拒绝，日志记录原因
 - 累计回撤达到 15% 后策略继续运行但不再下单
 - 风控检查耗时 < 1ms/订单
@@ -323,6 +337,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 支持组合使用（如：Kelly 计算基础仓位 × ATR 调整）
 
 **验收标准**：
+
 - 各仓位管理算法计算结果与手工计算一致
 - 仓位大小受风控模块限制（不超限）
 
@@ -351,6 +366,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
   - 本地缓存路径可配置
 
 **验收标准**：
+
 - 缓存命中时数据读取速度 > 直接 API 调用 10 倍
 - 切换数据源只需修改 `Cerebro.adddata(DataFeed("BaoStock", ...))`
 - Parquet 缓存写入 ≤ 500ms/千行
@@ -368,6 +384,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 模拟盘成绩与回测结果对比
 
 **验收标准**：
+
 - 模拟盘与回测结果误差 < 1%（允许实时数据与回测数据微小差异）
 - 模拟盘期间策略正常运行 ≥ 24 小时无崩溃
 
@@ -391,6 +408,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 支持自定义报表模板（Jinja2）
 
 **验收标准**：
+
 - HTML 报表包含所有图表和指标
 - PDF 报表排版美观，支持中文
 - 报表生成时间 < 5 秒（1000 笔交易以内）
@@ -443,6 +461,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 合规性检查（符合券商用户协议）
 
 **验收标准**：
+
 - 通过券商 API 成功下单并成交（模拟账户验证）
 - 订单审计日志完整记录所有操作
 - 实盘和模拟盘使用相同策略代码
@@ -462,7 +481,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
   - 回测完成通知
   - 定时报告（每日收盘后推送日总结）
 
----
+***
 
 ### F019 信号管线系统（P0）
 
@@ -482,12 +501,12 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
   - 仲裁规则可配置：默认"保守模式"（AI 否决时暂停，AI 建议时仍需策略确认）
 - **信号优先级矩阵**：
 
-| 信号来源 | 优先级 | 是否需要人工确认 | 可自动执行 |
-|----------|--------|------------------|-----------|
-| 传统策略信号 | P0 | 否 | 是 |
-| F024 盯盘信号 | P1 | 否（推送） | 否 |
-| F025 决策信号 | P1 | 是（半自动/全自动） | 是（需授权） |
-| AI 升华建议 | P2 | 是 | 否 |
+| 信号来源      | 优先级 | 是否需要人工确认   | 可自动执行  |
+| --------- | --- | ---------- | ------ |
+| 传统策略信号    | P0  | 否          | 是      |
+| F024 盯盘信号 | P1  | 否（推送）      | 否      |
+| F025 决策信号 | P1  | 是（半自动/全自动） | 是（需授权） |
+| AI 升华建议   | P2  | 是          | 否      |
 
 - **A 股规则约束**（所有信号必须满足）：
   - 数量必须是 100 的整数倍
@@ -496,12 +515,13 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
   - 建议需包含预估费用（佣金 0.025% + 印花税 0.05% 卖方 + 过户费 0.001%）
 
 **验收标准**：
+
 - AI 信号到策略信号的转换延迟 < 100ms
 - 信号冲突解决成功率 ≥ 90%
 - 所有 AI 信号 100% 通过 A 股规则校验
 - 信号过期自动失效，不会触发过期交易
 
----
+***
 
 ### F020 AI 信息处理全流程（P0）
 
@@ -509,7 +529,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 **核心设计**：信息处理全流程 + 记忆系统 + 反幻觉系统三位一体，记忆与反幻觉不是外挂模块，而是每个环节的内建能力。
 
----
+***
 
 #### 信息处理全流程架构
 
@@ -589,7 +609,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 输出决策建议 → 反幻觉终审 → 推送用户 / 自动执行
 ```
 
----
+***
 
 #### 20.1 环节1 — 信息采集（记忆+反幻觉内建）
 
@@ -616,6 +636,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
    - 与 L3 中"已知噪音模式"对比（如标题党模板、营销号模板），自动标记
 
 **能力要求**：
+
 - 支持配置化数据源（`data_sources.yaml`）
 - 自动检测数据源变更（如页面结构调整）并告警
 - 数据采集频率可配置（实时/分钟级/小时级/日级）
@@ -623,13 +644,14 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 所有采集操作自动记录到审计日志
 
 **验收标准**：
+
 - 新闻采集延迟 < 5 分钟（从发布到入库）
 - 来源验证对已采集数据源 100% 准确
 - 采集去重准确率 ≥ 99%
 - 事实初筛检出率 ≥ 90%（与人工标记对比）
 - 支持 ≥ 20 个数据源并行采集
 
----
+***
 
 #### 20.2 环节2 — 信息降噪（记忆+反幻觉内建）
 
@@ -653,12 +675,13 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
    - 合并后的摘要存入 L2，标记为"压缩摘要"
 
 **验收标准**：
+
 - 降噪后冗余内容保留率 ≤ 5%
 - 信源降权基于历史准确度数据，非主观判断
 - 时效性降权可审计（记录降权原因和依据）
 - 一致性过滤检出率 ≥ 85%
 
----
+***
 
 #### 20.3 环节3 — 信息总结（记忆+反幻觉内建）
 
@@ -688,6 +711,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
    - 验证失败的总结 → 进入人工审核队列，记录到幻觉数据库
 
 **总结策略**：
+
 - **会话级总结**：每次 AI 对话开始前，自动总结近期与查询标的相关的上下文，提炼为 3-5 条关键摘要
 - **日级总结**：每日收盘后自动生成"交易日报"（重要信息按标的分类 + 策略运行状态 + AI 建议与执行结果 + 市场状态变化）
 - **周级/月度总结**：市场状态 + 策略表现 + 关键信息时间线 + 信息准确度回顾
@@ -697,13 +721,14 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
   - 压缩前后核心事实保留率 ≥ 95%
 
 **验收标准**：
+
 - 总结准确率 ≥ 90%（与人工摘要对比）
 - 总结后事实验证通过率 ≥ 99%
 - 总结中无来源标注的比例 < 1%
 - 会话级总结生成延迟 < 2 秒
 - 记忆压缩后核心事实保留率 ≥ 95%
 
----
+***
 
 #### 20.4 环节4 — 信息升华（记忆+反幻觉内建）
 
@@ -734,12 +759,13 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 6. **输出**：形成可执行的交易建议或策略参数建议
 
 **验收标准**：
+
 - 每条升华结论必须附带完整推理链（100% 有来源引用）
 - 交叉验证一致率 ≥ 80%
 - 升华结论与实际市场表现的对标准确率 ≥ 65%
 - 无来源引用的结论标记为"低置信度"并附加警告
 
----
+***
 
 #### 20.5 全局记忆管理（贯穿全部四个环节）
 
@@ -747,24 +773,24 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 **记忆分层架构**：
 
-| 层级 | 寿命 | 存储 | 容量 | 内容 |
-|------|------|------|------|------|
-| L1 工作记忆 | 当前会话（盘前→收盘） | 内存 | ~100 条关键信息 | 当前关注标的、策略状态、最近 5 条新闻摘要、持仓状态 |
-| L2 短期记忆 | 可配置（7/14/30/60/90 天） | SQLite/PostgreSQL | 百万条记录 | 原始采集数据、分析结论、交易记录、用户反馈 |
-| L3 长期记忆 | 永久（除非遗忘机制触发） | PostgreSQL | 核心知识 | 已验证洞察、高置信度市场规律、用户手动维护知识库 |
+| 层级      | 寿命                   | 存储                | 容量          | 内容                          |
+| ------- | -------------------- | ----------------- | ----------- | --------------------------- |
+| L1 工作记忆 | 当前会话（盘前→收盘）          | 内存                | \~100 条关键信息 | 当前关注标的、策略状态、最近 5 条新闻摘要、持仓状态 |
+| L2 短期记忆 | 可配置（7/14/30/60/90 天） | SQLite/PostgreSQL | 百万条记录       | 原始采集数据、分析结论、交易记录、用户反馈       |
+| L3 长期记忆 | 永久（除非遗忘机制触发）         | PostgreSQL        | 核心知识        | 已验证洞察、高置信度市场规律、用户手动维护知识库    |
 
 **记忆写入规则**（每个环节的写入策略）：
 
-| 环节 | 写入内容 | 写入层级 | 触发条件 |
-|------|----------|----------|----------|
-| 采集 | 原始数据 + 初步分析 | L2 | 所有成功采集的数据 |
-| 采集 | 低信源/噪音模式 | L3 | 用户标记或多次验证为低质量 |
-| 降噪 | 冗余压缩摘要 | L2 | 相似度 > 95% 的合并 |
-| 降噪 | 信源信用度变化 | L3 | 信源准确度历史变化 |
-| 总结 | 会话/日/周/月总结 | L2（常规）/ L3（重大） | 总结验证通过 |
-| 总结 | 用户修正内容 | L3 | 用户编辑确认 |
-| 升华 | 已验证洞察 | L3 | 交叉验证通过 |
-| 升华 | 失败的洞察 | 幻觉数据库 | 验证失败 |
+| 环节 | 写入内容        | 写入层级           | 触发条件          |
+| -- | ----------- | -------------- | ------------- |
+| 采集 | 原始数据 + 初步分析 | L2             | 所有成功采集的数据     |
+| 采集 | 低信源/噪音模式    | L3             | 用户标记或多次验证为低质量 |
+| 降噪 | 冗余压缩摘要      | L2             | 相似度 > 95% 的合并 |
+| 降噪 | 信源信用度变化     | L3             | 信源准确度历史变化     |
+| 总结 | 会话/日/周/月总结  | L2（常规）/ L3（重大） | 总结验证通过        |
+| 总结 | 用户修正内容      | L3             | 用户编辑确认        |
+| 升华 | 已验证洞察       | L3             | 交叉验证通过        |
+| 升华 | 失败的洞察       | 幻觉数据库          | 验证失败          |
 
 **遗忘机制**（贯穿全部环节）：
 
@@ -779,7 +805,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 检索响应时间 < 200ms
 - Top-K 注入决策 Prompt
 
----
+***
 
 #### 20.6 全局反幻觉机制（贯穿全部四个环节）
 
@@ -789,18 +815,19 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 **各环节的反幻觉检查点**：
 
-| 环节 | 检查点 | 检查方式 | 结果处理 |
-|------|--------|----------|----------|
-| **采集** | 来源验证 | 与 L2 中已验证数据源对比 URL | 不一致 → 标记低置信度 |
-| **采集** | 事实初筛 | 与 L2/L3 中缓存数据对比 | 冲突 → 标记待核实 → 通知用户 |
-| **降噪** | 一致性过滤 | 与 L3 中"已证伪信息列表"对比 | 匹配 → 自动过滤 |
-| **总结** | Prompt 约束 | 注入事实清单 + 禁止编造规则 | 强制 LLM 仅基于检索内容总结 |
-| **总结** | 总结后验证 | 五步检测中的事实验证 + 来源验证 | 失败 → 进入人工审核 |
-| **升华** | 推理链验证 | 每步推理必须有记忆来源 | 无来源 → 降级为低置信度 |
-| **升华** | 交叉验证 | 第二 AI/规则引擎独立评估 | 不一致 → 触发人工审核 |
-| **全部** | 置信度评分 | 综合各环节验证结果打分 | 低分 → 标记警告 / 拒绝输出 |
+| 环节     | 检查点       | 检查方式               | 结果处理              |
+| ------ | --------- | ------------------ | ----------------- |
+| **采集** | 来源验证      | 与 L2 中已验证数据源对比 URL | 不一致 → 标记低置信度      |
+| **采集** | 事实初筛      | 与 L2/L3 中缓存数据对比    | 冲突 → 标记待核实 → 通知用户 |
+| **降噪** | 一致性过滤     | 与 L3 中"已证伪信息列表"对比  | 匹配 → 自动过滤         |
+| **总结** | Prompt 约束 | 注入事实清单 + 禁止编造规则    | 强制 LLM 仅基于检索内容总结  |
+| **总结** | 总结后验证     | 五步检测中的事实验证 + 来源验证  | 失败 → 进入人工审核       |
+| **升华** | 推理链验证     | 每步推理必须有记忆来源        | 无来源 → 降级为低置信度     |
+| **升华** | 交叉验证      | 第二 AI/规则引擎独立评估     | 不一致 → 触发人工审核      |
+| **全部** | 置信度评分     | 综合各环节验证结果打分        | 低分 → 标记警告 / 拒绝输出  |
 
 **五步自动化纠正流程**（在关键输出点执行）：
+
 1. 事实验证（对比数据源）
 2. 来源验证（URL 可达性 + 内容匹配）
 3. 逻辑一致性检查（推理链验证 + 历史记录对比）
@@ -808,17 +835,19 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 5. 置信度评分（综合打分，≥ 阈值推送 / < 阈值警告 / < 最低阈值拒绝）
 
 **幻觉数据库**（全局积累）：
+
 - 记录所有检测到的幻觉事件（类型、内容、AI 输出、Prompt、纠正结果）
 - 定期分析幻觉模式，自动优化 Prompt
 - 用户纠正后同类错误再犯率 ≤ 5%
 
 **纠正触发模式**：
+
 - 严格模式（默认）：所有 5 步检测必须通过
 - 标准模式（只读）：全部检测，允许低置信度输出
 - 宽松模式（回测/研究）：仅事实验证
 - 紧急模式（连续 3 次幻觉）：强制严格模式 + 人工审核
 
----
+***
 
 #### 20.7 记忆与反幻觉的闭环反馈
 
@@ -840,6 +869,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 **用户场景**：研究员不需要手动尝试各种指标参数，AI 自动分析当前市场状态，推荐最优指标及其参数组合。
 
 **功能描述**：
+
 - 分析标的的历史价格和成交量特征，识别市场状态（趋势/震荡/高波动/低波动）
 - 根据市场状态自动推荐适用的技术指标和参数
 - 自动生成合成指标（如将 RSI + 布林带宽度合并为"布林RSI强度指标"）
@@ -847,6 +877,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 支持自定义指标通过 `@indicator` 装饰器注册
 
 **验收标准**：
+
 - 推荐指标在历史数据上的信号胜率 ≥ 55%
 - 指标推荐耗时 < 10 秒/标的
 
@@ -855,6 +886,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 **用户场景**：用户用自然语言描述策略意图（如"在日线级别，当 MACD 金叉且东方财富论坛情绪超过 70% 时买入，仓位不超过总资产的 20%"），AI 自动生成可执行的策略代码。
 
 **功能描述**：
+
 - 自然语言 → 策略代码：基于 LLM 的 NL → Python 策略生成
 - 策略意图解析：理解用户描述中的技术指标、条件、仓位、止损等要素
 - 自动生成完整策略类（含 `on_start`、`on_bar`、`on_trade` 等钩子）
@@ -863,6 +895,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 策略知识库：自动归档历史策略，支持相似策略检索
 
 **验收标准**：
+
 - 生成的策略代码无语法错误，可在引擎中正常运行
 - 自然语言描述准确转译为策略要素（覆盖率 ≥ 90%）
 - AI 评分与人工评估的一致性 ≥ 80%
@@ -872,6 +905,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 **用户场景**：回测结束后，不是只看报表数字，AI 自动分析回测结果，指出问题、解释原因、给出改进建议。
 
 **功能描述**：
+
 - 自动解读回测结果：用自然语言描述策略表现（"该策略年化收益 25%，但最大回撤达 30%，主要集中在 2022 年 4 月和 2024 年 1 月，原因是这两次连续触发了跌停板无法卖出"）
 - 过拟合检测：检测策略是否过拟合参数（参数敏感性分析、样本外表现对比）
 - 策略改进建议：基于失败交易分析，提出具体优化方向（"建议增加 3 日缩量确认条件避免假突破"）
@@ -880,6 +914,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - **回测模式说明**：回测模式下 AI 仅做后分析（BacktestAgent），不实时介入交易流。AI 在回测结束后读取回测结果和策略日志，生成自然语言解读。回测期间 F020 信息处理全流程不执行（无实时新闻/情绪数据可处理）。
 
 **验收标准**：
+
 - 回测解读报告自动生成，包含至少 5 个维度的分析
 - 过拟合检测准确率 ≥ 80%（与人工标记对比）
 - 改进建议至少 3 条，且每条可操作
@@ -889,6 +924,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 **用户场景**：盘中 AI 实时分析行情 + 消息面，自动识别交易机会和风险，通过钉钉推送提醒。
 
 **功能描述**：
+
 - 实时行情分析：监控指定股票/指数/板块的技术信号突破
 - 消息面联动：实时新闻/公告与持仓标的联动分析（"持仓的贵州茅台发布Q3业绩预告，超预期 15%"）
 - 情绪监控：社交媒体情绪突变检测（"东方财富论坛关于比亚迪的看空情绪突然升至 65%"）
@@ -898,6 +934,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 收盘总结：每日收盘后自动生成持仓总结和市场回顾
 
 **验收标准**：
+
 - 实时行情信号延迟 < 3 秒
 - 消息面联动分析延迟 < 5 分钟
 - AI 信号融合准确率 ≥ 65%（与人工标记对比）
@@ -909,6 +946,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 **用户场景**：在实盘/模拟盘交易中，AI 作为"第二大脑"提供决策建议——是否该买入/卖出、仓位是否合理、是否存在潜在风险。
 
 **功能描述**：
+
 - 交易建议生成：在每次交易决策前，AI 综合分析当前状态，给出建议（"建议买入 sh600519，理由：MACD 金叉 + 东方财富情绪转好 + 板块轮动到白酒"）
 - 风险预警：识别潜在风险（"该标的已连续上涨 5 日，RSI=78，建议减少仓位"）
 - 持仓优化建议：基于当前持仓组合，建议调整（"持仓中白酒占比 40%，建议降低至 20%"）
@@ -925,6 +963,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
   - **只读**：AI 只推送建议，不自动下单
 
 **验收标准**：
+
 - AI 交易建议与策略信号的一致性 ≥ 70%（不矛盾）
 - 风险预警触发后，策略可配置自动减仓或暂停
 - 半自动模式下，用户确认平均响应时间 < 30 秒
@@ -935,6 +974,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 **用户场景**：风控参数不是静态的，AI 根据市场环境动态调整——牛市放宽、熊市收紧。
 
 **功能描述**：
+
 - 动态风控参数：基于市场波动率动态调整仓位上限、止损线、回撤熔断阈值
 - 异常交易检测：识别异常交易模式（频繁撤单、异常大额下单、同向连续下单）
 - 黑天鹅防护：极端行情下自动降级为保守模式（大幅降低仓位、暂停新开仓）
@@ -950,6 +990,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
   - 建议减仓时自动计算 100 股整数倍的最接近数量
 
 **验收标准**：
+
 - 风控参数调整基于客观数据（市场指标），非纯黑盒
 - 极端行情（单日跌幅 > 5%）下风控自动生效，延迟 < 10 秒
 - 参数调整可审计（记录调整原因和依据）
@@ -959,6 +1000,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 **用户场景**：同时对比多个策略的优劣，AI 自动选出最优组合并推荐配置比例。
 
 **功能描述**：
+
 - 多策略横向对比：自动对比多个策略的各项指标，生成对比排名
 - 策略组合优化：分析策略间相关性，推荐最优组合比例（降低组合回撤）
 - 策略生命周期建议：基于近期表现，建议何时启用/停用某策略
@@ -966,13 +1008,14 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 ### F028 AI 自然语言交互界面（P2）
 
 **功能描述**：
+
 - 对话式策略开发：用自然语言对话式创建、修改、回测策略
 - 对话式数据分析："最近一个月白酒板块表现如何？" → AI 生成图表 + 分析
 - 对话式回测报告："我的策略为什么在 3 月份亏了很多？" → AI 分析并回答
 - 对话式盯盘："帮我监控 sh600519 和 sz000858" → AI 开始监控并推送通知
-- 支持 Markdown 格式输出图表和表格
+- 支持 Markdown + html 格式输出图表和表格
 
----
+***
 
 ### F029 Web Dashboard 前端（P1）
 
@@ -984,18 +1027,18 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 **页面结构**（侧边栏导航 + 顶栏 + 内容区）：
 
-| 页面 | 路由 | 功能 | 核心组件 |
-|------|------|------|----------|
-| 主页仪表盘 | `/` | 全局概览：权益曲线、持仓汇总、今日通知、系统状态 | EquityChart, MetricTable, NotificationList |
-| 回测配置 | `/backtest` | 数据选择 + 策略选择/编辑 + 参数配置 + 启动回测 | DataSelector, StrategyEditor, ParamForm, StartButton |
-| 回测结果 | `/backtest/:id` | 30+ 指标汇总 + 资金曲线/回撤/热力图 + 交易明细 + AI 解读 | Chart/EquityChart, Chart/DrawdownChart, Chart/MonthHeatmap, Table/TradeTable, AI/InsightCard |
-| 参数优化 | `/backtest/optimize` | 参数范围设置 + 并行优化 + 排名表 + 扫描图 | ParamForm, Table/ParameterRanking, ScanChart |
-| 策略管理 | `/strategy` | 策略列表 + 代码编辑器 + 语法高亮 + 保存/预览 | StrategyList, MonacoEditor, PreviewPanel |
-| 实时盯盘 | `/monitor` | 自选股列表 + 实时行情 + AI 信号推送 + 告警 | Monitor/StockTicker, Monitor/WatchList, Monitor/AlertPanel, AI/SignalCard |
-| AI 对话 | `/ai-chat` | 与 AI 对话：策略开发、数据分析、回测解读 | AI/ChatPanel, AI/SignalCard |
-| 投资组合 | `/portfolio` | 持仓汇总 + 个股权益 + 行业分布 + 盈亏分析 | PortfolioSummary, SectorPieChart, PnLTable |
-| 数据管理 | `/data` | 数据源配置 + 缓存管理 + 数据采集历史 | DataSourceForm, CacheStats, DataLogTable |
-| 系统设置 | `/settings` | LLM 配置 + AI Agent 开关 + 推送配置 + 风控参数 | LLMConfigForm, AgentToggles, NotifierForm |
+| 页面    | 路由                   | 功能                                    | 核心组件                                                                                         |
+| ----- | -------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 主页仪表盘 | `/`                  | 全局概览：权益曲线、持仓汇总、今日通知、系统状态              | EquityChart, MetricTable, NotificationList                                                   |
+| 回测配置  | `/backtest`          | 数据选择 + 策略选择/编辑 + 参数配置 + 启动回测          | DataSelector, StrategyEditor, ParamForm, StartButton                                         |
+| 回测结果  | `/backtest/:id`      | 30+ 指标汇总 + 资金曲线/回撤/热力图 + 交易明细 + AI 解读 | Chart/EquityChart, Chart/DrawdownChart, Chart/MonthHeatmap, Table/TradeTable, AI/InsightCard |
+| 参数优化  | `/backtest/optimize` | 参数范围设置 + 并行优化 + 排名表 + 扫描图             | ParamForm, Table/ParameterRanking, ScanChart                                                 |
+| 策略管理  | `/strategy`          | 策略列表 + 代码编辑器 + 语法高亮 + 保存/预览           | StrategyList, MonacoEditor, PreviewPanel                                                     |
+| 实时盯盘  | `/monitor`           | 自选股列表 + 实时行情 + AI 信号推送 + 告警           | Monitor/StockTicker, Monitor/WatchList, Monitor/AlertPanel, AI/SignalCard                    |
+| AI 对话 | `/ai-chat`           | 与 AI 对话：策略开发、数据分析、回测解读                | AI/ChatPanel, AI/SignalCard                                                                  |
+| 投资组合  | `/portfolio`         | 持仓汇总 + 个股权益 + 行业分布 + 盈亏分析             | PortfolioSummary, SectorPieChart, PnLTable                                                   |
+| 数据管理  | `/data`              | 数据源配置 + 缓存管理 + 数据采集历史                 | DataSourceForm, CacheStats, DataLogTable                                                     |
+| 系统设置  | `/settings`          | LLM 配置 + AI Agent 开关 + 推送配置 + 风控参数    | LLMConfigForm, AgentToggles, NotifierForm                                                    |
 
 **核心交互流程**：
 
@@ -1008,7 +1051,6 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
    → WebSocket 实时推送进度条 + 中间指标
    → 完成 → 跳转结果页 → 自动渲染图表
    ```
-
 2. **AI 对话流程**：
    ```
    用户输入自然语言
@@ -1017,7 +1059,6 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
    → ChatPanel 逐字渲染 AI 回复
    → 消息附带 SignalCard/InsightCard（如 AI 给出交易建议）
    ```
-
 3. **实时盯盘流程**：
    ```
    WebSocket 连接 /ws/monitor
@@ -1029,7 +1070,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 **系统设置页 Settings 详细设计**（参考 autoquant 项目 Settings.vue UI + 配置参数结构）：
 
-> 设计依据：`D:\projects\autoquant\frontend\src\views\Settings.vue` + `D:\projects\autoquant\src\utils\runtime.py`（ALLOWED_SETTINGS 白名单 14 分组体系）。UI 复刻暗色科技感主题、向导/专家模式双视图、动态表单、条件显隐、密钥掩码、dirty 追踪、浮动保存条、管理员口令二次确认。
+> 设计依据：`D:\projects\autoquant\frontend\src\views\Settings.vue` + `D:\projects\autoquant\src\utils\runtime.py`（ALLOWED\_SETTINGS 白名单 14 分组体系）。UI 复刻暗色科技感主题、向导/专家模式双视图、动态表单、条件显隐、密钥掩码、dirty 追踪、浮动保存条、管理员口令二次确认。
 
 **UI 架构**（与 autoquant 一致）：
 
@@ -1070,22 +1111,22 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 **14 个配置分组**（按 StockQuant 2.0 实际功能精简参数）：
 
-| 序号 | 分组 key | 组名 | 图标 | 精简后参数项 | autoquant 原分组 |
-|------|----------|------|------|-------------|-----------------|
-| 1 | `system_control` | 系统总控 | Monitor | trading.mode, system.log_level, system.web_port, system.initial_capital, simulator.force_run, simulator.tick_interval, ssl.enabled | system_control + ssl |
-| 2 | `data_source` | 数据源 | Coin | data_provider.source, baostock.enabled, data_provider.default_api_key, data_provider.default_api_url, data_provider.tushare_token, data_provider.tdx_host, data_provider.tdx_port, data_provider.duckdb_path, mysql/postgres 连接参数 | data_source + baostock |
-| 3 | `trading_cost` | 交易成本 | Wallet | system.commission_rate, system.min_commission, system.stamp_tax_rate, execution.transfer_fee_rate | trading_cost |
-| 4 | `execution_params` | 执行参数 | Aim | system.slippage, system.lot_size, system.price_limit_ratio | execution_params |
-| 5 | `trading_session` | 交易时段 | Clock | system.morning_open, system.morning_close, system.afternoon_open, system.afternoon_close | trading_session |
-| 6 | `broker_channel` | 券商通道 | Connection | trading.broker, trading.lock_on_startup, trading.poll_interval_sec, trading.auto_reconcile_minutes, qmt 参数, broker_http 参数 | broker_channel |
-| 7 | `risk_control` | 风控阈值 | Warning | risk_control.max_stop_loss_pct, max_pos_per_stock, max_total_pos, max_daily_loss_pct, max_drawdown_pct | risk_control |
-| 8 | `ai_model` | AI 模型 | MagicStick | ai_model.provider, api_url, api_key, model, temperature, max_tokens, timeout_sec, retry_times, fallback_to_mock, strategy_llm_* | ai_model + strategy_llm |
-| 9 | `evolution` | 策略进化 | Promotion | evolution.enabled, llm_provider, llm_base_url, llm_api_key, llm_model, llm_temperature, llm_max_tokens, llm_timeout, llm_retry, llm_fallback | evolution |
-| 10 | `notification` | 通知推送 | Bell | notification.wechat_webhook, dingtalk_webhook, smtp_*, email_*, telegram_bot_token | notification |
-| 11 | `fundamental_adapter` | 基本面适配 | Document | fundamental_adapter.enabled, apply_in_backtest, apply_in_live, provider, cache_ttl, refresh_interval | fundamental_adapter |
-| 12 | `signal` | 信号管理 | Connection | signal.dedup_cooldown_sec, dedup_db_check_pending, dedup_audit_rejected | signal |
-| 13 | `history_sync` | 历史同步 | Refresh | history_sync.write_mode, interval_minutes, scheduler_start_time, lookback_days, concurrency, stock_list_provider | history_sync |
-| 14 | `kafka_messaging` | 消息总线 | Promotion | kafka.enabled, bootstrap_servers, consumer_group, topic_* | kafka_messaging |
+| 序号 | 分组 key                | 组名    | 图标         | 精简后参数项                                                                                                                                                                                                                                           | autoquant 原分组             |
+| -- | --------------------- | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| 1  | `system_control`      | 系统总控  | Monitor    | trading.mode, system.log\_level, system.web\_port, system.initial\_capital, simulator.force\_run, simulator.tick\_interval, ssl.enabled                                                                                                          | system\_control + ssl     |
+| 2  | `data_source`         | 数据源   | Coin       | data\_provider.source, baostock.enabled, data\_provider.default\_api\_key, data\_provider.default\_api\_url, data\_provider.tushare\_token, data\_provider.tdx\_host, data\_provider.tdx\_port, data\_provider.duckdb\_path, mysql/postgres 连接参数 | data\_source + baostock   |
+| 3  | `trading_cost`        | 交易成本  | Wallet     | system.commission\_rate, system.min\_commission, system.stamp\_tax\_rate, execution.transfer\_fee\_rate                                                                                                                                          | trading\_cost             |
+| 4  | `execution_params`    | 执行参数  | Aim        | system.slippage, system.lot\_size, system.price\_limit\_ratio                                                                                                                                                                                    | execution\_params         |
+| 5  | `trading_session`     | 交易时段  | Clock      | system.morning\_open, system.morning\_close, system.afternoon\_open, system.afternoon\_close                                                                                                                                                     | trading\_session          |
+| 6  | `broker_channel`      | 券商通道  | Connection | trading.broker, trading.lock\_on\_startup, trading.poll\_interval\_sec, trading.auto\_reconcile\_minutes, qmt 参数, broker\_http 参数                                                                                                                | broker\_channel           |
+| 7  | `risk_control`        | 风控阈值  | Warning    | risk\_control.max\_stop\_loss\_pct, max\_pos\_per\_stock, max\_total\_pos, max\_daily\_loss\_pct, max\_drawdown\_pct                                                                                                                             | risk\_control             |
+| 8  | `ai_model`            | AI 模型 | MagicStick | ai\_model.provider, api\_url, api\_key, model, temperature, max\_tokens, timeout\_sec, retry\_times, fallback\_to\_mock, strategy\_llm\_\*                                                                                                       | ai\_model + strategy\_llm |
+| 9  | `evolution`           | 策略进化  | Promotion  | evolution.enabled, llm\_provider, llm\_base\_url, llm\_api\_key, llm\_model, llm\_temperature, llm\_max\_tokens, llm\_timeout, llm\_retry, llm\_fallback                                                                                         | evolution                 |
+| 10 | `notification`        | 通知推送  | Bell       | notification.wechat\_webhook, dingtalk\_webhook, smtp\_*, email\_*, telegram\_bot\_token                                                                                                                                                         | notification              |
+| 11 | `fundamental_adapter` | 基本面适配 | Document   | fundamental\_adapter.enabled, apply\_in\_backtest, apply\_in\_live, provider, cache\_ttl, refresh\_interval                                                                                                                                      | fundamental\_adapter      |
+| 12 | `signal`              | 信号管理  | Connection | signal.dedup\_cooldown\_sec, dedup\_db\_check\_pending, dedup\_audit\_rejected                                                                                                                                                                   | signal                    |
+| 13 | `history_sync`        | 历史同步  | Refresh    | history\_sync.write\_mode, interval\_minutes, scheduler\_start\_time, lookback\_days, concurrency, stock\_list\_provider                                                                                                                         | history\_sync             |
+| 14 | `kafka_messaging`     | 消息总线  | Promotion  | kafka.enabled, bootstrap\_servers, consumer\_group, topic\_\*                                                                                                                                                                                    | kafka\_messaging          |
 
 **后台 API 设计**（Settings API）：
 
@@ -1137,9 +1178,9 @@ GET    /api/settings/whitelist  # 仅暴露白名单结构（不含 value），�
 - **密钥掩码**：`secret` 字段默认显示 `********`，编辑后显示真实值
 - **Dirty 追踪**：修改 → 显示"未保存"标签；批量保存/放弃修改
 - **浮动保存条**：右下角固定，显示未保存数量和操作按钮
-- **管理员口令**：保存/删除操作弹出 Modal 要求输入 admin_token
+- **管理员口令**：保存/删除操作弹出 Modal 要求输入 admin\_token
 
----
+***
 
 **技术实现**：
 
@@ -1153,13 +1194,14 @@ GET    /api/settings/whitelist  # 仅暴露白名单结构（不含 value），�
 - **响应式设计**：Ant Design 栅格系统，支持 1280px+ 桌面端（暂不兼容移动端）
 
 **验收标准**：
+
 - 首屏加载时间 < 3 秒（Lighthouse Performance ≥ 80）
 - 回测结果页图表渲染 < 2 秒（1000 笔交易以内）
 - 实时行情推送延迟 < 500ms（从数据到达页面更新）
 - 所有页面中文渲染正确，无乱码
 - Monaco Editor 语法高亮准确率 100%
 
----
+***
 
 ### F030 前后端集成部署（P1）
 
@@ -1188,110 +1230,112 @@ GET    /api/settings/whitelist  # 仅暴露白名单结构（不含 value），�
 - **健康检查**：Nginx 健康端点 `/health`，Docker Compose healthcheck
 
 **验收标准**：
+
 - `docker compose up -d` 一键启动全部服务
 - 前后端通信正常（前端可访问后端 API）
 - Nginx 反向代理配置正确（CORS 已处理）
+
 ### NFR001 性能
 
-| 场景 | 要求 |
-|------|------|
-| 日线回测（10 年，5 只股票） | ≥ 5000 Bar/秒（单核） |
-| 分钟线回测（10 年，5 只股票） | ≥ 500 Bar/秒（单核） |
-| 参数优化（100 组，4 核） | ≤ 单组时间 × 4（并行效率 ≥ 75%） |
-| 指标计算 | 18 个指标全部实现，单次计算 < 1ms |
-| 数据缓存读取 | 读取 10 年日线 < 100ms |
-| 风控检查 | < 1ms/订单 |
-| 策略执行延迟（Tick 级） | < 10ms（从 Tick 到订单） |
+| 场景                | 要求                     |
+| ----------------- | ---------------------- |
+| 日线回测（10 年，5 只股票）  | ≥ 5000 Bar/秒（单核）       |
+| 分钟线回测（10 年，5 只股票） | ≥ 500 Bar/秒（单核）        |
+| 参数优化（100 组，4 核）   | ≤ 单组时间 × 4（并行效率 ≥ 75%） |
+| 指标计算              | 18 个指标全部实现，单次计算 < 1ms  |
+| 数据缓存读取            | 读取 10 年日线 < 100ms      |
+| 风控检查              | < 1ms/订单               |
+| 策略执行延迟（Tick 级）    | < 10ms（从 Tick 到订单）     |
 
 ### NFR002 可靠性
 
-| 要求 | 描述 |
-|------|------|
-| 事件派发 | 零丢失，通过集成测试保证 |
-| 订单处理 | 幂等性保证（重复订单自动去重） |
+| 要求    | 描述                      |
+| ----- | ----------------------- |
+| 事件派发  | 零丢失，通过集成测试保证            |
+| 订单处理  | 幂等性保证（重复订单自动去重）         |
 | 数据完整性 | 数据下载失败自动重试（最多 3 次，指数退避） |
-| 崩溃恢复 | 模拟盘/实盘模式重启后从缓存恢复状态 |
+| 崩溃恢复  | 模拟盘/实盘模式重启后从缓存恢复状态      |
 | 回测确定性 | 同一参数同一策略同一数据，多次运行结果完全一致 |
 
 ### NFR003 可扩展性
 
-| 要求 | 描述 |
-|------|------|
-| 数据源 | 新增数据源只需实现 `DataFeed` 接口 |
-| Broker | 新增 Broker 只需实现 `Broker` 接口 |
-| 指标 | 新增指标通过 `@indicator` 装饰器或继承 `Indicator` |
-| 策略 | 新增策略只需继承 `BaseStrategy` |
-| 推送 | 新增推送渠道只需实现 `Notifier` 接口 |
-| 并行 | 参数优化支持跨机器分布式（未来） |
+| 要求     | 描述                                     |
+| ------ | -------------------------------------- |
+| 数据源    | 新增数据源只需实现 `DataFeed` 接口                |
+| Broker | 新增 Broker 只需实现 `Broker` 接口             |
+| 指标     | 新增指标通过 `@indicator` 装饰器或继承 `Indicator` |
+| 策略     | 新增策略只需继承 `BaseStrategy`                |
+| 推送     | 新增推送渠道只需实现 `Notifier` 接口               |
+| 并行     | 参数优化支持跨机器分布式（未来）                       |
 
 ### NFR004 安全性
 
-| 要求 | 描述 |
-|------|------|
+| 要求   | 描述                        |
+| ---- | ------------------------- |
 | 配置加密 | API Key、Token 等敏感信息支持加密存储 |
-| 交易审计 | 所有订单操作记录审计日志 |
-| 风控熔断 | 异常行情自动暂停交易 |
-| 权限控制 | Web Dashboard 支持用户角色（未来） |
+| 交易审计 | 所有订单操作记录审计日志              |
+| 风控熔断 | 异常行情自动暂停交易                |
+| 权限控制 | Web Dashboard 支持用户角色（未来）  |
 
 ### NFR005 可维护性
 
-| 要求 | 描述 |
-|------|------|
-| 测试覆盖率 | ≥ 90%（核心模块 100%） |
-| 代码规范 | 遵循 PEP 8，类型标注 100% 覆盖 |
-| API 文档 | 自动生成 API 文档（Sphinx） |
-| 变更日志 | 每次发布更新 CHANGELOG |
+| 要求     | 描述                    |
+| ------ | --------------------- |
+| 测试覆盖率  | ≥ 90%（核心模块 100%）      |
+| 代码规范   | 遵循 PEP 8，类型标注 100% 覆盖 |
+| API 文档 | 自动生成 API 文档（Sphinx）   |
+| 变更日志   | 每次发布更新 CHANGELOG      |
 
 ### NFR006 兼容性
 
-| 要求 | 描述 |
-|------|------|
-| Python | 3.10+ |
-| 操作系统 | Windows 10+、macOS 12+、Ubuntu 20.04+ |
-| 数据库 | SQLite（内置）、PostgreSQL（可选） |
+| 要求     | 描述                                  |
+| ------ | ----------------------------------- |
+| Python | 3.10+                               |
+| 操作系统   | Windows 10+、macOS 12+、Ubuntu 20.04+ |
+| 数据库    | SQLite（内置）、PostgreSQL（可选）           |
 
 ### NFR007 可用性
 
-| 要求 | 描述 |
-|------|------|
-| 安装 | `pip install stockquant` 一键安装 |
-| 上手 | 5 分钟完成第一个回测（文档 + 示例） |
-| 文档 | 完整的 Getting Started 教程 |
-| 中文友好 | 全部中文文档和错误提示 |
+| 要求   | 描述                            |
+| ---- | ----------------------------- |
+| 安装   | `pip install stockquant` 一键安装 |
+| 上手   | 5 分钟完成第一个回测（文档 + 示例）          |
+| 文档   | 完整的 Getting Started 教程        |
+| 中文友好 | 全部中文文档和错误提示                   |
 
 ### NFR008 AI 性能与成本
 
-| 要求 | 描述 |
-|------|------|
-| 数据采集延迟 | 从发布到入库 < 5 分钟 |
-| 情感分析延迟 | 单篇文章 < 100ms（本地模型）或 < 500ms（LLM） |
-| AI 决策延迟（轻量模式） | 本地模型/规则引擎响应 < 200ms（实盘高频场景，不使用 LLM） |
-| AI 决策延迟（完整模式） | LLM 调用 + 记忆检索 + 反幻觉验证 < 3 秒（实盘低频/回测场景） |
-| AI 决策模式自动切换 | 高频 Tick 级使用本地模型（< 200ms），Bar 级/日级使用 LLM（< 3s） |
-| LLM 调用成本 | 每日 ≤ 2 元（默认配置下，轻量模式为主） |
-| 降级策略 | LLM API 不可用时自动降级为本地模型 → 规则引擎 |
-| 本地模型可选 | 支持 HuggingFace 本地模型推理，零 API 成本 |
+| 要求            | 描述                                            |
+| ------------- | --------------------------------------------- |
+| 数据采集延迟        | 从发布到入库 < 5 分钟                                 |
+| 情感分析延迟        | 单篇文章 < 100ms（本地模型）或 < 500ms（LLM）              |
+| AI 决策延迟（轻量模式） | 本地模型/规则引擎响应 < 200ms（实盘高频场景，不使用 LLM）           |
+| AI 决策延迟（完整模式） | LLM 调用 + 记忆检索 + 反幻觉验证 < 3 秒（实盘低频/回测场景）        |
+| AI 决策模式自动切换   | 高频 Tick 级使用本地模型（< 200ms），Bar 级/日级使用 LLM（< 3s） |
+| LLM 调用成本      | 每日 ≤ 2 元（默认配置下，轻量模式为主）                        |
+| 降级策略          | LLM API 不可用时自动降级为本地模型 → 规则引擎                  |
+| 本地模型可选        | 支持 HuggingFace 本地模型推理，零 API 成本                |
 
 > **性能互斥解决**：实盘高频场景（Tick 级）仅使用本地模型/规则引擎（< 200ms），不触发 LLM 调用。LLM 调用仅发生在低频场景（Bar 级/日级/事件触发），允许 < 3 秒延迟。回测模式下 AI 仅做后分析（BacktestAgent），不拦截交易流。
 
 ### NFR009 AI 可靠性
 
-| 要求 | 描述 |
-|------|------|
-| 情感分析准确率 | ≥ 75%（与人工标注对比） |
-| 信息抽取准确率 | ≥ 85%（实体识别 + 事件分类） |
-| AI 信号一致性 | AI 建议与策略信号的一致性 ≥ 70%（不矛盾） |
-| LLM 输出可追溯 | 所有 LLM 调用记录 Prompt 和 Response 到审计日志 |
-| 可解释性 | AI 决策必须附带推理过程（Chain-of-Thought） |
-| 幻觉防护 | AI 生成的交易建议必须引用数据来源，无来源标注时标记为"低置信度" |
-| 人工确认 | 全自动模式下关键操作仍需人工确认（防 LLM 幻觉） |
-| **事实验证通过率** | ≥ 99%（AI 输出的数据与数据源一致） |
-| **来源验证准确率** | 对已采集数据源 100% 准确 |
-| **推理幻觉检出率** | ≥ 80%（与人工标记对比） |
-| **用户纠正确认率** | 纠正后同类错误再犯率 ≤ 5% |
-| **连续幻觉告警** | 连续 3 次幻觉自动触发紧急模式 |
+| 要求          | 描述                                  |
+| ----------- | ----------------------------------- |
+| 情感分析准确率     | ≥ 75%（与人工标注对比）                      |
+| 信息抽取准确率     | ≥ 85%（实体识别 + 事件分类）                  |
+| AI 信号一致性    | AI 建议与策略信号的一致性 ≥ 70%（不矛盾）           |
+| LLM 输出可追溯   | 所有 LLM 调用记录 Prompt 和 Response 到审计日志 |
+| 可解释性        | AI 决策必须附带推理过程（Chain-of-Thought）     |
+| 幻觉防护        | AI 生成的交易建议必须引用数据来源，无来源标注时标记为"低置信度"  |
+| 人工确认        | 全自动模式下关键操作仍需人工确认（防 LLM 幻觉）          |
+| **事实验证通过率** | ≥ 99%（AI 输出的数据与数据源一致）               |
+| **来源验证准确率** | 对已采集数据源 100% 准确                     |
+| **推理幻觉检出率** | ≥ 80%（与人工标记对比）                      |
+| **用户纠正确认率** | 纠正后同类错误再犯率 ≤ 5%                     |
+| **连续幻觉告警**  | 连续 3 次幻觉自动触发紧急模式                    |
 
----
+***
 
 ## 5. 系统架构
 
@@ -1586,26 +1630,26 @@ StockQuant 2.0 前端采用 **React 18 + TypeScript + Vite** 技术栈，组件�
 
 **API 设计**：
 
-| 路由 | 方法 | 描述 |
-|------|------|------|
-| `/api/health` | GET | 健康检查 |
-| `/api/backtest` | POST | 提交回测任务 |
-| `/api/backtest` | GET | 回测任务列表 |
-| `/api/backtest/{id}` | GET | 回测结果（指标 + 交易 + 权益曲线） |
-| `/api/backtest/{id}` | DELETE | 删除回测任务 |
-| `/api/backtest/optimize` | POST | 提交参数优化任务 |
-| `/api/strategy` | POST | 创建策略 |
-| `/api/strategy` | GET | 策略列表 |
-| `/api/strategy/{id}` | GET/PUT/DELETE | 策略 CRUD |
-| `/api/data/sources` | GET/POST | 数据源配置 |
-| `/api/data/cache` | GET | 缓存状态 |
-| `/api/dashboard/metrics` | GET | 仪表盘核心指标 |
-| `/api/ai/chat` | POST | AI 对话（SSE 流式响应） |
-| `/api/ai/analyze-backtest/{id}` | POST | AI 解读回测结果 |
-| `/api/monitor/config` | PUT | 盯盘配置 |
-| `/ws/backtest/{task_id}` | WS | 回测实时进度 |
-| `/ws/monitor` | WS | 实时行情/盯盘推送 |
-| `/ws/notification` | WS | 系统通知/告警 |
+| 路由                              | 方法             | 描述                   |
+| ------------------------------- | -------------- | -------------------- |
+| `/api/health`                   | GET            | 健康检查                 |
+| `/api/backtest`                 | POST           | 提交回测任务               |
+| `/api/backtest`                 | GET            | 回测任务列表               |
+| `/api/backtest/{id}`            | GET            | 回测结果（指标 + 交易 + 权益曲线） |
+| `/api/backtest/{id}`            | DELETE         | 删除回测任务               |
+| `/api/backtest/optimize`        | POST           | 提交参数优化任务             |
+| `/api/strategy`                 | POST           | 创建策略                 |
+| `/api/strategy`                 | GET            | 策略列表                 |
+| `/api/strategy/{id}`            | GET/PUT/DELETE | 策略 CRUD              |
+| `/api/data/sources`             | GET/POST       | 数据源配置                |
+| `/api/data/cache`               | GET            | 缓存状态                 |
+| `/api/dashboard/metrics`        | GET            | 仪表盘核心指标              |
+| `/api/ai/chat`                  | POST           | AI 对话（SSE 流式响应）      |
+| `/api/ai/analyze-backtest/{id}` | POST           | AI 解读回测结果            |
+| `/api/monitor/config`           | PUT            | 盯盘配置                 |
+| `/ws/backtest/{task_id}`        | WS             | 回测实时进度               |
+| `/ws/monitor`                   | WS             | 实时行情/盯盘推送            |
+| `/ws/notification`              | WS             | 系统通知/告警              |
 
 **WebSocket 消息格式**：
 
@@ -1619,9 +1663,10 @@ StockQuant 2.0 前端采用 **React 18 + TypeScript + Vite** 技术栈，组件�
 ```
 
 **认证**：
+
 - JWT Token 认证（Bearer Token）
 - CORS 配置：前端域名白名单
--  Rate Limiting：API 调用频率限制（默认 100 req/min）
+- Rate Limiting：API 调用频率限制（默认 100 req/min）
 
 ### 5.4 核心数据流
 
@@ -1742,120 +1787,120 @@ InformationProcessingPipeline (信息处理全流程 — 核心编排)
         └── FeedbackLoop (用户纠正→传播)
 ```
 
----
+***
 
 ## 6. 功能优先级列表
 
-| 优先级 | 功能 ID | 功能名称 | 估时 | 说明 |
-|--------|---------|----------|------|------|
-| **P0** | F001 | 事件驱动回测引擎 | 3 周 | 核心引擎，零妥协 |
-| **P0** | F002 | 订单管理系统 OMS | 3 周 | 5 种订单类型 + 状态机 |
-| **P0** | F003 | 投资组合模拟 | 2 周 | 多资产多空跟踪 |
-| **P0** | F004 | 策略框架 BaseStrategy | 3 周 | 生命周期钩子 + 指标代理 |
-| **P0** | F005 | 回测统计指标 30+ | 2 周 | Sharpe/Sortino/Calmar 等 |
-| **P0** | F006 | Broker 抽象层 | 2 周 | 回测/模拟/实盘可互换 |
-| **P0** | F007 | 佣金与滑点建模 | 1 周 | A 股真实费用 |
-| **P1** | F008 | 参数优化器 | 2 周 | 网格 + 随机 + Walk-Forward |
-| **P1** | F009 | 风险管理模块 | 2 周 | 风控规则拦截 |
-| **P1** | F010 | 仓位管理模块 | 1 周 | Kelly/ATR/波动率 |
-| **P1** | F011 | 数据层抽象 + 缓存 | 2 周 | DataFeed ABC + 本地缓存 |
-| **P1** | F012 | 模拟盘模式 | 1 周 | 实时行情验证 |
-| **P1** | F013 | 回测报表系统 | 2 周 | HTML/JSON 报表 |
-| **P1** | F018 | 消息推送增强 | 1 周 | 企微/Telegram + AI 推送 |
-| **P0** | F022 | AI 策略生成与配置 Agent | 3 周 | 自然语言→策略代码 + 策略评分 + 知识库 |
-| **P1** | F021 | AI 指标发现 Agent | 2 周 | 自动推荐指标+参数 |
-| **P1** | F023 | AI 回测解读 Agent | 2 周 | 自然语言解读+过拟合检测 |
-| **P1** | F024 | AI 实时盯盘 Agent | 2 周 | 行情+消息联动+异动检测 |
-| **P1** | F026 | AI 动态风控 Agent | 2 周 | 市场环境自适应风控 |
-| **P2** | F014 | 内置策略模板 7 套 | 2 周 | 开箱即用 |
-| **P1** | F015 | 自定义指标 DSL | 1 周 | @indicator 装饰器（与 F004 同步开发） |
-| **P2** | F016 | Web Dashboard | 2 周 | Streamlit |
-| **P2** | F017 | 券商 API 实盘 | 3 周 | XTP/CTP 集成 |
-| **P2** | F027 | AI 策略对比 Agent | 1 周 | 多策略横向对比+组合优化 |
-| **P2** | F028 | AI 自然语言交互界面 | 2 周 | 对话式策略/数据/盯盘 |
-| **P0** | F019 | 信号管线系统 | 2 周 | AI 信号↔策略信号转换 + A股规则校验 |
-| **P0** | F020 | AI 信息处理全流程 | 7 周 | 采集→降噪→总结→升华 + 记忆+反幻觉贯穿（含记忆系统 6 模块 + 反幻觉系统 10 模块） |
-| **P1** | F029 | Web Dashboard 前端 | 4 周 | React + Ant Design + ECharts + Monaco |
-| **P1** | F030 | 前后端集成部署 | 2 周 | Docker Compose + Nginx + FastAPI |
-| — | — | 基础设施（测试/CI/Docker/文档） | 2 周 | 贯穿所有阶段 |
+| 优先级    | 功能 ID | 功能名称                  | 估时  | 说明                                               |
+| ------ | ----- | --------------------- | --- | ------------------------------------------------ |
+| **P0** | F001  | 事件驱动回测引擎              | 3 周 | 核心引擎，零妥协                                         |
+| **P0** | F002  | 订单管理系统 OMS            | 3 周 | 5 种订单类型 + 状态机                                    |
+| **P0** | F003  | 投资组合模拟                | 2 周 | 多资产多空跟踪                                          |
+| **P0** | F004  | 策略框架 BaseStrategy     | 3 周 | 生命周期钩子 + 指标代理                                    |
+| **P0** | F005  | 回测统计指标 30+            | 2 周 | Sharpe/Sortino/Calmar 等                          |
+| **P0** | F006  | Broker 抽象层            | 2 周 | 回测/模拟/实盘可互换                                      |
+| **P0** | F007  | 佣金与滑点建模               | 1 周 | A 股真实费用                                          |
+| **P1** | F008  | 参数优化器                 | 2 周 | 网格 + 随机 + Walk-Forward                           |
+| **P1** | F009  | 风险管理模块                | 2 周 | 风控规则拦截                                           |
+| **P1** | F010  | 仓位管理模块                | 1 周 | Kelly/ATR/波动率                                    |
+| **P1** | F011  | 数据层抽象 + 缓存            | 2 周 | DataFeed ABC + 本地缓存                              |
+| **P1** | F012  | 模拟盘模式                 | 1 周 | 实时行情验证                                           |
+| **P1** | F013  | 回测报表系统                | 2 周 | HTML/JSON 报表                                     |
+| **P1** | F018  | 消息推送增强                | 1 周 | 企微/Telegram + AI 推送                              |
+| **P0** | F022  | AI 策略生成与配置 Agent      | 3 周 | 自然语言→策略代码 + 策略评分 + 知识库                           |
+| **P1** | F021  | AI 指标发现 Agent         | 2 周 | 自动推荐指标+参数                                        |
+| **P1** | F023  | AI 回测解读 Agent         | 2 周 | 自然语言解读+过拟合检测                                     |
+| **P1** | F024  | AI 实时盯盘 Agent         | 2 周 | 行情+消息联动+异动检测                                     |
+| **P1** | F026  | AI 动态风控 Agent         | 2 周 | 市场环境自适应风控                                        |
+| **P2** | F014  | 内置策略模板 7 套            | 2 周 | 开箱即用                                             |
+| **P1** | F015  | 自定义指标 DSL             | 1 周 | @indicator 装饰器（与 F004 同步开发）                      |
+| **P2** | F016  | Web Dashboard         | 2 周 | Streamlit                                        |
+| **P2** | F017  | 券商 API 实盘             | 3 周 | XTP/CTP 集成                                       |
+| **P2** | F027  | AI 策略对比 Agent         | 1 周 | 多策略横向对比+组合优化                                     |
+| **P2** | F028  | AI 自然语言交互界面           | 2 周 | 对话式策略/数据/盯盘                                      |
+| **P0** | F019  | 信号管线系统                | 2 周 | AI 信号↔策略信号转换 + A股规则校验                            |
+| **P0** | F020  | AI 信息处理全流程            | 7 周 | 采集→降噪→总结→升华 + 记忆+反幻觉贯穿（含记忆系统 6 模块 + 反幻觉系统 10 模块） |
+| **P1** | F029  | Web Dashboard 前端      | 4 周 | React + Ant Design + ECharts + Monaco            |
+| **P1** | F030  | 前后端集成部署               | 2 周 | Docker Compose + Nginx + FastAPI                 |
+| —      | —     | 基础设施（测试/CI/Docker/文档） | 2 周 | 贯穿所有阶段                                           |
 
 **总估时**：约 40-52 周（10-13 个月），含基础设施 + AI 模块 + Web 前端
 
 > **工期说明**：F020（AI 信息处理全流程）7 周为最关键路径，包含完整的记忆系统（6 个文件）、反幻觉系统（10 个文件）、NLP 处理链和爬虫系统。F019（信号管线）2 周与 F004（策略框架）3 周部分并行。F029（Web 前端）4 周与后端 API 开发并行。F030（集成部署）2 周在核心功能开发完成后进行。集成调试时间已计入各模块估时的 +20% 缓冲。
 
----
+***
 
 ## 7. 技术栈
 
 ### 核心依赖
 
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| numpy | ≥ 1.24 | 数值计算 |
-| pandas | ≥ 2.0 | 数据操作 |
-| talib | ≥ 0.4 | 技术指标（C 库） |
-| pandas-ta | ≥ 0.3 | 技术指标（纯 Python 备用） |
-| plotly | ≥ 5.0 | 交互式可视化 |
-| Jinja2 | ≥ 3.0 | HTML 报表模板 |
-| requests | ≥ 2.28 | HTTP 请求 |
-| websocket-client | ≥ 1.5 | WebSocket 实时数据 |
-| beautifulsoup4 | ≥ 4.12 | Web 爬取 |
-| feedparser | ≥ 6.0 | RSS 解析 |
-| sqlalchemy | ≥ 2.0 | 本地数据库 |
-| pyarrow | ≥ 12.0 | Parquet 格式 |
-| streamlit | ≥ 1.20 | Web Dashboard |
-| openai | ≥ 1.0 | OpenAI LLM API |
-| anthropic | ≥ 0.18 | Anthropic Claude API |
-| httpx | ≥ 0.25 | 异步 HTTP 客户端（爬虫） |
-| chromadb | ≥ 0.4 | 向量数据库（记忆嵌入搜索） |
-| sentence-transformers | ≥ 2.2 | 文本嵌入模型（语义搜索） |
-| pytest | ≥ 7.0 | 测试框架 |
-| coverage | ≥ 7.0 | 测试覆盖率 |
-| ruff | ≥ 0.1 | 代码格式化 + lint |
-| APScheduler | ≥ 3.10 | 定时任务调度（数据采集） |
+| 依赖                    | 版本     | 用途                   |
+| --------------------- | ------ | -------------------- |
+| numpy                 | ≥ 1.24 | 数值计算                 |
+| pandas                | ≥ 2.0  | 数据操作                 |
+| talib                 | ≥ 0.4  | 技术指标（C 库）            |
+| pandas-ta             | ≥ 0.3  | 技术指标（纯 Python 备用）    |
+| plotly                | ≥ 5.0  | 交互式可视化               |
+| Jinja2                | ≥ 3.0  | HTML 报表模板            |
+| requests              | ≥ 2.28 | HTTP 请求              |
+| websocket-client      | ≥ 1.5  | WebSocket 实时数据       |
+| beautifulsoup4        | ≥ 4.12 | Web 爬取               |
+| feedparser            | ≥ 6.0  | RSS 解析               |
+| sqlalchemy            | ≥ 2.0  | 本地数据库                |
+| pyarrow               | ≥ 12.0 | Parquet 格式           |
+| streamlit             | ≥ 1.20 | Web Dashboard        |
+| openai                | ≥ 1.0  | OpenAI LLM API       |
+| anthropic             | ≥ 0.18 | Anthropic Claude API |
+| httpx                 | ≥ 0.25 | 异步 HTTP 客户端（爬虫）      |
+| chromadb              | ≥ 0.4  | 向量数据库（记忆嵌入搜索）        |
+| sentence-transformers | ≥ 2.2  | 文本嵌入模型（语义搜索）         |
+| pytest                | ≥ 7.0  | 测试框架                 |
+| coverage              | ≥ 7.0  | 测试覆盖率                |
+| ruff                  | ≥ 0.1  | 代码格式化 + lint         |
+| APScheduler           | ≥ 3.10 | 定时任务调度（数据采集）         |
 
 ### 前端依赖（Web Dashboard）
 
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| react | ≥ 18.2 | UI 框架 |
-| react-router-dom | ≥ 6.0 | 路由 |
-| ant-design | ≥ 5.0 | 组件库 |
-| echarts-for-react | ≥ 3.0 | ECharts 图表 |
-| zustand | ≥ 4.0 | 状态管理 |
-| axios | ≥ 1.0 | HTTP 客户端 |
-| monaco-editor | ≥ 0.40 | 代码编辑器 |
-| vite | ≥ 5.0 | 构建工具 |
-| typescript | ≥ 5.0 | 类型系统 |
-| sass | ≥ 1.0 | CSS 预处理器 |
-| dayjs | ≥ 1.0 | 日期处理 |
-| marked | ≥ 9.0 | Markdown 渲染（AI 对话） |
+| 依赖                | 版本     | 用途                 |
+| ----------------- | ------ | ------------------ |
+| react             | ≥ 18.2 | UI 框架              |
+| react-router-dom  | ≥ 6.0  | 路由                 |
+| ant-design        | ≥ 5.0  | 组件库                |
+| echarts-for-react | ≥ 3.0  | ECharts 图表         |
+| zustand           | ≥ 4.0  | 状态管理               |
+| axios             | ≥ 1.0  | HTTP 客户端           |
+| monaco-editor     | ≥ 0.40 | 代码编辑器              |
+| vite              | ≥ 5.0  | 构建工具               |
+| typescript        | ≥ 5.0  | 类型系统               |
+| sass              | ≥ 1.0  | CSS 预处理器           |
+| dayjs             | ≥ 1.0  | 日期处理               |
+| marked            | ≥ 9.0  | Markdown 渲染（AI 对话） |
 
 ### 后端依赖（API 网关）
 
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| fastapi | ≥ 0.100 | RESTful API 框架 |
-| uvicorn | ≥ 0.20 | ASGI 服务器 |
-| pydantic | ≥ 2.0 | 数据验证 |
-| python-jose | ≥ 0.20 | JWT 认证 |
-| python-socketio | ≥ 5.0 | WebSocket 实时推送 |
-| aiohttp | ≥ 3.0 | 异步 HTTP 客户端 |
-| gunicorn | ≥ 21.0 | 生产级 WSGI 进程管理 |
-| slowapi | ≥ 0.1 | API 限流 |
+| 依赖              | 版本      | 用途             |
+| --------------- | ------- | -------------- |
+| fastapi         | ≥ 0.100 | RESTful API 框架 |
+| uvicorn         | ≥ 0.20  | ASGI 服务器       |
+| pydantic        | ≥ 2.0   | 数据验证           |
+| python-jose     | ≥ 0.20  | JWT 认证         |
+| python-socketio | ≥ 5.0   | WebSocket 实时推送 |
+| aiohttp         | ≥ 3.0   | 异步 HTTP 客户端    |
+| gunicorn        | ≥ 21.0  | 生产级 WSGI 进程管理  |
+| slowapi         | ≥ 0.1   | API 限流         |
 
 ### 可选依赖
 
-| 依赖 | 用途 |
-|------|------|
-| xtp-ctp | 中泰 XTP / CTP 券商 API |
-| weasyprint | PDF 报表生成 |
-| cryptography | 配置加密 |
-| ollama-python | 本地 LLM 推理 |
-| transformers | HuggingFace 本地 NLP 模型 |
-| duckdb | 轻量级本地分析数据库 |
+| 依赖            | 用途                    |
+| ------------- | --------------------- |
+| xtp-ctp       | 中泰 XTP / CTP 券商 API   |
+| weasyprint    | PDF 报表生成              |
+| cryptography  | 配置加密                  |
+| ollama-python | 本地 LLM 推理             |
+| transformers  | HuggingFace 本地 NLP 模型 |
+| duckdb        | 轻量级本地分析数据库            |
 
----
+***
 
 ## 8. API 设计预览
 
@@ -2011,7 +2056,7 @@ ai:
   risk_override_enabled: false    # AI 是否可以覆盖风控参数
 ```
 
----
+***
 
 ### Web API 调用示例
 
@@ -2054,7 +2099,7 @@ const response = await aiApi.chat({
 // 流式读取 SSE response → ChatPanel 逐字渲染
 ```
 
----
+***
 
 ## 9. 向后兼容策略
 
@@ -2065,7 +2110,7 @@ const response = await aiApi.chat({
 - **StockQuant v1.x** 标记为 EOL（End of Life），不再更新
 - **StockQuant v2.0** 全新 API，与 v1 不兼容
 - 提供 **Migration Guide** 文档，说明 v1 → v2 的迁移方法
-- 提供 **v1_compat** 模块：包装 v1 风格策略，使其可在 v2 引擎中运行（有限支持，仅单标的日线回测）
+- 提供 **v1\_compat** 模块：包装 v1 风格策略，使其可在 v2 引擎中运行（有限支持，仅单标的日线回测）
 
 ### 9.2 迁移指南核心要点
 
@@ -2098,26 +2143,26 @@ cerebro.add_strategy(MyStrategy)
 cerebro.run()
 ```
 
----
+***
 
 ## 10. 测试策略
 
 ### 10.1 测试覆盖目标
 
-| 模块 | 目标覆盖率 | 测试类型 |
-|------|-----------|----------|
-| engine/cerebro.py | 100% | 单元测试 + 集成测试 |
-| engine/event.py | 100% | 单元测试 |
-| engine/oms.py | 100% | 单元测试（订单状态机） |
-| engine/portfolio.py | 100% | 单元测试（资金计算） |
-| engine/broker/*.py | 100% | 单元测试 + 集成测试 |
-| indicators/*.py | 100% | 单元测试（与 TA-Lib 独立计算对比） |
-| strategy/base.py | 100% | 单元测试 + 集成测试 |
-| analytics/ | 95% | 单元测试 |
-| data/ | 95% | 单元测试 + 集成测试 |
-| execution/ | 90% | 单元测试 |
-| api/ | 95% | 单元测试 + 集成测试 |
-| web/ | 85% | 单元测试（组件） + E2E（Cypress） |
+| 模块                  | 目标覆盖率 | 测试类型                    |
+| ------------------- | ----- | ----------------------- |
+| engine/cerebro.py   | 100%  | 单元测试 + 集成测试             |
+| engine/event.py     | 100%  | 单元测试                    |
+| engine/oms.py       | 100%  | 单元测试（订单状态机）             |
+| engine/portfolio.py | 100%  | 单元测试（资金计算）              |
+| engine/broker/\*.py | 100%  | 单元测试 + 集成测试             |
+| indicators/\*.py    | 100%  | 单元测试（与 TA-Lib 独立计算对比）   |
+| strategy/base.py    | 100%  | 单元测试 + 集成测试             |
+| analytics/          | 95%   | 单元测试                    |
+| data/               | 95%   | 单元测试 + 集成测试             |
+| execution/          | 90%   | 单元测试                    |
+| api/                | 95%   | 单元测试 + 集成测试             |
+| web/                | 85%   | 单元测试（组件） + E2E（Cypress） |
 
 ### 10.2 测试策略
 
@@ -2134,64 +2179,65 @@ cerebro.run()
 - **API 测试**：pytest + httpx（FastAPI TestClient），测试所有 REST + WebSocket 端点
 - **Snapshot 测试**：关键组件（Chart/Table/AI 卡片）UI 不变性验证
 
----
+***
 
 ## 11. 发布计划
 
-| 版本 | 时间 | 内容 |
-|------|------|------|
-| v2.0.0-alpha | 第 10 周 | 事件引擎 + OMS + 投资组合 + 策略基类 + 18 指标 + AI 数据采集 Agent |
-| v2.0.0-beta | 第 18 周 | + 佣金/滑点 + 参数优化 + 风控 + 报表 + Broker 抽象 + AI 策略生成 + AI 辅助决策 + API 网关 |
-| v2.0.0-rc | 第 24 周 | + 数据缓存 + 模拟盘 + AI 回测解读 + AI 盯盘 + 动态风控 + Web Dashboard Alpha + 测试覆盖 ≥ 90% |
-| v2.0.0 | 第 36 周 | + Web Dashboard 完成版 + AI 对话界面 + 券商 API + Docker Compose 一键部署 |
-| v2.1.0 | 第 48 周 | Web Dashboard 高级功能（多用户、Streamlit 高级分析、移动端适配） |
+| 版本           | 时间     | 内容                                                                       |
+| ------------ | ------ | ------------------------------------------------------------------------ |
+| v2.0.0-alpha | 第 10 周 | 事件引擎 + OMS + 投资组合 + 策略基类 + 18 指标 + AI 数据采集 Agent                         |
+| v2.0.0-beta  | 第 18 周 | + 佣金/滑点 + 参数优化 + 风控 + 报表 + Broker 抽象 + AI 策略生成 + AI 辅助决策 + API 网关        |
+| v2.0.0-rc    | 第 24 周 | + 数据缓存 + 模拟盘 + AI 回测解读 + AI 盯盘 + 动态风控 + Web Dashboard Alpha + 测试覆盖 ≥ 90% |
+| v2.0.0       | 第 36 周 | + Web Dashboard 完成版 + AI 对话界面 + 券商 API + Docker Compose 一键部署             |
+| v2.1.0       | 第 48 周 | Web Dashboard 高级功能（多用户、Streamlit 高级分析、移动端适配）                             |
 
----
+***
 
 ## 12. 风险与缓解
 
-| 风险 | 影响 | 缓解措施 |
-|------|------|----------|
-| TA-Lib C 库安装失败 | 安装困难 | 提供 pandas-ta 纯 Python 替代 |
-| BaoStock API 变动 | 历史数据中断 | 本地缓存 + Tushare 备用 |
-| 网易 API 变动 | 实时数据中断 | 引入 Tushare Pro 实时行情 |
-| XTP API 集成复杂 | 实盘延迟 | 先支持回测/模拟盘，实盘逐步推进 |
-| 项目周期过长 | 人员变动风险 | 分版本发布，每个 Alpha 可用 |
-| 文档不足 | 用户学习成本高 | 边开发边写文档，每个 Alpha 配套教程 |
-| **LLM API 不可用/成本高** | AI 功能失效/成本超支 | 本地模型降级 + 每日成本预算限制 + 规则引擎兜底 |
-| **爬虫被反爬** | 数据采集中断 | 多源冗余 + 代理池 + 速率限制 + 失败告警 |
-| **AI 幻觉导致错误交易** | 资金损失 | 全自动模式需人工确认 + AI 输出必须引用来源 + 风控层二次验证 |
-| **AI 决策不透明** | 合规风险 | 所有 AI 调用记录到审计日志 + Chain-of-Thought 可追溯 |
-| **LLM 供应商锁定** | 迁移困难 | LLM 适配层抽象 + 多供应商支持（OpenAI/Claude/本地） |
-| **前端构建依赖冲突** | 前端 npm 依赖版本冲突 | npm lockfile + 固定依赖版本 + 独立 CI 环境 |
-| **CORS 跨域问题** | 前后端分离部署时的跨域 | Nginx 反向代理统一域名 |
-| **WebSocket 连接不稳定** | 网络波动导致断连 | 自动重连 + 指数退避 + 心跳检测 |
-| **大表格渲染卡顿** | 10 万笔交易明细导致前端卡顿 | 虚拟滚动 + 分页加载 + 服务端分页 |
+| 风险                  | 影响              | 缓解措施                                   |
+| ------------------- | --------------- | -------------------------------------- |
+| TA-Lib C 库安装失败      | 安装困难            | 提供 pandas-ta 纯 Python 替代               |
+| BaoStock API 变动     | 历史数据中断          | 本地缓存 + Tushare 备用                      |
+| 网易 API 变动           | 实时数据中断          | 引入 Tushare Pro 实时行情                    |
+| XTP API 集成复杂        | 实盘延迟            | 先支持回测/模拟盘，实盘逐步推进                       |
+| 项目周期过长              | 人员变动风险          | 分版本发布，每个 Alpha 可用                      |
+| 文档不足                | 用户学习成本高         | 边开发边写文档，每个 Alpha 配套教程                  |
+| **LLM API 不可用/成本高** | AI 功能失效/成本超支    | 本地模型降级 + 每日成本预算限制 + 规则引擎兜底             |
+| **爬虫被反爬**           | 数据采集中断          | 多源冗余 + 代理池 + 速率限制 + 失败告警               |
+| **AI 幻觉导致错误交易**     | 资金损失            | 全自动模式需人工确认 + AI 输出必须引用来源 + 风控层二次验证     |
+| **AI 决策不透明**        | 合规风险            | 所有 AI 调用记录到审计日志 + Chain-of-Thought 可追溯 |
+| **LLM 供应商锁定**       | 迁移困难            | LLM 适配层抽象 + 多供应商支持（OpenAI/Claude/本地）   |
+| **前端构建依赖冲突**        | 前端 npm 依赖版本冲突   | npm lockfile + 固定依赖版本 + 独立 CI 环境       |
+| **CORS 跨域问题**       | 前后端分离部署时的跨域     | Nginx 反向代理统一域名                         |
+| **WebSocket 连接不稳定** | 网络波动导致断连        | 自动重连 + 指数退避 + 心跳检测                     |
+| **大表格渲染卡顿**         | 10 万笔交易明细导致前端卡顿 | 虚拟滚动 + 分页加载 + 服务端分页                    |
 
----
+***
 
 ## 13. 成功指标
 
-| 指标 | 目标值 |
-|------|--------|
-| 测试覆盖率 | ≥ 90% |
-| 回测速度与 backtrader 持平 | ± 20% 以内 |
-| 回测指标与 vectorbt 结果一致 | ± 0.1% 以内 |
-| 新用户 30 分钟完成第一个回测 | 通过用户测试验证 |
-| PyPI 下载量（发布 6 个月内） | ≥ 5000 |
-| GitHub Star | ≥ 2000 |
-| 内置策略模板 | ≥ 7 套 |
-| 支持数据源 | ≥ 5 种 |
-| AI 情感分析准确率 | ≥ 75% |
-| 数据采集源数量 | ≥ 20 个 |
-| LLM 供应商支持 | ≥ 2 种（OpenAI + Claude） |
-| AI 决策可追溯率 | 100%（所有调用记录审计日志） |
-| 记忆检索响应时间 | < 200ms |
-| 信息压缩核心事实保留率 | ≥ 95% |
-| 幻觉纠正通过率（严格模式） | ≥ 99%（通过事实验证的建议） |
-| 幻觉模式识别准确率 | ≥ 80% |
-| 用户纠正后同类错误再犯率 | ≤ 5% |
-| Web 首屏加载时间 | < 3 秒（Lighthouse ≥ 80） |
-| API 响应延迟（P95） | < 200ms（常规查询） |
-| WebSocket 实时推送延迟 | < 500ms |
-| Cypress E2E 测试通过率 | 100%（核心流程） |
+| 指标                  | 目标值                    |
+| ------------------- | ---------------------- |
+| 测试覆盖率               | ≥ 90%                  |
+| 回测速度与 backtrader 持平 | ± 20% 以内               |
+| 回测指标与 vectorbt 结果一致 | ± 0.1% 以内              |
+| 新用户 30 分钟完成第一个回测    | 通过用户测试验证               |
+| PyPI 下载量（发布 6 个月内）  | ≥ 5000                 |
+| GitHub Star         | ≥ 2000                 |
+| 内置策略模板              | ≥ 7 套                  |
+| 支持数据源               | ≥ 5 种                  |
+| AI 情感分析准确率          | ≥ 75%                  |
+| 数据采集源数量             | ≥ 20 个                 |
+| LLM 供应商支持           | ≥ 2 种（OpenAI + Claude） |
+| AI 决策可追溯率           | 100%（所有调用记录审计日志）       |
+| 记忆检索响应时间            | < 200ms                |
+| 信息压缩核心事实保留率         | ≥ 95%                  |
+| 幻觉纠正通过率（严格模式）       | ≥ 99%（通过事实验证的建议）       |
+| 幻觉模式识别准确率           | ≥ 80%                  |
+| 用户纠正后同类错误再犯率        | ≤ 5%                   |
+| Web 首屏加载时间          | < 3 秒（Lighthouse ≥ 80） |
+| API 响应延迟（P95）       | < 200ms（常规查询）          |
+| WebSocket 实时推送延迟    | < 500ms                |
+| Cypress E2E 测试通过率   | 100%（核心流程）             |
+
