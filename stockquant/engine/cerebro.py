@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import logging
+import itertools
 import time
 import uuid
 from collections import defaultdict
@@ -327,6 +328,9 @@ class Cerebro:
         max_iters: int = 100,
         target: str = "Sharpe Ratio",
         n_jobs: Optional[int] = None,
+        train_window: Optional[int] = None,
+        test_window: Optional[int] = None,
+        step: Optional[int] = None,
     ) -> List[dict]:
         """
         参数优化 — 网格搜索或随机搜索。
@@ -376,8 +380,15 @@ class Cerebro:
                     else:
                         combo[k] = v
                 param_combos.append(combo)
+        elif optimizer == "walkforward":
+            param_combos = []  # placeholder — walkforward generates its own combos
         else:
-            raise ValueError(f"Unknown optimizer: {optimizer}. Use 'grid' or 'random'.")
+            raise ValueError(f"Unknown optimizer: {optimizer}. Use 'grid', 'random', or 'walkforward'.")
+
+        # Walk-Forward: 需要特殊处理（不并行，需滚动窗口）
+        if optimizer == "walkforward":
+            return self._run_walkforward(strategy_cls, param_grid, target, n_jobs,
+                                         train_window, test_window, step)
 
         logger.info(f"Parameter optimization: {len(param_combos)} combinations, {n_jobs} workers, target={target}")
 
@@ -424,6 +435,176 @@ class Cerebro:
             logger.info(f"  #{i+1}: {r['params']} → {target} = {target_val}")
 
         return results
+
+    def _run_walkforward(
+        self,
+        strategy_cls: Type[BaseStrategy],
+        param_grid: Dict[str, Any],
+        target: str,
+        n_jobs: int,
+        train_window: Optional[int],
+        test_window: Optional[int],
+        step: Optional[int],
+    ) -> List[dict]:
+        """
+        Walk-Forward 滚动窗口优化。
+
+        流程：
+        1. 用第一个数据窗口（训练集）网格搜索最优参数
+        2. 在下一个数据窗口（测试集）验证
+        3. 窗口滚动，重复步骤 1-2
+        4. 汇总所有窗口的结果，取测试集表现最优的参数
+        """
+        from stockquant.data import DataFeed
+
+        # 获取数据长度
+        if not self._data_feeds:
+            raise ValueError("No data feeds for Walk-Forward optimization")
+
+        total_bars = len(self._data_feeds[0])
+
+        # 默认窗口大小
+        if train_window is None:
+            train_window = min(252, total_bars // 3)  # 至少 1 年日线
+        if test_window is None:
+            test_window = min(63, total_bars // 10)  # 约 1 季度
+        if step is None:
+            step = max(1, test_window // 2)
+
+        if total_bars < train_window + test_window:
+            raise ValueError(
+                f"Data too short: {total_bars} bars < "
+                f"{train_window} (train) + {test_window} (test)"
+            )
+
+        logger.info(
+            f"Walk-Forward: train={train_window}, test={test_window}, "
+            f"step={step}, total={total_bars} bars"
+        )
+
+        all_results = []
+        window_idx = 0
+
+        # 滚动窗口
+        train_start = 0
+        while train_start + train_window + test_window <= total_bars:
+            train_end = train_start + train_window
+            test_end = train_end + test_window
+
+            # 1. 在训练集上网格搜索
+            train_param_combos = self._generate_combos(param_grid)
+            best_params = None
+            best_score = float("-inf")
+            best_train_metrics = None
+
+            for params in train_param_combos:
+                result = self._run_single_optimization(
+                    strategy_cls, params, target, window_idx
+                )
+                if result:
+                    score = self._extract_target(result["metrics"], target)
+                    if score > best_score:
+                        best_score = score
+                        best_params = params
+                        best_train_metrics = result["metrics"]
+
+            if best_params is None:
+                train_start += step
+                window_idx += 1
+                continue
+
+            # 2. 在测试集上验证
+            test_cerebro = Cerebro(
+                cash=self._cash,
+                broker=self._broker,
+                commission=self._commission,
+                risk_manager=self._risk_manager,
+            )
+            for feed in self._data_feeds:
+                test_feed = self._slice_feed(feed, train_end, test_end)
+                test_cerebro.add_data(test_feed)
+            test_cerebro.add_strategy(strategy_cls, **best_params)
+
+            test_results = test_cerebro.run()
+            test_metrics = test_results[0]["metrics"] if test_results else {}
+
+            # 3. 汇总结果
+            all_results.append({
+                "window": window_idx + 1,
+                "params": best_params,
+                "train_metrics": best_train_metrics,
+                "test_metrics": test_metrics,
+                "train_start": train_start,
+                "train_end": train_end,
+                "test_start": train_end,
+                "test_end": test_end,
+            })
+
+            logger.info(
+                f"  Window {window_idx+1}: best params={best_params}, "
+                f"train_{target}={self._extract_target(best_train_metrics, target):.4f}, "
+                f"test_{target}={self._extract_target(test_metrics, target):.4f}"
+            )
+
+            train_start += step
+            window_idx += 1
+
+        # 4. 汇总：取测试集表现最好的参数
+        if all_results:
+            for r in all_results:
+                r["test_score"] = self._extract_target(r["test_metrics"], target)
+
+            # 按测试集得分排序，取 Top 1
+            all_results.sort(key=lambda x: x["test_score"], reverse=True)
+            logger.info(
+                f"Walk-Forward complete. {len(all_results)} windows. "
+                f"Best: window={all_results[0]['window']}, "
+                f"params={all_results[0]['params']}"
+            )
+
+        return all_results
+
+    def _generate_combos(self, param_grid: Dict[str, Any]) -> List[dict]:
+        """生成参数组合列表"""
+        keys = list(param_grid.keys())
+        values = list(param_grid.values())
+        return [dict(zip(keys, combo)) for combo in itertools.product(*values)]
+
+    def _extract_target(self, metrics: dict, target: str) -> float:
+        """提取目标指标值"""
+        val = metrics.get(target, 0)
+        if isinstance(val, str):
+            try:
+                val = float(val)
+            except (ValueError, TypeError):
+                val = 0
+        return float(val)
+
+    def _slice_feed(self, feed: "DataFeed", start: int, end: int) -> "DataFeed":
+        """切片数据源（仅取 start:end 范围）"""
+        import tempfile
+        import os
+        from stockquant.data.providers.csv_feed import CSVFeed
+
+        # 获取完整 DataFrame，切片后写入临时文件
+        df = feed.get_dataframe()
+        sliced = df.iloc[start:end].copy()
+
+        if sliced.empty:
+            raise ValueError(f"Sliced feed is empty: [{start}:{end}]")
+
+        # 写入临时 CSV 文件
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False, encoding="utf-8"
+        )
+        tmp.close()
+        sliced.to_csv(tmp.name, index=True)
+
+        return CSVFeed(
+            filepath=tmp.name,
+            symbol=feed.symbol,
+            timeframe=feed.timeframe,
+        )
 
     def _run_single_optimization(
         self,
