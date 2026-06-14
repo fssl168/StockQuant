@@ -3,5 +3,7 @@
 
 from stockquant.data.providers.baostock_feed import BaoStockFeed
 from stockquant.data.providers.csv_feed import CSVFeed
+from stockquant.data.providers.parquet_feed import ParquetFeed
+from stockquant.data.providers.sqlite_feed import SQLiteFeed
 
-__all__ = ["BaoStockFeed", "CSVFeed"]
+__all__ = ["BaoStockFeed", "CSVFeed", "ParquetFeed", "SQLiteFeed"]
