@@ -10,6 +10,6 @@
         "password" : "your qq email authorization code",
         "to" : "your qq email address",
         "server" : "smtp.qq.com",
-        "port": 587
+        "port": 1587
     }
 }

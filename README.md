@@ -1,364 +1,356 @@
-# StockQuant
+# StockQuant 2.0
 
-`Gary-Hertel`
+> **机构级中国 A 股量化交易平台**
+> 从数据采集 → 指标计算 → 策略配置 → 回测验证 → 实时盯盘 → AI 辅助决策 → 风控执行，全流程闭环。
 
-请勿提交`issue`！可以加入交流群与其他朋友一起自学交流，加微信`mzjimmy`
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Alpha-orange)]()
 
-------
+---
 
-## 一、配置文件的设置
+## 产品定位
 
-**启动框架需要先导入必要的模块，并且载入一次配置文件！**
+StockQuant 2.0 是一个面向**专业量化开发者**的 **AI 原生机构级**中国 A 股量化交易平台。
 
-配置文件是一个`json`格式的文件`config.json`，在`docs`文件夹中有模板文件，其内容如下，将其中的信息替换成自己的即可：
+**核心差异**：
+- **AI Agent 全流程**：6 个 AI Agent 覆盖数据采集、指标发现、策略生成、回测解读、实时盯盘、动态风控
+- **记忆 + 反幻觉**：三级记忆系统 + 五步反幻觉纠正，深度嵌入信息处理的每个环节
+- **机构级引擎**：事件驱动引擎 + 完整 OMS + 多资产投资组合 + 30+ 回测指标
+- **渐进式平台**：简单场景简单用（自然语言 → 策略），复杂场景深度用（完整 API）
 
-```json
-{
-    "LOG": {
-        "level": "debug",
-        "handler": "stream"
-    },
-    "DINGTALK": "your dingding token",
-    "TUSHARE": "your tushare token",
-    "SENDMAIL": {
-        "from": "your qq email address",
-        "password": "your qq email authorization code",
-        "to": "your qq email address",
-        "server": "smtp.qq.com",
-        "port": 587
-    }
-}
+**对标框架**：backtrader / VNPy / vectorbt，同时通过 AI Agent 架构实现差异化。
+
+---
+
+## 快速开始
+
+### 安装
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/fssl168/quantclaw.git
+cd StockQuant
+
+# 2. 安装核心依赖
+pip install -e .
+
+# 3. 安装 AI 模块（可选）
+pip install openai anthropic chromadb sentence-transformers
+
+# 4. 安装前端依赖（可选，需 node.js 18+）
+cd web && npm install && cd ..
+
+# 5. 安装后端 API 依赖（可选）
+pip install fastapi uvicorn pydantic python-jose
 ```
 
-其中的内容说明：
-
-+ `LOG`：日志配置
-  + `level`：日志显示的等级，可选`debug`、`info`、`error`、`warning`、`critical`
-  + `handler`：日志的输出方式，可选`stream`、`file`、`time`
-+ `DINGTALK`：你的钉钉`webhook token`
-+ `TUSHARE`：你的`tushare_pro token`
-+ `SENDMAIL`：邮箱配置
-  + `from`：发件邮箱，推荐使用`QQ`邮箱
-  + `password`：你的`QQ`邮箱授权码，非`QQ`密码
-  + `to`：收件邮箱，推荐使用`QQ`邮箱并在微信上绑定此邮箱以实现微信接收消息
-  + `server`：邮箱服务器，`QQ`邮箱默认使用此服务器
-  + `port`：邮箱端口，`QQ`邮箱默认此端口即可
-
-除了配置的这些信息外，也可以向配置文件中添加任意的信息，但注意**不能与默认设置内容中大写的内容名称相同，即使你添加的信息是小写亦不可**！要在策略中使用向配置文件中增加的信息，示例如下：
-
-> 比如我们向配置文件中添加一项信息
->
-> ```json
-> {
->     "LOG": {
->         "level": "debug",
->         "handler": "stream"
->     },
->     "DINGTALK": "your dingding token",
->     "TUSHARE": "your tushare token",
->     "SENDMAIL": {
->         "from": "your qq email address",
->         "password": "your qq email authorization code",
->         "to": "your qq email address",
->         "server": "smtp.qq.com",
->         "port": 587
->     },
->     "person_name": "Gary-Hertel"
-> }
-> ```
->
-> 要在策略中使用，只需：
->
-> ```python
-> config.person_name
-> ```
-
-
-
-------
-
-## 二、框架的启用
-
-在我们配置好配置文件后，将其放入我们的项目中，接下来就可以使用我们的框架了：
+### 运行第一个回测
 
 ```python
-from stockquant.quant import *		# 导入必要的模块
+from stockquant.engine import Cerebro
+from stockquant.strategy import BaseStrategy
+from stockquant.data import DataFeed
+from stockquant.broker import BacktestBroker
+from stockquant.commission import AShareCommission
 
-config.loads('config.json')			# 载入配置文件
+# 定义策略
+class MyStrategy(BaseStrategy):
+    name = "Dual MA Crossover"
+    parameters = {"fast": 5, "slow": 20}
+
+    def on_start(self):
+        self.ma_fast = self.EMA(period=self.parameters["fast"])
+        self.ma_slow = self.EMA(period=self.parameters["slow"])
+
+    def on_bar(self):
+        if self.ma_fast.crossed_above(self.ma_slow):
+            self.order_market(self.data.close[0], 100)
+        elif self.ma_fast.crossed_below(self.ma_slow):
+            self.close_all()
+
+# 运行回测
+cerebro = Cerebro(
+    cash=1_000_000,
+    broker=BacktestBroker(),
+    commission=AShareCommission(),
+)
+
+cerebro.add_data(DataFeed.baostock(
+    symbols=["sh600519", "sz000858"],
+    timeframe="1d",
+    start="2020-01-01",
+    end="2024-12-31",
+))
+cerebro.add_strategy(MyStrategy, fast=5, slow=20)
+results = cerebro.run()
+
+# 查看报告
+cerebro.show_report(results)
 ```
 
-
-
-------
-
-## 三、行情数据
-
-行情数据获取，具体参数请看方法内部的说明文档，在开发工具中，按住`ctrl`用鼠标点击一下方法的名称即可查看。
-
-| 说明                     |                           调用方式                           |
-| :----------------------- | :----------------------------------------------------------: |
-| 获取指定股票的实时数据   |                    `Market.tick(symbol)`                     |
-| 获取深圳成指             |             `Market.shenzhen_component_index()`              |
-| 获取上证综指             |             `Market.shanghai_component_index()`              |
-| 获取历史k线数据          | `Market.kline(symbol, timeframe, adj=None, start_date=None, end_date=None)` |
-| 股票列表                 |                `Market.stocks_list(day=None)`                |
-| 查询今日沪深股市是否开盘 |                   `Market.today_is_open()`                   |
-| 证券基本资料             |   `Market.stock_basic_info(symbol=None, symbol_name=None)`   |
-| 查询除权除息信息         |        `Market.dividend_data(symbol, year, yearType)`        |
-| 查询复权因子信息         | `Market.adjust_factor(symbol, start_date=None, end_date=None)` |
-| 季频盈利能力             |    `Market.profit_data(symbol, year=None, quarter=None)`     |
-| 季频营运能力             |   `Market.operation_data(symbol, year=None, quarter=None)`   |
-| 季频成长能力             |    `Market.growth_data(symbol, year=None, quarter=None)`     |
-| 季频偿债能力             |    `Market.balance_data(symbol, year=None, quarter=None)`    |
-| 季频现金流量             |   `Market.cash_flow_data(symbol, year=None, quarter=None)`   |
-| 季频杜邦指数             |    `Market.dupont_data(symbol, year=None, quarter=None)`     |
-| 季频公司业绩快报         | `Market.performance_express_report(symbol, start_date, end_date)` |
-| 季频公司业绩预告         |    `Market.forcast_report(symbol, start_date, end_date)`     |
-| 存款利率                 |  `Market.deposit_rate_data(start_date=None, end_date=None)`  |
-| 贷款利率                 |   `Market.loan_rate_data(start_date=None, end_date=None)`    |
-| 存款准备金率             | `Market.required_reserve_ratio_data(start_date=None, end_date=None, yearType=None)` |
-| 货币供应量               | `Market.money_supply_data_month(start_date=None, end_date=None)` |
-| 货币供应量(年底余额)     | `Market.money_supply_data_year(start_date=None, end_date=None)` |
-| 银行间同业拆放利率       |     `Market.shibor_data(start_date=None, end_date=None)`     |
-| 获取行业分类信息         |       `Market.stock_industry(symbol=None, date=None)`        |
-| 获取上证50成分股信息     |               `Market.sz50_stocks(date=None)`                |
-| 沪深300成分股            |               `Market.hs300_stocks(date=None)`               |
-| 中证500成分股            |               `Market.zz500_stocks(date=None)`               |
-| 获取新股上市列表数据     |                     `Market.new_stock()`                     |
-
-**Note: 获取指定股票的实时数据时，Tick对象数据结构如下：**
-
-|        调用方式        | 数据类型 |  字段说明  |
-| :--------------------: | :------: | :--------: |
-|     `tick.symbol`      | `string` |  股票名称  |
-|      `tick.last`       | `float`  |  当前价格  |
-|      `tick.open`       | `float`  | 今日开盘价 |
-|      `tick.high`       | `float`  | 今日最高价 |
-|       `tick.low`       | `float`  | 今日最低价 |
-| `tick.yesterday_close` | `float`  | 昨日收盘价 |
-|    `tick.bid_price`    | `float`  |   竞买价   |
-|    `tick.ask_price`    | `float`  |   竞卖价   |
-|  `tick.transactions`   | `float`  |  成交数量  |
-|    `tick.turnover`     | `float`  |  成交金额  |
-|  `tick.bid1_quantity`  | `float`  |  买一数量  |
-|   `tick.bid1_price`    | `float`  |  买一报价  |
-|  `tick.bid2_quantity`  | `float`  |  买二数量  |
-|   `tick.bid2_price`    | `float`  |  买二报价  |
-|  `tick.bid3_quantity`  | `float`  |  买三数量  |
-|   `tick.bid3_price`    | `float`  |  买三报价  |
-|  `tick.bid4_quantity`  | `float`  |  买四数量  |
-|   `tick.bid4_price`    | `float`  |  买四报价  |
-|  `tick.bid5_quantity`  | `float`  |  买五数量  |
-|   `tick.bid5_price`    | `float`  |  买五报价  |
-|  `tick.ask1_quantity`  | `float`  |  卖一数量  |
-|   `tick.ask1_price`    | `float`  |  卖一报价  |
-|  `tick.ask2_quantity`  | `float`  |  卖二数量  |
-|   `tick.ask2_price`    | `float`  |  卖二报价  |
-|  `tick.ask3_quantity`  | `float`  |  卖三数量  |
-|   `tick.ask3_price`    | `float`  |  卖三报价  |
-|  `tick.ask4_quantity`  | `float`  |  卖四数量  |
-|   `tick.ask4_price`    | `float`  |  卖四报价  |
-|  `tick.ask5_quantity`  | `float`  |  卖五数量  |
-|   `tick.ask5_price`    | `float`  |  卖五报价  |
-|    `tick.timestamp`    |  `str`   |   时间戳   |
-
-
-
-------
-
-
-
-## 四、技术指标
+### 使用 AI 生成策略
 
 ```python
-kline = Market.kline("sh601003", "1d")
+from stockquant.ai import AIOrchestrator
+
+ai = AIOrchestrator(
+    llm_provider="openai",
+    llm_model="gpt-4o",
+    data_sources=["baostock", "eastmoney"],
+)
+
+# 自然语言 → 策略代码
+strategy = ai.generate_strategy(
+    "在日线级别，当 MACD 金叉且东方财富论坛情绪超过 70% 时买入，"
+    "仓位不超过总资产的 20%，止损 5%"
+)
+
+# AI 自动回测 + 解读
+results = cerebro.backtest(strategy)
+analysis = ai.analyze_backtest(results)
+print(analysis.summary)    # 自然语言总结
+print(analysis.suggestions)  # 改进建议
 ```
 
-|         指标名称         |               调用方式                |                            返回值                            |
-| :----------------------: | :-----------------------------------: | :----------------------------------------------------------: |
-|     `指数移动平均线`     |        `ATR(14, kline=kline)`         |                          `一维数组`                          |
-|     `k线数据的长度`      |       `CurrentBar(kline=kline)`       |                          `整型数字`                          |
-|          `布林`          |        `BOLL(20, kline=kline)`        | `{"upperband": 上轨， "middleband": 中轨， "lowerband": 下轨}` |
-|        `顺势指标`        |        `CCI(20, kline=kline)`         |                          `一维数组`                          |
-|       `周期最高价`       |      `HIGHEST(20, kline=kline)`       |                          `一维数组`                          |
-|       `移动平均线`       |       `MA(20, 30, kline=kline)`       |                          `一维数组`                          |
-|   `指数平滑异同平均线`   |    `MACD(14, 26, 9, kline=kline)`     |     `{'DIF': DIF数组, 'DEA': DEA数组, 'MACD': MACD数组}`     |
-|       `指数平均数`       |      `EMA(20, 30, kline=kline)`       |                          `一维数组`                          |
-| `考夫曼自适应移动平均线` |      `KAMA(20, 30, kline=kline)`      |                          `一维数组`                          |
-|        `随机指标`        |     `KDJ(20, 30, 9, kline=kline)`     |               `{'k': k值数组， 'd': d值数组}`                |
-|       `周期最低价`       |       `LOWEST(20, kline=kline)`       |                          `一维数组`                          |
-|         `能量潮`         |          `OBV(kline=kline)`           |                          `一维数组`                          |
-|        `强弱指标`        |        `RSI(20, kline=kline)`         |                          `一维数组`                          |
-|       `变动率指标`       |        `ROC(20, kline=kline)`         |                          `一维数组`                          |
-|    `随机相对强弱指数`    |  `STOCHRSI(20, 30, 9, kline=kline)`   |       `{'stochrsi': stochrsi数组, 'fastk': fastk数组}`       |
-|       `抛物线指标`       |          `SAR(kline=kline)`           |                          `一维数组`                          |
-|        `标准方差`        | `STDDEV(20, kline=kline, nbdev=None)` |                          `一维数组`                          |
-|   `三重指数平滑平均线`   |        `TRIX(20, kline=kline)`        |                          `一维数组`                          |
-|         `成交量`         |         `VOLUME(kline=kline)`         |                          `一维数组`                          |
+---
 
+## 架构概览
 
-
-------
-
-## 五、日志
-
-日志模块对于分析程序的运行状况至关重要，`StockQuant`内置日志模块，可用来方便记录程序运行状况与排查问题。
-
-日志一共分成5个等级，从低到高分别是：
-
-1. DEBUG
-2. INFO
-3. WARNING
-4. ERROR
-5. CRITICAL
-
-```python
-logger.debug("DEBUG日志")
-logger.info("INFO日志")
-logger.warning("WARNING日志")
-logger.error("ERROR日志")
-logger.critical("CRITICAL日志")
+```
+stockquant/
+├── engine/          # 事件驱动引擎（Cerebro / EventEngine / OMS / Portfolio）
+├── strategy/        # 策略框架（BaseStrategy / 模板库）
+├── indicators/      # 技术指标（18+ 指标）
+├── analytics/       # 分析报表（HTML/PDF/JSON 报表 + Plotly 可视化）
+├── data/            # 数据层（DataFeed ABC + 本地缓存 + 多数据源）
+├── execution/       # 交易执行（LiveBroker + 消息推送）
+├── ai/              # AI 层（Agent 编排 / 信息处理全流程 / 记忆 / 反幻觉 / LLM 适配 / 爬虫 / NLP）
+├── api/             # API 网关（FastAPI RESTful + WebSocket）
+├── web/             # Web 前端（React + Ant Design + ECharts）
+└── utils/           # 工具层（时间 / 日志 / 配置）
 ```
 
-配置文件中，`level`如设置成`debug`级别，则会输出所有级别的日志，如设置成`info`级别，只会输出`info`及以上级别的日志，而不会输出`debug`级别的日志。
+### 核心数据流
 
-配置文件中，`handler`如设置为`stream`，是打印日志到控制台；如设为`file`是保存至文件，文件大小按`1M`进行分割，会保留最近的`1000`份日志文件；如设置为`time`是按照每天进行分割。
+```
+用户策略 → Cerebro → EventEngine → BarEvent → BaseStrategy.on_bar()
+  → Broker.place_order() → RiskManager.check() → 撮合引擎 → 更新 Portfolio
 
-**`Note`：如果是在宝塔面板上运行程序，记得将配置文件中`LOG`的`handler`设置不要设置为`stream`，否则会一直写入日志，并且不会自动分割日志。**
-
-
-
-------
-
-## 六、信息推送
-
-信息推送对于风控通知来说是至关重要的。`StockQuant`内置信息推送模块，可直接调用以推送信息至钉钉或邮箱。
-
-### 1.钉钉
-
-`Note`：需在配置文件中设置钉钉`WebHook Api`，建立钉钉群聊后添加一个`WebHook`机器人，创建机器人时指定关键字如`交易`。
-
-#### （1）推送文本类型信息
-
-推送文本类型信息时需包含关键字，否则无法送达。
-
-```python
-Dingralk.text("交易提醒：sh600519的价格已达到2000元！")
+DataAgent 采集新闻/公告 → NLP 情感分析 → MonitorAgent 实时监控
+  → DecisionAgent 融合技术面+消息面 → 生成交易建议 → 推送用户
 ```
 
-#### （2）推送`markdown`类型信息
+---
 
-推送`markdown`信息时无需包含关键字（前提是你的关键字设置的是`交易`）。下面看一个示例：
+## 功能清单
+
+### 传统量化能力（F001-F018）
+
+| 模块 | 功能 | 状态 |
+|------|------|------|
+| **引擎** | 事件驱动回测引擎（F001） | Planned |
+| **OMS** | 订单管理（5 种订单类型 + 状态机 + T+1）（F002） | Planned |
+| **组合** | 多资产投资组合（F003） | Planned |
+| **策略** | BaseStrategy 框架 + 生命周期钩子（F004） | Planned |
+| **指标** | 30+ 回测统计指标 Sharpe/Sortino/Calmar（F005） | Planned |
+| **Broker** | 回测/模拟/实盘抽象层（F006） | Planned |
+| **费用** | A 股佣金/滑点/印花税建模（F007） | Planned |
+| **优化** | 参数优化器（网格 + 随机 + Walk-Forward）（F008） | Planned |
+| **风控** | 风险管理模块（F009） | Planned |
+| **仓位** | 仓位管理 Kelly/ATR/波动率目标（F010） | Planned |
+| **数据** | 数据层抽象 + 本地缓存（F011） | Planned |
+| **模拟** | 模拟盘模式（F012） | Planned |
+| **报表** | HTML/JSON 回测报表（F013） | Planned |
+| **模板** | 7 套内置策略模板（F014） | Planned |
+| **DSL** | 自定义指标装饰器（F015） | Planned |
+| **Dashboard** | Web Dashboard（F029） | Planned |
+| **实盘** | 券商 API（中泰 XTP / CTP）（F017） | Planned |
+| **推送** | 钉钉/邮件/企微/Telegram 推送（F018） | Planned |
+
+### AI 能力（F020-F028）
+
+| Agent | 功能 | 状态 |
+|-------|------|------|
+| **DataAgent** | 多源数据采集 + 情感分析 + 结构化（F020） | Planned |
+| **IndicatorAgent** | 自动推荐最优指标组合（F021） | Planned |
+| **StrategyAgent** | 自然语言 → 策略代码（F022） | Planned |
+| **BacktestAgent** | 自动解读回测结果 + 过拟合检测（F023） | Planned |
+| **MonitorAgent** | 实时盯盘 + 异动检测（F024） | Planned |
+| **DecisionAgent** | AI 辅助决策 + 风险预警（F025） | Planned |
+| **RiskAgent** | 动态风控 + 黑天鹅防护（F026） | Planned |
+| **对比 Agent** | 多策略横向对比 + 组合优化（F027） | Planned |
+| **交互界面** | 对话式策略/数据/盯盘（F028） | Planned |
+
+### 基础设施（F030）
+
+| 模块 | 功能 | 状态 |
+|------|------|------|
+| **部署** | Docker Compose 一键部署（F030） | Planned |
+| **测试** | pytest + CI/CD + 覆盖率 ≥ 90% | Planned |
+
+---
+
+## Web Dashboard
+
+StockQuant 2.0 提供完整的 Web 前端，涵盖 10 个核心页面：
+
+| 页面 | 路由 | 功能 |
+|------|------|------|
+| 主页仪表盘 | `/` | 权益曲线、持仓汇总、通知、系统状态 |
+| 回测配置 | `/backtest` | 数据选择 + 策略配置 + 启动回测 |
+| 回测结果 | `/backtest/:id` | 30+ 指标 + 资金曲线/回撤/热力图 + AI 解读 |
+| 策略管理 | `/strategy` | 策略列表 + Monaco 代码编辑器 |
+| 实时盯盘 | `/monitor` | 自选股 + 实时行情 + AI 信号推送 |
+| AI 对话 | `/ai-chat` | 与 AI 对话：策略开发、数据分析 |
+| 投资组合 | `/portfolio` | 持仓汇总 + 行业分布 + 盈亏分析 |
+| 数据管理 | `/data` | 数据源配置 + 缓存管理 |
+| 系统设置 | `/settings` | 运行配置中心（14 分组、向导/专家双模式） |
+| 登录 | `/login` | 用户认证（未来） |
+
+### 技术栈
+
+| 层次 | 技术 |
+|------|------|
+| 前端框架 | React 18 + TypeScript + Vite |
+| UI 组件 | Ant Design 5 |
+| 图表 | ECharts 5 |
+| 状态管理 | Zustand |
+| 代码编辑 | Monaco Editor |
+| 后端 API | FastAPI + Uvicorn + WebSocket |
+| 部署 | Docker Compose + Nginx |
+
+### 系统设置页
+
+系统设置页参考成熟的配置管理体系，提供 14 个配置分组、70+ 参数项：
+
+| 分组 | 参数项 | 说明 |
+|------|--------|------|
+| 系统总控 | 6 项 | 交易模式、日志级别、Web 端口、初始资金、强制运行、Tick 间隔 |
+| 数据源 | 10 项 | 主数据源（BaoStock/Tushare/TDX/DuckDB/MySQL/PG）及连接参数 |
+| 交易成本 | 4 项 | 佣金率、最低佣金、印花税率、过户费率 |
+| 执行参数 | 3 项 | 滑点、最小手数、涨跌停限制 |
+| 交易时段 | 4 项 | 早盘/午盘开收盘时间 |
+| 券商通道 | 5 项 | 通道类型（内部/QMT/HTTP）、轮询间隔、QMT/HTTP 网关参数 |
+| 风控阈值 | 5 项 | 单笔止损、单票仓位、总仓位、日亏熔断、回撤限制 |
+| AI 模型 | 14 项 | LLM 提供商、API 地址/密钥、模型、温度、Token、超时、策略专用 LLM |
+| 策略进化 | 10 项 | 进化开关、LLM 配置、重试、降级 |
+| 通知推送 | 8 项 | 企微/钉钉/SMTP/邮箱/Telegram |
+| 基本面适配 | 10 项 | 启用开关、回测/实时启用、缓存配置 |
+| 信号管理 | 3 项 | 去重冷却、DB 兜底、审计拒单 |
+| 历史同步 | 14 项 | 写入模式、定时间隔、并发、股票池 |
+| 消息总线 | 3 项 | Kafka 开关、集群地址、消费者组 |
+
+**UI 特性**：暗色科技感主题、向导/专家双视图、动态表单控件、条件显隐、密钥掩码、Dirty 追踪、浮动保存条、管理员口令二次确认。
+
+---
+
+## 配置说明
+
+### AI 配置（YAML 驱动）
+
+```yaml
+# stockquant_config.yaml
+ai:
+  llm:
+    provider: "openai"          # openai / anthropic / local
+    model: "gpt-4o"
+    api_key: "${AI_API_KEY}"    # 从环境变量读取
+    temperature: 0.3
+    max_tokens: 2048
+
+  data_collection:
+    enabled: true
+    frequency: "5min"
+    sources:
+      - name: "eastmoney_news"
+        type: "web_scraper"
+        schedule: "*/5 * * * *"
+      - name: "cls_news"
+        type: "rss"
+
+  nlp:
+    sentiment_model: "clue/albert-base-chinese-sst"
+    fallback_provider: "openai"
+
+  decision_mode: "advisory"    # advisory / semi-auto / auto
+```
+
+---
+
+## 里程碑
+
+| 版本 | 时间 | 内容 |
+|------|------|------|
+| **v2.0.0-alpha** | 第 10 周 | 事件引擎 + OMS + 投资组合 + 策略基类 + 18 指标 + AI 数据采集 Agent |
+| **v2.0.0-beta** | 第 18 周 | + 佣金/滑点 + 参数优化 + 风控 + 报表 + Broker 抽象 + AI 策略生成 + AI 辅助决策 + API 网关 |
+| **v2.0.0-rc** | 第 24 周 | + 数据缓存 + 模拟盘 + AI 回测解读 + AI 盯盘 + 动态风控 + Web Dashboard Alpha + 测试 ≥ 90% |
+| **v2.0.0** | 第 36 周 | + Web Dashboard 完整版 + AI 对话界面 + 券商 API + Docker 一键部署 |
+| **v2.1.0** | 第 48 周 | 高级功能：多用户、Streamlit 高级分析、移动端适配 |
+
+**总工期**：约 40-52 周（10-13 个月）
+
+---
+
+## 从 v1 迁移
+
+StockQuant v1.x 已标记为 EOL（End of Life）。v2.0 采用全新 API，不再兼容 v1。
+
+提供 `v1_compat` 模块，可包装 v1 风格策略在 v2 引擎中运行（有限支持，仅单标的日线回测）。
 
 ```python
+# v1 写法（不再推荐）
 from stockquant.quant import *
-
 config.loads('config.json')
-
-tick = Market.tick("sh600519")
-
-content = "### 订单更新推送\n\n" \
-            "> **股票名称:** {symbol}\n\n" \
-            "> **当前价格:** {last}\n\n" \
-            "> **成交数量:** {transactions}\n\n" \
-            "> **成交金额:** {turnover}\n\n" \
-            "> **时间戳:** {timestamp}".format(
-                symbol=tick.symbol,
-                last=tick.last,
-                transactions=tick.transactions,
-                turnover=tick.turnover,
-                timestamp=tick.timestamp
-            )
-DingTalk.markdown(content)
-```
-
-### 2.邮件
-
-```python
-sendmail("交易提醒：sh600519的价格已达到2000美元！")
-```
-
-
-
-------
-
-## 七、数据存储
-
-```python
-txt_save(content, filename)						 # 保存数据至txt文件
-txt_read(filename)								# 读取txt文件中的数据
-save_to_csv_file(tuple, path)					 # 保存文件至csv文件
-read_csv_file(path)								# 读取csv文件中保存的数据
-```
-
-
-
-------
-
-## 八、时间戳转换的一些方法
-
-```python
-sleep(seconds)							# 休眠，作用等同于time.sleep()
-get_cur_timestamp()						# 获取当前时间戳（秒）
-ts_to_utc_str(ts)						# 将时间戳转换为UTC时间格式
-get_cur_timestamp_ms()					# 获取当前时间戳(毫秒)
-get_cur_datetime_m()					# 获取当前日期时间字符串，包含 年 + 月 + 日 + 时 + 分 + 秒
-get_datetime()							# 获取日期字符串，包含 年 + 月 + 日
-date_str_to_dt(date_str)				# 日期字符串转换到datetime对象
-dt_to_date_str(dt)						# datetime对象转换到日期字符串
-get_utc_time()							# 获取当前utc时间
-get_localtime()							# 获取本地时间
-ts_to_datetime_str(ts)					# 将时间戳转换为日期时间格式，年-月-日 时:分:秒
-datetime_str_to_ts(dt_str)				# 将日期时间格式字符串转换成时间戳
-datetime_to_timestamp(dt)				# 将datetime对象转换成时间戳
-utctime_str_to_ts(utctime_str)			# 将UTC日期时间格式字符串转换成时间戳
-utctime_str_to_mts(utctime_str)			# 将UTC日期时间格式字符串转换成时间戳（毫秒）
-```
-
-
-
-## 九、自动交易
-
-```python
-"""
-股票自动交易，使用的是easytrader开源项目。
-仅支持windows系统，云主机与虚拟机上无法运行。
-具体用法，可参考哔哩哔哩教学视频：
-    https://www.bilibili.com/video/BV1zK411u7uG
-"""
-
-
-from stockquant.quant import *
-
-
 class Strategy:
-
     def __init__(self):
-        self.trade = Trade(config_file="config.json", symbol="sh512980")    # 初始化trade模块
+        self.trade = Trade(config_file="config.json")
+        kline = Market.kline("sh600519", "1d")
+        for i in range(10, len(kline)):
+            bt.initialize(kline[:i+1])
 
-        self.do_action()
+# v2 写法（推荐）
+from stockquant.strategy import BaseStrategy
+from stockquant.engine import Cerebro
 
-    def do_action(self):
-        price = Market.tick("sh512980").ask1_price          # 获取卖一价格
-        success, error = self.trade.buy(price, amount)      # 买入
-        success, error = self.trade.sell(price, amount)     # 卖出
-        success, error = self.trade.get_positions()         # 查询当前持仓
-        success, error = self.trade.get_balance()           # 查询资金信息
-        success, error = self.trade.get_today_orders()      # 查询今日委托
-        success, error = self.trade.get_today_deals()       # 查询今日成交
-        if error:
-            DingTalk.text("交易提醒：失败：{}".format(error))
-            pass
-        logger.info("success:{}".format(success))
+class MyStrategy(BaseStrategy):
+    def on_bar(self):
+        if self.is_last_bar():
+            pass  # 不再需要手动迭代
 
-
-if __name__ == '__main__':
-
-    Strategy()
+cerebro = Cerebro()
+cerebro.add_data(DataFeed.baostock("sh600519", "1d"))
+cerebro.add_strategy(MyStrategy)
+cerebro.run()
 ```
 
+---
 
+## 技术栈
 
-------
+| 类别 | 依赖 |
+|------|------|
+| **核心** | numpy, pandas, TA-Lib / pandas-ta, plotly |
+| **API** | FastAPI, Uvicorn, Pydantic v2 |
+| **前端** | React 18, Ant Design 5, ECharts 5, Zustand, Monaco Editor |
+| **AI** | OpenAI, Anthropic Claude, ChromaDB, sentence-transformers |
+| **数据** | BaoStock, Tushare, SQLAlchemy, PyArrow, DuckDB |
+| **部署** | Docker, Docker Compose, Nginx |
+| **测试** | pytest, coverage, Jest, Cypress |
+| **开发** | ruff, mypy, black |
 
-`updated at 2021/03/03`
+---
+
+## 路线图
+
+详见 [Product-Spec.md](Product-Spec.md)（产品需求文档，30 个功能需求完整规格）。
+
+---
+
+## 许可
+
+MIT License
+
+---
+
+> **说明**：StockQuant 2.0 目前处于 Alpha 开发阶段，API 和功能尚未稳定。本文档描述的是目标架构，部分功能仍在实现中。当前版本（v1.2.0）可参考旧的 README 分支使用。
