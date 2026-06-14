@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """StockQuant 2.0 公共 API 导出"""
 
+# API 网关（FastAPI）— 延迟导入，避免循环引用
+# 使用时: from stockquant.api import create_app
+
 # 模型
 from stockquant.models.bar import BarData
 from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
