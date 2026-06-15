@@ -102,8 +102,9 @@ class ComparisonAgent:
         # 组合优化
         portfolio_weights = self._optimize_weights(results, correlation_matrix)
 
-        # 生成建议
-        recommendations = self._generate_recommendations(ranked_strategies, portfolio_weights)
+        # 生成建议（含近期表现）
+        recent_perf = self._compute_recent_performance(results)
+        recommendations = self._generate_recommendations(ranked_strategies, portfolio_weights, recent_perf)
 
         comparison = StrategyComparison(
             strategies=strategy_names,
@@ -156,39 +157,88 @@ class ComparisonAgent:
     def _compute_correlation(
         self, results: List[Dict[str, Any]]
     ) -> Dict[str, float]:
-        """计算策略间的收益相关性"""
+        """计算策略间的收益相关性（使用逐日收益率序列计算 Pearson 相关系数）"""
         if len(results) < 2:
             return {}
 
-        returns: List[float] = []
-        for r in results:
-            try:
-                val = r.get("Annualized Return")
-                if isinstance(val, str):
-                    val = float(val.replace("%", "")) / 100
-                else:
-                    val = float(val)
-                returns.append(val)
-            except (ValueError, TypeError):
-                returns.append(0.0)
+        import pandas as pd
 
-        correlation_matrix: Dict[str, float] = {}
-        for i in range(len(results)):
-            for j in range(i + 1, len(results)):
-                ri, rj = returns[i], returns[j]
-                if ri == 0 and rj == 0:
-                    corr = 0.0
-                else:
-                    denom = max(abs(ri), 0.01) * max(abs(rj), 0.01)
-                    corr = ri * rj / denom
-                    corr = max(-1.0, min(1.0, corr))
-                key = (
-                    results[i].get("strategy", ""),
-                    results[j].get("strategy", ""),
-                )
-                correlation_matrix[str(key)] = round(corr, 3)
+        # 从 equity_curve 提取逐日收益率
+        series_map: Dict[str, pd.Series] = {}
+        for i, r in enumerate(results):
+            name = r.get("strategy", f"Strategy {i+1}")
+            equity = r.get("equity_curve")
+            if isinstance(equity, list) and len(equity) >= 2:
+                # equity_curve 格式: [[date, value], ...] 或 [value, ...]
+                try:
+                    if isinstance(equity[0], (list, tuple)) and len(equity[0]) >= 2:
+                        values = [float(p[1]) for p in equity]
+                    else:
+                        values = [float(v) for v in equity]
+                    series_map[name] = pd.Series(values).pct_change().dropna()
+                except (ValueError, TypeError, IndexError):
+                    series_map[name] = pd.Series([0.0])
+            else:
+                # 退化：从汇总指标估算
+                try:
+                    ann_return = r.get("Annualized Return", 0)
+                    if isinstance(ann_return, str):
+                        ann_return = float(ann_return.replace("%", "")) / 100
+                    vals = [float(ann_return) / 252] * 5
+                    series_map[name] = pd.Series(vals)
+                except (ValueError, TypeError):
+                    series_map[name] = pd.Series([0.0])
 
-        return correlation_matrix
+        if len(series_map) < 2:
+            return {}
+
+        corr_df = pd.DataFrame(series_map).corr(method="pearson")
+        result: Dict[str, float] = {}
+        names = list(series_map.keys())
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                c = corr_df.loc[names[i], names[j]]
+                if pd.isna(c):
+                    c = 0.0
+                key = (names[i], names[j])
+                result[str(key)] = round(float(c), 3)
+
+        return result
+
+    def _compute_recent_performance(
+        self, results: List[Dict[str, Any]], window: int = 20
+    ) -> Dict[str, Dict[str, float]]:
+        """计算策略近期表现（最近 N 天的收益/回撤趋势）"""
+        perf: Dict[str, Dict[str, float]] = {}
+        for i, r in enumerate(results):
+            name = r.get("strategy", f"Strategy {i+1}")
+            equity = r.get("equity_curve")
+            recent: Dict[str, float] = {}
+            if isinstance(equity, list) and len(equity) >= 2:
+                try:
+                    if isinstance(equity[0], (list, tuple)):
+                        values = [float(p[1]) for p in equity]
+                    else:
+                        values = [float(v) for v in equity]
+                    n = len(values)
+                    recent_window = values[-window:] if n >= window else values
+                    if len(recent_window) >= 2:
+                        ret = (recent_window[-1] - recent_window[0]) / max(abs(recent_window[0]), 1)
+                        peak = max(recent_window)
+                        dd = (recent_window[-1] - peak) / max(abs(peak), 1)
+                        recent["recent_return"] = round(ret * 100, 2)
+                        recent["recent_drawdown"] = round(dd * 100, 2)
+                    else:
+                        recent["recent_return"] = 0.0
+                        recent["recent_drawdown"] = 0.0
+                except (ValueError, TypeError, IndexError):
+                    recent["recent_return"] = 0.0
+                    recent["recent_drawdown"] = 0.0
+            else:
+                recent["recent_return"] = 0.0
+                recent["recent_drawdown"] = 0.0
+            perf[name] = recent
+        return perf
 
     def _optimize_weights(
         self,
@@ -197,6 +247,8 @@ class ComparisonAgent:
     ) -> Dict[str, float]:
         """基于风险和收益优化权重分配"""
         n = len(results)
+        if n == 0:
+            return {}
         if n == 1:
             return {results[0].get("strategy", "Strategy 1"): 1.0}
 
@@ -244,8 +296,9 @@ class ComparisonAgent:
     def _generate_recommendations(
         ranked: List[tuple],
         weights: Dict[str, float],
+        recent_perf: Optional[Dict[str, Dict[str, float]]] = None,
     ) -> List[str]:
-        """生成对比建议"""
+        """生成对比建议（含近期表现与生命周期建议）"""
         recs: List[str] = []
 
         if ranked:
@@ -261,6 +314,18 @@ class ComparisonAgent:
                 recs.append(f"  {name} 建议高配 ({w*100:.0f}%)")
             elif w <= 0.1:
                 recs.append(f"  {name} 建议低配或停用 ({w*100:.0f}%)")
+
+        # 近期表现分析 → 生命周期建议
+        if recent_perf:
+            for name, perf in recent_perf.items():
+                ret = perf.get("recent_return", 0)
+                dd = perf.get("recent_drawdown", 0)
+                if ret < -10 and dd < -15:
+                    recs.append(f"  ⚠ {name} 近期表现不佳（收益 {ret}%，回撤 {dd}%），建议暂停或重构")
+                elif ret > 5 and abs(dd) < 5:
+                    recs.append(f"  ✓ {name} 近期表现稳健（收益 {ret}%），建议维持")
+                elif ret < 0:
+                    recs.append(f"  ~ {name} 近期小幅回撤（收益 {ret}%），建议观察")
 
         if not recs:
             recs.append("暂无足够数据进行对比分析")

@@ -1,6 +1,20 @@
 version: '3.8'
 
 services:
+  frontend:
+    build: ./web
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   backend:
     build: .
     ports:
@@ -8,7 +22,7 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - DATABASE_URL=sqlite:///./stockquant.db
+      - DATABASE_URL=sqlite:////app/stockquant.db
     volumes:
       - ./data:/app/data
       - ./stockquant.db:/app/stockquant.db
@@ -19,5 +33,19 @@ services:
       timeout: 10s
       retries: 3
 
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8888:80"
+    volumes:
+      - chroma_data:/chroma/chroma
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   data:
+  chroma_data:

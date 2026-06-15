@@ -201,28 +201,6 @@ class AuditLog:
     user_confirmed: Optional[bool] = None  # 半自动模式下用户是否确认
 
 
-# ── F024 盯盘模型 ──
-
-
-@dataclass
-class MonitorSignal:
-    """盯盘监控信号"""
-
-    symbol: str = ""
-    direction: str = ""             # "BUY" / "SELL" / "WATCH"
-    reason: str = ""
-    confidence: float = 0.0         # 0.0-1.0
-    signal_type: str = ""           # "technical" / "news" / "anomaly" / "fused"
-    timestamp: datetime = field(default_factory=datetime.now)
-    tool_calls: List[dict] = field(default_factory=list)
-    reasoning: str = ""
-    acting: str = ""
-
-    @property
-    def has_tool_calls(self) -> bool:
-        return len(self.tool_calls) > 0
-
-
 # ── F027 对比模型 ──
 
 
