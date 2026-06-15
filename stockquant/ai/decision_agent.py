@@ -31,6 +31,7 @@ from stockquant.ai.models import (
     SignalSource,
     SignalVerification,
 )
+from stockquant.persistence.repository import save_audit_log
 
 logger = logging.getLogger("stockquant.ai")
 
@@ -104,11 +105,13 @@ class DecisionAgent:
         fetcher_manager: Any = None,
         news_searcher: Any = None,
         max_steps: int = 10,
+        db_url: Optional[str] = None,
     ) -> None:
         self._mode = mode
         self._fetcher_manager = fetcher_manager
         self._news_searcher = news_searcher
         self._audit_logs: List[AuditLog] = []
+        self._db_url = db_url or "sqlite:///./stockquant.db"
 
         # 构建 ReActAgent
         self._react = ReActAgent(
@@ -340,7 +343,7 @@ class DecisionAgent:
         advice: DecisionAdvice,
         final_action: str,
     ) -> None:
-        """记录审计日志。"""
+        """记录审计日志（内存 + 持久化）。"""
         log = AuditLog(
             timestamp=datetime.now(),
             signal_source=signal.get("source", "unknown"),
@@ -356,3 +359,27 @@ class DecisionAgent:
             f"Decision audit: {log.symbol} {log.direction} → "
             f"{advice.action} (confidence={advice.confidence:.2f})"
         )
+
+        # 持久化到 SQLite
+        try:
+            save_audit_log(
+                engine_url=self._db_url,
+                timestamp=log.timestamp,
+                signal_source=log.signal_source,
+                symbol=log.symbol,
+                direction=log.direction,
+                original_signal=log.original_signal,
+                ai_decision={
+                    "action": advice.action,
+                    "confidence": advice.confidence,
+                    "reason": advice.reason,
+                    "modified_params": advice.modified_params,
+                    "risk_warnings": advice.risk_warnings,
+                    "stop_loss": advice.stop_loss,
+                    "take_profit": advice.take_profit,
+                },
+                final_action=final_action,
+                user_confirmed=log.user_confirmed,
+            )
+        except Exception:
+            logger.debug("Audit log persistence failed (non-fatal)")

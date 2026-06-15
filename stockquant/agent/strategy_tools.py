@@ -191,6 +191,91 @@ def validate_strategy_code(code: str) -> str:
     }, ensure_ascii=False)
 
 
+# ── 安全辅助函数 ──
+
+
+def _safe_exec(code: str) -> Dict[str, Any]:
+    """在沙箱中执行策略代码。
+
+    沙箱限制：
+    - 移除危险 builtins（eval/exec/open/import 等）
+    - 仅允许 stockquant/numpy/pandas/datetime/typing 等白名单模块导入
+    - 捕获所有异常
+
+    Parameters
+    ----------
+    code : str
+        要执行的 Python 代码
+
+    Returns
+    -------
+    Dict[str, Any]
+        执行后的命名空间
+    """
+    _builtin_import = __import__  # 保存真实的 builtin __import__
+
+    allowed_modules = {
+        "stockquant", "numpy", "pandas", "datetime", "typing",
+        "abc", "dataclasses", "logging", "math", "collections",
+    }
+
+    # 危险的内置函数
+    _dangerous = {"eval", "exec", "open", "compile", "__import__",
+                  "input", "breakpoint", "globals", "locals", "vars", "getattr",
+                  "setattr", "delattr", "dir", "hasattr", "memoryview",
+                  "copyright", "exit", "quit", "help", "__loader__",
+                  "__spec__", "__build_class__"}
+
+    def _restricted_import(name: str, *args, **kwargs):
+        top = name.split(".")[0] if name else ""
+        if top not in allowed_modules:
+            raise ImportError(f"Module '{name}' not allowed in strategy sandbox")
+        return _builtin_import(name, *args, **kwargs)
+
+    # 基于真实 builtins 构建安全子集
+    import builtins
+    safe_builtins_dict = {
+        k: v for k, v in vars(builtins).items()
+        if not k.startswith("_") or k in ("__len__", "__iter__", "__getitem__",
+                                           "__add__", "__call__", "__name__",
+                                           "__import__", "__doc__", "__build_class__",
+                                           "__subclasses__", "__contains__",
+                                           "__enter__", "__exit__", "__await__",
+                                           "__ge__", "__gt__", "__le__", "__lt__",
+                                           "__eq__", "__ne__", "__and__", "__or__",
+                                           "__mul__", "__truediv__", "__floordiv__",
+                                           "__mod__", "__pow__", "__neg__", "__pos__",
+                                           "__abs__", "__invert__", "__bool__",
+                                           "__sizeof__", "__hash__", "__repr__",
+                                           "__format__", "__reversed__", "__getitem__",
+                                           "__delitem__", "__setitem__",
+                                           "__iter__", "__next__", "__getattribute__",
+                                           "__setattr__", "__reduce__", "__reduce_ex__",
+                                           "__getstate__", "__class__", "__dict__",
+                                           "__bases__", "__mro__", "__dictclass__",
+                                           "__cause__", "__context__", "__traceback__",
+                                           "__file__", "__path__", "__cached__",
+                                           "__spec__", "__loader__",
+                                           "__builtins__")
+    }
+    # 显式移除危险项
+    for _k in ("eval", "exec", "open", "compile", "__import__",
+               "input", "breakpoint", "globals", "locals", "vars",
+               "getattr", "setattr", "delattr", "dir", "hasattr",
+               "memoryview", "copyright", "exit", "quit", "help"):
+        safe_builtins_dict.pop(_k, None)
+    # 注入受限 __import__
+    safe_builtins_dict["__import__"] = _restricted_import
+    safe_builtins_dict["__name__"] = "sandbox"
+
+    safe_ns: Dict[str, Any] = {"__builtins__": safe_builtins_dict}
+    try:
+        exec(compile(code, "<strategy_sandbox>", "exec"), safe_ns)
+    except Exception as exc:
+        logger.warning("Strategy sandbox exec error: %s", exc)
+    return safe_ns
+
+
 # ── Tool 4: backtest_strategy ──
 
 
@@ -206,6 +291,8 @@ def _make_backtest_strategy(fetcher_manager: Any) -> Any:
         cash: float = 1000000.0,
     ) -> str:
         """自动回测生成的策略代码。
+
+        策略代码在沙箱中执行，仅允许导入 stockquant/numpy/pandas 等白名单模块。
 
         Parameters
         ----------
@@ -224,9 +311,8 @@ def _make_backtest_strategy(fetcher_manager: Any) -> Any:
             from stockquant.engine.cerebro import Cerebro
             from stockquant.data.feed import BaoStockFeed
 
-            # 动态执行策略代码，获取策略类
-            namespace: Dict[str, Any] = {}
-            exec(code, namespace)  # noqa: S102
+            # 沙箱执行策略代码，获取策略类
+            namespace = _safe_exec(code)
 
             # 找到 BaseStrategy 的子类
             from stockquant.strategy.base import BaseStrategy

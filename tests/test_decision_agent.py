@@ -465,3 +465,113 @@ def test_decision_advice_dataclass():
     assert advice2.market_env.environment == "bull"
     assert advice2.sentiment.score == pytest.approx(0.8)
     assert advice2.position_eval.reasonable is True
+
+
+# ── 15. test_db_url_config ──
+
+
+def test_decision_agent_db_url_config():
+    """DecisionAgent 接受 db_url 参数并用于持久化。"""
+    with patch.object(DecisionAgent, "__init__", lambda self, **kwargs: None):
+        agent = DecisionAgent.__new__(DecisionAgent)
+        agent._mode = DecisionMode.READ_ONLY
+        agent._audit_logs = []
+        agent._db_url = "sqlite:///./custom.db"
+
+    advice = agent.evaluate({"symbol": "sh600519", "direction": "BUY"})
+    # db_url 应可用于持久化
+    assert agent._db_url == "sqlite:///./custom.db"
+
+
+# ── 16. test_audit_persistence_wired ──
+
+
+def test_audit_persistence_wired():
+    """审计日志应调用 save_audit_log 持久化。"""
+    with patch("stockquant.ai.decision_agent.save_audit_log") as mock_save:
+        with patch.object(DecisionAgent, "__init__", lambda self, **kwargs: None):
+            agent = DecisionAgent.__new__(DecisionAgent)
+            agent._mode = DecisionMode.AUTO
+            agent._audit_logs = []
+            agent._db_url = "sqlite:///:memory:"
+            agent._react = MagicMock()
+
+            react_result = ReActResult(
+                final_answer="建议买入",
+                thoughts=[
+                    Thought(
+                        step=1,
+                        thought="决策",
+                        action="generate_decision",
+                        action_input={},
+                        observation=json.dumps({
+                            "action": "confirm",
+                            "confidence": 0.7,
+                            "reason": "测试",
+                            "modified_params": None,
+                            "risk_warnings": [],
+                            "stop_loss": None,
+                            "take_profit": None,
+                        }),
+                        state=ReActState.OBSERVING,
+                    ),
+                ],
+                tool_calls_made=1,
+                success=True,
+            )
+            agent._react.run.return_value = react_result
+
+        signal = {"symbol": "sh600519", "direction": "BUY", "qty": 100, "source": "strategy"}
+        agent.evaluate(signal)
+
+        mock_save.assert_called_once()
+        call_kwargs = mock_save.call_args[1]
+        assert call_kwargs["symbol"] == "sh600519"
+        assert call_kwargs["direction"] == "BUY"
+        assert call_kwargs["final_action"] == "confirm"  # AUTO mode: final_action = advice.action
+
+
+# ── 17. test_persistence_error_non_fatal ──
+
+
+def test_persistence_error_non_fatal():
+    """持久化失败不应影响 evaluate 返回值。"""
+    with patch("stockquant.ai.decision_agent.save_audit_log", side_effect=RuntimeError("db down")):
+        with patch.object(DecisionAgent, "__init__", lambda self, **kwargs: None):
+            agent = DecisionAgent.__new__(DecisionAgent)
+            agent._mode = DecisionMode.AUTO
+            agent._audit_logs = []
+            agent._db_url = "sqlite:///:memory:"
+            agent._react = MagicMock()
+
+            react_result = ReActResult(
+                final_answer="建议买入",
+                thoughts=[
+                    Thought(
+                        step=1,
+                        thought="决策",
+                        action="generate_decision",
+                        action_input={},
+                        observation=json.dumps({
+                            "action": "confirm",
+                            "confidence": 0.5,
+                            "reason": "测试",
+                            "modified_params": None,
+                            "risk_warnings": [],
+                            "stop_loss": None,
+                            "take_profit": None,
+                        }),
+                        state=ReActState.OBSERVING,
+                    ),
+                ],
+                tool_calls_made=1,
+                success=True,
+            )
+            agent._react.run.return_value = react_result
+
+        signal = {"symbol": "sh600519", "direction": "BUY", "qty": 100, "source": "strategy"}
+        advice = agent.evaluate(signal)
+
+        # evaluate 不应因持久化失败而抛出异常
+        assert advice.action == "confirm"
+        assert advice.confidence == pytest.approx(0.5)

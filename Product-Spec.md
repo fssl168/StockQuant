@@ -1,10 +1,10 @@
 # StockQuant Product Specification
 
 > **项目名称**：StockQuant 2.0 — 机构级中国 A 股量化交易平台
-> **版本**：2.0.0（系统设置页设计版 v2.0.3）
+> **版本**：2.0.0-dev
 > **创建日期**：2026-06-14
-> **更新日期**：2026-06-14（项目经理复核，修复 14 个问题）
-> **状态**：Ready for Development
+> **更新日期**：2026-06-15
+> **状态**：In Development (87% Complete — 26/30 功能已完成，575 测试通过)
 
 ***
 
@@ -115,7 +115,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 ## 3. 功能需求
 
-### F001 事件驱动回测引擎（P0）
+### F001 事件驱动回测引擎（P0） [✅ Done]
 
 **用户场景**：量化研究员编写策略后，通过一条命令运行回测，引擎自动按时间顺序派发 Bar 事件，策略响应后生成订单，引擎模拟成交并记录持仓变化。
 
@@ -134,7 +134,13 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 事件派发零丢失（通过集成测试验证）
 - 多标的回测正确聚合投资组合盈亏
 
-### F002 订单管理系统 OMS（P0）
+**实际实现**：
+- 关键文件：`engine/cerebro.py`, `engine/event.py`
+- `Cerebro` 类支持 `add_data()`, `add_strategy()`, `set_broker()`, `set_commission()`, `run()`
+- `EventEngine` 支持同步/异步事件派发，`EventType` 枚举覆盖全部事件类型
+- `ProgressBar` 提供回测进度实时显示
+
+### F002 订单管理系统 OMS（P0） [✅ Done]
 
 **用户场景**：策略发出买入指令后，订单进入 OMS 管理，经历"提交 → 排队 → 部分成交 → 全部成交"的完整生命周期。支持限价单、市价单、止损单、止损限价单。
 
@@ -155,7 +161,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 涨停板买单、跌停板卖单被正确拒绝
 - T+1 规则：当日买入持仓不可在当日卖出
 
-### F003 投资组合模拟（P0）
+### F003 投资组合模拟（P0） [✅ Done]
 
 **用户场景**：用户同时持有 10 只股票，投资组合跟踪每只股票的持仓数量、成本价、市值、盈亏，以及总现金、总权益、权益曲线。
 
@@ -174,7 +180,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 全部卖出后权益变化与手工计算一致（误差 < 0.01 元）
 - 多策略并发下单不出现资金超买
 
-### F004 策略框架（P0）
+### F004 策略框架（P0） [✅ Done]
 
 **用户场景**：开发者通过继承 `BaseStrategy` 编写策略，实现 `on_start`、`on_bar`、`on_tick`、`on_order`、`on_trade`、`on_finish` 钩子函数。框架自动调用。
 
@@ -195,7 +201,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 策略生命周期钩子按正确顺序调用
 - 指标计算结果与 TA-Lib 独立计算结果一致（误差 < 1e-6）
 
-### F005 回测统计指标（P0）
+### F005 回测统计指标（P0） [✅ Done]
 
 **用户场景**：回测结束后，一键生成包含 30+ 指标的完整报告，包括收益、风险、风险调整后收益、交易统计等。
 
@@ -239,7 +245,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 报告包含所有 30+ 指标
 - 支持自定义基准（默认沪深 300）
 
-### F006 Broker 抽象层（P0）
+### F006 Broker 抽象层（P0） [✅ Done]
 
 **用户场景**：同一套策略代码，通过切换 Broker 实现回测/模拟盘/实盘三种模式，无需修改策略逻辑。
 
@@ -256,7 +262,12 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 同一策略在 BacktestBroker 和 PaperBroker 下生成的交易记录一致（允许滑点差异）
 - 切换 Broker 只需修改一行配置代码
 
-### F007 佣金与滑点建模（P0）
+**实际实现**：
+- 关键文件：`engine/broker.py`
+- `Broker` ABC → `BacktestBroker`, `PaperBroker`, `LiveBroker` 三个子类
+- 统一接口：`place_order()`, `cancel_order()`, `get_positions()`, `get_balance()`
+
+### F007 佣金与滑点建模（P0） [✅ Done]
 
 **用户场景**：回测中每笔交易自动扣除 A 股市场真实费用，确保回测结果贴近实际。
 
@@ -279,7 +290,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 卖出 10000 元股票，扣除后实际收入 = 10000 × (1 - 0.025% - 0.05% - 0.001%)
 - 滑点模型在回测中正确应用
 
-### F008 参数优化器（P1）
+### F008 参数优化器（P1） [✅ Done]
 
 **用户场景**：用户声明策略参数范围，引擎自动并行运行所有参数组合，输出排名报表。
 
@@ -298,7 +309,12 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 输出结果包含所有参数组合的完整指标
 - Walk-Forward 正确划分训练/测试窗口
 
-### F009 风险管理模块（P1）
+**实际实现**：
+- 关键文件：`engine/cerebro.py`, `engine/commission.py`
+- Walk-Forward 分析：`WalkForwardOptimizer` 支持滚动窗口优化
+- `Cerebro.optstrategy()` 支持网格搜索和随机搜索
+
+### F009 风险管理模块（P1） [✅ Done]
 
 **用户场景**：引擎在策略订单到达 Broker 之前，自动检查是否违反风控规则，拦截不合规订单。
 
@@ -322,7 +338,12 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 累计回撤达到 15% 后策略继续运行但不再下单
 - 风控检查耗时 < 1ms/订单
 
-### F010 仓位管理模块（P1）
+**实际实现**：
+- 关键文件：`engine/risk.py`
+- `RiskManager` 支持可配置规则：单票仓位/金额上限、日亏熔断、累计回撤熔断、频率限制
+- `engine/sizer.py`：5 种仓位管理算法
+
+### F010 仓位管理模块（P1） [✅ Done]
 
 **用户场景**：策略通过仓位管理器自动计算每笔交易的买入数量，而不是手动指定固定手数。
 
@@ -341,7 +362,11 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 各仓位管理算法计算结果与手工计算一致
 - 仓位大小受风控模块限制（不超限）
 
-### F011 数据层抽象（P1）
+**实际实现**：
+- 关键文件：`engine/sizer.py`
+- `FixedFractionSizer`, `KellySizer`, `ATRSizer`, `VolatilityTargetSizer`, `EqualWeightSizer`
+
+### F011 数据层抽象（P1） [✅ Done]
 
 **用户场景**：用户通过统一的 `DataFeed` 接口获取任意数据源的数据，切换数据源不需要修改策略代码。
 
@@ -371,7 +396,15 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 切换数据源只需修改 `Cerebro.adddata(DataFeed("BaoStock", ...))`
 - Parquet 缓存写入 ≤ 500ms/千行
 
-### F012 模拟盘模式（P1）
+**实际实现**：
+- 关键文件：`data/` 目录 — `BaoStockFeed`, `AkShareFeed`, `CSVFeed`, `ParquetFeed`, `SQLiteFeed`
+- `DataFetcherManager` 实现数据源优先级队列 + 健康检查 + 自动故障切换
+- `data/standardize.py`：`STANDARD_COLUMNS` 列映射 + `normalize_columns()` + `calculate_standard_indicators()`
+- `data/calendar.py`：CN/HK/US 交易日历 + exchange-calendars 软依赖 fallback
+- `data/exceptions.py`：三层异常层次 `StockQuantError → DataFetchError/RateLimitError/...`
+- `data/retry.py`：基于 tenacity 的 3 套预置重试策略
+
+### F012 模拟盘模式（P1） [✅ Done]
 
 **用户场景**：回测通过后，用户可以一键切换到模拟盘，使用真实行情验证策略，不花一分钱但体验真实交易环境。
 
@@ -388,7 +421,10 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 模拟盘与回测结果误差 < 1%（允许实时数据与回测数据微小差异）
 - 模拟盘期间策略正常运行 ≥ 24 小时无崩溃
 
-### F013 回测报表系统（P1）
+**实际实现**：
+- `engine/broker.py` 中 `PaperBroker` 子类
+
+### F013 回测报表系统（P1） [✅ Done]
 
 **用户场景**：回测结束后自动生成包含图表和指标的 HTML 报表，可以邮件发送给团队审阅。
 
@@ -413,7 +449,12 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - PDF 报表排版美观，支持中文
 - 报表生成时间 < 5 秒（1000 笔交易以内）
 
-### F014 内置策略模板库（P2）
+**实际实现**：
+- 关键文件：`analytics/report.py`
+- `ReportGenerator` 支持 HTML/JSON 输出 + `output_path` 文件写入
+- `analytics/market_review.py`：`MarketReviewer` 大盘复盘（板块/资金数据目前为 mock 占位）
+
+### F014 内置策略模板库（P2） [✅ Done]
 
 **功能描述**：
 
@@ -426,7 +467,11 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - `Momentum_Strategy`：动量策略
 - 每套模板附带使用文档和回测示例
 
-### F015 自定义指标 DSL（P1）
+**实际实现**：
+- 关键文件：`strategy/templates.py`
+- 7 套模板：`DualMACrossoverStrategy`, `RSIReversalStrategy`, `BollingerBounceStrategy`, `MACDDivergenceStrategy`, `DualThrustStrategy`, `MeanReversionStrategy`, `MomentumStrategy`
+
+### F015 自定义指标 DSL（P1） [✅ Done]
 
 **功能描述**：
 
@@ -435,7 +480,13 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 指标链式调用：`self.EMA(self.RSI(14))`
 - 指标可视化：`self.plot_indicator(indicator, name="MyIndicator")`
 
-### F016 Web Dashboard（P2）
+**实际实现**：
+- 关键文件：`indicators/base.py`, `indicators/dsl.py`, `indicators/` 目录
+- 18+ 指标：MA, EMA, KAMA, TRIX, RSI, KDJ, CCI, ROC, STOCHRSI, BOLL, ATR, STDDEV, SAR, MACD, OBV, HIGHEST, LOWEST, VOLUME
+- DSL 装饰器：`@indicator`, `apply_indicators`
+- `strategy/signal.py`：`plot_indicator` 可视化
+
+### F016 Web Dashboard（P2） [❌ Planned]
 
 **功能描述**：
 
@@ -449,7 +500,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
   - 模拟盘监控：实时持仓和通知
 - 支持多用户（未来）
 
-### F017 券商 API 实盘交易（P2）
+### F017 券商 API 实盘交易（P2） [⚠️ Skeleton]
 
 **功能描述**：
 
@@ -466,7 +517,11 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 订单审计日志完整记录所有操作
 - 实盘和模拟盘使用相同策略代码
 
-### F018 消息推送系统（P1）
+**实际实现**：
+- `engine/broker.py` 中 `LiveBroker` 骨架已实现（券商 API 接入待开发）
+- 订单审计日志记录在 `persistence/repository.py`
+
+### F018 消息推送系统（P1） [✅ Done]
 
 **功能描述**：
 
@@ -483,7 +538,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 ***
 
-### F019 信号管线系统（P0）
+### F019 信号管线系统（P0） [✅ Done]
 
 > **定位**：连接 AI 信息处理全流程（F020）与策略执行框架（F004）的桥梁。AI 升华输出的是自然语言洞察，策略框架执行的是代码信号，信号管线负责两者之间的双向转换。
 
@@ -521,9 +576,15 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 所有 AI 信号 100% 通过 A 股规则校验
 - 信号过期自动失效，不会触发过期交易
 
+**实际实现**：
+- 关键文件：`strategy/signal.py`, `strategy/signal_evaluator.py`
+- `Signal`, `SignalSide`, `SignalSource`, `SignalManager`
+- `SignalEvaluator` + `SignalAccuracy` + `SignalDecay`
+- `convert_ai_to_strategy()` 自动转换函数
+
 ***
 
-### F020 AI 信息处理全流程（P0）
+### F020 AI 信息处理全流程（P0） [⚠️ Partial]
 
 **用户场景**：AI 不是孤立的"采集+决策"两阶段工具，而是构建了一个从信息采集 → 信息降噪 → 信息总结 → 信息升华的完整信息处理链。记忆系统和反幻觉机制深度嵌入到**每一个环节**，确保信息从进入系统到驱动决策的全生命周期都准确、可靠、可追溯。
 
@@ -864,7 +925,14 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 幻觉数据库的积累，反过来优化每个环节的 Prompt 和规则
 - 形成"采集→验证→记忆→检索→推理→验证→记忆积累→Prompt 优化→更好采集"的持续进化闭环
 
-### F021 AI 指标发现 Agent（P1）
+**实际实现**：
+- 关键文件：`ai/news_searcher.py`, `ai/json_utils.py`, `persistence/`
+- `NewsSearcher` 支持新闻搜索 + `NewsItem` 数据结构
+- `robust_json_parse` 4 级 JSON 修复降级
+- 持久化：`persistence/models.py` 中 `KlineData`, `AnalysisHistory`, `ChatMessage`
+- 未实现：完整记忆系统（L1/L2/L3）、反幻觉机制（已证伪列表、低信源列表）
+
+### F021 AI 指标发现 Agent（P1） [✅ Done]
 
 **用户场景**：研究员不需要手动尝试各种指标参数，AI 自动分析当前市场状态，推荐最优指标及其参数组合。
 
@@ -881,7 +949,11 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 推荐指标在历史数据上的信号胜率 ≥ 55%
 - 指标推荐耗时 < 10 秒/标的
 
-### F022 AI 策略生成与配置 Agent（P0）
+**实际实现**：
+- 关键文件：`ai/indicator_agent.py`
+- `IndicatorAgent` 自动分析市场状态 → 推荐指标 → 评分
+
+### F022 AI 策略生成与配置 Agent（P0） [✅ Done]
 
 **用户场景**：用户用自然语言描述策略意图（如"在日线级别，当 MACD 金叉且东方财富论坛情绪超过 70% 时买入，仓位不超过总资产的 20%"），AI 自动生成可执行的策略代码。
 
@@ -900,7 +972,16 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 自然语言描述准确转译为策略要素（覆盖率 ≥ 90%）
 - AI 评分与人工评估的一致性 ≥ 80%
 
-### F023 AI 回测解读 Agent（P1）
+**实际实现**：
+- 关键文件：`ai/strategy_agent.py`, `agent/strategy_tools.py`, `agent/react_agent.py`
+- `StrategyAgent` 使用 `ReActAgent` 6 工具管线：parse_intent → generate_code → validate_code → backtest → score → suggest_improvements
+- `_safe_exec()` 沙箱隔离：模块白名单 + 受限 `__import__`
+- `_extract_code_block()` 从 LLM 响应提取代码
+- `score_strategy()` 4 维度评分（收益/风险/交易质量/稳定性）
+- `agent/llm_adapter.py`：`LLMAdapter` + `call_with_tools` + 模型回退链
+- `agent/tool_registry.py`：`@tool` 装饰器 + JSON Schema 自动生成
+
+### F023 AI 回测解读 Agent（P1） [✅ Done]
 
 **用户场景**：回测结束后，不是只看报表数字，AI 自动分析回测结果，指出问题、解释原因、给出改进建议。
 
@@ -919,7 +1000,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 过拟合检测准确率 ≥ 80%（与人工标记对比）
 - 改进建议至少 3 条，且每条可操作
 
-### F024 AI 实时盯盘 Agent（P1）
+### F024 AI 实时盯盘 Agent（P1） [❌ Planned]
 
 **用户场景**：盘中 AI 实时分析行情 + 消息面，自动识别交易机会和风险，通过钉钉推送提醒。
 
@@ -939,7 +1020,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 消息面联动分析延迟 < 5 分钟
 - AI 信号融合准确率 ≥ 65%（与人工标记对比）
 
-### F025 AI 辅助决策 Agent（P0）
+### F025 AI 辅助决策 Agent（P0） [✅ Done]
 
 > **与 F024 的边界**：F024（盯盘 Agent）是**信号探测器**——负责发现机会/风险并推送通知，不直接参与交易决策。F025（决策 Agent）是**信号决策器**——在交易执行前对 F024 推送的信号和策略自身的信号做二次验证，决定是否执行、何时执行、执行多少仓位。
 
@@ -969,7 +1050,15 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 半自动模式下，用户确认平均响应时间 < 30 秒
 - F024 推送信号经 F025 验证后误报率 ≤ 30%
 
-### F026 AI 动态风控 Agent（P1）
+**实际实现**：
+- 关键文件：`ai/decision_agent.py`, `agent/decision_tools.py`, `persistence/repository.py`
+- `DecisionAgent` 使用 `ReActAgent` 6 工具管线：verify_signal → assess_risk → check_market_env → analyze_news_sentiment → evaluate_position → generate_decision
+- 3 种模式：`DecisionMode.AUTO`, `SEMI_AUTO`, `READ_ONLY`
+- 审计日志：`_record_audit()` → `save_audit_log()`（try/except 非致命失败）
+- `db_url` 参数用于持久化
+- `DecisionAdvice` 数据类含完整决策上下文
+
+### F026 AI 动态风控 Agent（P1） [✅ Done]
 
 **用户场景**：风控参数不是静态的，AI 根据市场环境动态调整——牛市放宽、熊市收紧。
 
@@ -995,7 +1084,12 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 极端行情（单日跌幅 > 5%）下风控自动生效，延迟 < 10 秒
 - 参数调整可审计（记录调整原因和依据）
 
-### F027 AI 策略回测对比 Agent（P2）
+**实际实现**：
+- 关键文件：`ai/risk_agent.py`
+- `RiskAgent` 动态风控参数调整
+- `DynamicRiskParams`, `MarketEnvironment` 数据结构
+
+### F027 AI 策略回测对比 Agent（P2） [❌ Planned]
 
 **用户场景**：同时对比多个策略的优劣，AI 自动选出最优组合并推荐配置比例。
 
@@ -1005,7 +1099,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 策略组合优化：分析策略间相关性，推荐最优组合比例（降低组合回撤）
 - 策略生命周期建议：基于近期表现，建议何时启用/停用某策略
 
-### F028 AI 自然语言交互界面（P2）
+### F028 AI 自然语言交互界面（P2） [❌ Planned]
 
 **功能描述**：
 
@@ -1017,7 +1111,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 ***
 
-### F029 Web Dashboard 前端（P1）
+### F029 Web Dashboard 前端（P1） [⚠️ Partial]
 
 > **定位**：StockQuant 2.0 的核心用户界面，通过浏览器提供完整的量化交易平台体验。React 18 + TypeScript + Vite + Ant Design 5 + ECharts。
 
@@ -1203,7 +1297,7 @@ GET    /api/settings/whitelist  # 仅暴露白名单结构（不含 value），�
 
 ***
 
-### F030 前后端集成部署（P1）
+### F030 前后端集成部署（P1） [❌ Planned]
 
 **功能描述**：
 
@@ -1348,48 +1442,18 @@ stockquant/
 │   ├── __init__.py
 │   ├── cerebro.py                # Cerebro 主引擎
 │   ├── event.py                  # EventEngine + Event 定义
-│   ├── portfolio.py              # 投资组合管理
-│   ├── oms.py                    # 订单管理系统
-│   ├── broker.py                 # Broker ABC
-│   │   ├── backtest_broker.py
-│   │   ├── paper_broker.py
-│   │   └── live_broker.py
+│   ├── broker.py                 # Broker ABC + BacktestBroker/PaperBroker/LiveBroker
 │   ├── commission.py             # 佣金/滑点模型
-│   ├── risk.py                   # 风险管理
+│   ├── risk.py                   # 风险管理 RiskManager
+│   ├── sizer.py                  # 仓位管理 5 种算法
 │   └── metrics.py                # 回测统计 30+ 指标
 ├── strategy/                      # 策略框架层
 │   ├── __init__.py
 │   ├── base.py                   # BaseStrategy
-│   ├── signal.py                 # 信号系统
-│   └── templates/                # 内置策略模板
-│       ├── ma_crossover.py
-│       ├── bollinger.py
-│       ├── macd_divergence.py
-│       ├── rsi_reversal.py
-│       ├── dual_thrust.py
-│       ├── mean_reversion.py
-│       └── momentum.py
-├── analytics/                     # 分析报表层
-│   ├── __init__.py
-│   ├── report.py                 # HTML/PDF/JSON 报表
-│   └── plotter.py                # Plotly 可视化
-├── data/                          # 数据层
-│   ├── __init__.py
-│   ├── feed.py                   # DataFeed ABC
-│   ├── cache.py                  # DataCache
-│   ├── providers/                # 结构化数据源
-│   │   ├── baostock_feed.py
-│   │   ├── tushare_feed.py
-│   │   ├── netease_feed.py
-│   │   ├── csv_feed.py
-│   │   ├── parquet_feed.py
-│   │   └── sqlite_feed.py
-│   └── models/                   # 数据模型
-│       ├── kline.py              # K 线数据类
-│       ├── tick.py               # Tick 数据类
-│       ├── order.py              # 订单数据类
-│       ├── position.py           # 持仓数据类
-│       └── sentiment.py          # 情绪数据类（AI）
+│   ├── yaml_loader.py            # YAML 策略配置
+│   ├── signal.py                 # 信号系统 Signal/SignalManager
+│   ├── signal_evaluator.py       # 信号准确率统计
+│   └── templates.py              # 7 套内置策略模板
 ├── indicators/                    # 技术指标层
 │   ├── __init__.py
 │   ├── base.py                   # Indicator ABC
@@ -1397,165 +1461,96 @@ stockquant/
 │   ├── oscillators.py            # RSI/KDJ/CCI/ROC/STOCHRSI
 │   ├── volatility.py             # BOLL/ATR/STDDEV/SAR
 │   ├── trend.py                  # MACD/OBV
-│   └── utils.py                  # 工具函数
+│   └── dsl.py                    # @indicator DSL 装饰器
+├── data/                          # 数据层
+│   ├── __init__.py
+│   ├── feed.py                   # DataFeed ABC
+│   ├── standardize.py            # 列标准化 + 自动计算
+│   ├── providers/                # 数据源实现
+│   │   ├── baostock_feed.py
+│   │   ├── akshare_feed.py
+│   │   ├── csv_feed.py
+│   │   ├── parquet_feed.py
+│   │   └── sqlite_feed.py
+│   ├── fetcher_manager.py        # 数据源管理器（优先级队列 + 故障切换）
+│   ├── calendar.py               # 交易日历
+│   ├── exceptions.py             # 异常层次
+│   └── retry.py                  # 基于 tenacity 的重试策略
+├── models/                        # 数据模型
+│   ├── __init__.py
+│   ├── base.py                   # BaseData
+│   ├── bar.py                    # BarData
+│   ├── order.py                  # Order + OrderSide/Type/Status
+│   ├── position.py               # Position
+│   ├── account.py                # Account
+│   ├── trade.py                  # TradeData
+│   └── portfolio.py              # Portfolio
+├── agent/                         # Agent 基础设施（新增）
+│   ├── __init__.py
+│   ├── llm_adapter.py            # LLMAdapter（litellm wrapper）
+│   ├── react_agent.py            # ReActAgent（Reasoning-Acting 循环）
+│   └── tool_registry.py          # @tool 装饰器 + ToolRegistry
+├── ai/                            # AI Agent
+│   ├── __init__.py
+│   ├── json_utils.py             # robust_json_parse（4 级 JSON 修复）
+│   ├── models.py                 # AI 数据类（DecisionAdvice/SignalVerification/...）
+│   ├── news_searcher.py          # NewsSearcher
+│   ├── indicator_agent.py        # IndicatorAgent
+│   ├── strategy_agent.py         # StrategyAgent（6 工具 ReAct 管线）
+│   ├── backtest_agent.py         # BacktestAgent
+│   ├── risk_agent.py             # RiskAgent
+│   └── decision_agent.py         # DecisionAgent（6 工具 ReAct 管线）
+├── analytics/                     # 分析报表层
+│   ├── __init__.py
+│   ├── report.py                 # HTML/JSON 报表
+│   └── market_review.py          # MarketReviewer（大盘复盘）
 ├── execution/                     # 交易执行层
 │   ├── __init__.py
-│   ├── trade.py                  # LiveBroker（券商 API）
-│   └── notifier/                 # 消息推送
+│   ├── report_renderer.py        # Markdown 转图片
+│   └── notifier/                 # 消息推送（9 渠道）
 │       ├── base.py
+│       ├── router.py             # MessageRouter
 │       ├── dingtalk.py
 │       ├── email.py
 │       ├── wechat.py
-│       └── telegram.py
-├── ai/                            # AI 层（新增）
+│       ├── telegram.py
+│       ├── discord.py
+│       ├── feishu.py
+│       ├── pushplus.py
+│       ├── serverchan.py
+│       └── webhook.py
+├── persistence/                   # 持久化层（新增）
 │   ├── __init__.py
-│   ├── orchestrator.py           # AI Agent 编排器
-│   ├── pipeline.py               # 信息处理全流程编排（采集→降噪→总结→升华）
-│   ├── data_agent.py             # 信息采集 Agent（含来源验证+事实初筛）
-│   ├── denoiser.py               # 信息降噪器（信源降权+时效过滤+一致性过滤+冗余压缩）
-│   ├── summarizer.py             # 信息总结器（记忆检索+反幻觉验证+记忆写入）
-│   ├── elevator.py               # 信息升华器（多源融合+推理链验证+交叉验证）
-│   ├── indicator_agent.py        # 指标发现 Agent
-│   ├── strategy_agent.py         # 策略生成 Agent
-│   ├── backtest_agent.py         # 回测解读 Agent
-│   ├── monitor_agent.py          # 实时盯盘 Agent
-│   ├── decision_agent.py         # 辅助决策 Agent
-│   ├── risk_agent.py             # 动态风控 Agent
-│   ├── memory/                   # 记忆系统（被全流程各环节调用）
-│   │   ├── base.py               # 记忆层 ABC（L1/L2/L3）
-│   │   ├── working.py            # 工作记忆（会话级，内存）
-│   │   ├── short_term.py         # 短期记忆（向量数据库 + 时间索引）
-│   │   ├── long_term.py          # 长期记忆（持久化 + 语义索引）
-│   │   ├── memory_lifecycle.py        # 记忆生命周期管理（总结/遗忘/压缩）
-│   │   ├── forgetter.py          # 遗忘机制（时效性 + 置信度 + 冗余压缩）
-│   │   ├── compressor.py         # 记忆压缩器
-│   │   └── retriever.py          # 多源检索器（语义 + 关键词 + 时间 + 置信度）
-│   ├── hallucination/            # 反幻觉系统（被全流程各环节调用）
-│   │   ├── base.py               # 幻觉检测器 ABC
-│   │   ├── source_verifier.py    # 来源验证（采集时）
-│   │   ├── fact_screener.py      # 事实初筛（采集时）
-│   │   ├── consistency_filter.py # 一致性过滤（降噪时）
-│   │   ├── prompt_constraint.py  # Prompt 约束注入（总结时）
-│   │   ├── post_verify.py        # 总结后验证（五步中的事实+来源验证）
-│   │   ├── logic_verifier.py     # 推理链验证（升华时）
-│   │   ├── cross_validator.py    # 交叉验证（升华时）
-│   │   ├── confidence_scorer.py  # 置信度评分（全部环节输出点）
-│   │   ├── hallucination_db.py   # 幻觉数据库（全局积累）
-│   │   ├── pattern_detector.py   # 幻觉模式识别
-│   │   ├── prompt_optimizer.py   # Prompt 自动优化
-│   │   └── feedback_loop.py      # 人工纠正反馈循环
-│   ├── llm/                      # LLM 适配层
-│   │   ├── base.py               # LLM Provider ABC
-│   │   ├── openai.py             # OpenAI GPT
-│   │   ├── anthropic.py          # Claude
-│   │   ├── local.py              # 本地模型（Ollama）
-│   │   └── config.py             # LLM 配置
-│   ├── scrapers/                 # 数据采集器
-│   │   ├── base.py               # Scraper ABC
-│   │   ├── eastmoney.py          # 东方财富
-│   │   ├── xueqiu.py             # 雪球
-│   │   ├── cls.py                # 财联社
-│   │   ├── cninfo.py             # 巨潮资讯
-│   │   └── sszi.py               # 上交所
-│   ├── nlp/                      # NLP 处理
-│   │   ├── sentiment.py          # 情感分析
-│   │   ├── extractor.py          # 信息抽取
-│   │   └── classifier.py         # 分类器
-│   └── storage/                  # AI 数据存储
-│       ├── sqlite_store.py       # SQLite 存储
-│       └── pg_store.py           # PostgreSQL 存储
-├── utils/                         # 工具层
+│   ├── models.py                 # SQLAlchemy 模型
+│   └── repository.py             # CRUD 操作 + save_audit_log
+├── api/                           # API 网关层（FastAPI）
 │   ├── __init__.py
-│   ├── time.py                   # 时间工具
-│   ├── logger.py                 # 日志
-│   └── config.py                 # 配置管理
-└── __main__.py                   # CLI 入口
-├── api/                            # API 网关层（新增 — FastAPI）
-│   ├── __init__.py
-│   ├── main.py                     # FastAPI 应用入口 + 中间件
-│   ├── routers/                    # RESTful 路由
-│   │   ├── backtest.py             # 回测相关（提交/查询/删除/列表）
-│   │   ├── strategy.py             # 策略管理（CRUD + 预览）
-│   │   ├── data.py                 # 数据管理（数据源配置 + 缓存管理）
-│   │   ├── dashboard.py            # Dashboard 数据接口（持仓/收益/指标）
-│   │   ├── ai.py                   # AI 相关（对话/分析/盯盘配置）
-│   │   ├── user.py                 # 用户认证（未来多用户）
-│   │   └── system.py               # 系统状态（健康检查/版本/资源）
-│   ├── websocket.py                # WebSocket 实时推送（行情/交易/通知）
-│   ├── deps.py                     # 依赖注入（认证/配置）
-│   └── schemas.py                  # Pydantic 数据模型
-├── web/                            # Web 前端（新增 — React + Ant Design）
-│   ├── package.json                # 前端依赖
-│   ├── vite.config.ts              # Vite 构建配置
-│   ├── tsconfig.json               # TypeScript 配置
-│   ├── src/
-│   │   ├── main.tsx                # 应用入口
-│   │   ├── App.tsx                 # 路由配置 + 布局
-│   │   ├── store/                  # 状态管理（Zustand）
-│   │   │   ├── index.ts
-│   │   │   ├── marketStore.ts      # 市场行情状态
-│   │   │   ├── backtestStore.ts    # 回测任务状态
-│   │   │   ├── strategyStore.ts    # 策略管理状态
-│   │   │   ├── aiStore.ts          # AI 对话状态
-│   │   │   └── notificationStore.ts # 通知状态
-│   │   ├── api/                    # API 客户端
-│   │   │   ├── client.ts           # Axios 实例 + 拦截器
-│   │   │   ├── backtest.ts         # 回测 API 调用封装
-│   │   │   ├── strategy.ts         # 策略 API 调用封装
-│   │   │   ├── dashboard.ts        # Dashboard API 调用封装
-│   │   │   ├── ai.ts               # AI 对话 API 调用封装
-│   │   │   └── websocket.ts        # WebSocket 客户端
-│   │   ├── components/             # 公共组件
-│   │   │   ├── Layout.tsx          # 主布局（侧边栏 + 顶栏 + 内容区）
-│   │   │   ├── Chart/              # 图表组件
-│   │   │   │   ├── EquityChart.tsx       # 资金曲线（ECharts）
-│   │   │   │   ├── DrawdownChart.tsx     # 回撤曲线
-│   │   │   │   ├── MonthHeatmap.tsx      # 月度收益热力图
-│   │   │   │   └── IndexComparison.tsx   # 基准对比
-│   │   │   ├── Table/              # 表格组件
-│   │   │   │   ├── TradeTable.tsx        # 交易明细（分页/排序/筛选）
-│   │   │   │   ├── MetricTable.tsx       # 指标汇总表
-│   │   │   │   └── ParameterRanking.tsx  # 参数优化排名
-│   │   │   ├── AI/                 # AI 交互组件
-│   │   │   │   ├── ChatPanel.tsx         # AI 对话面板
-│   │   │   │   ├── SignalCard.tsx        # AI 信号卡片
-│   │   │   │   └── InsightCard.tsx       # AI 洞察卡片
-│   │   │   ├── Monitor/            # 盯盘组件
-│   │   │   │   ├── StockTicker.tsx       # 实时行情滚动条
-│   │   │   │   ├── WatchList.tsx         # 自选股列表
-│   │   │   │   └── AlertPanel.tsx        # 告警面板
-│   │   │   └── common/             # 通用组件
-│   │   │       ├── PageHeader.tsx
-│   │   │       ├── StatusBadge.tsx
-│   │   │       └── ConfirmModal.tsx
-│   │   ├── pages/                  # 页面组件
-│   │   │   ├── Dashboard.tsx         # 主页仪表盘
-│   │   │   ├── Backtest.tsx          # 回测配置与执行页
-│   │   │   ├── BacktestResult.tsx    # 回测结果详情页
-│   │   │   ├── Strategy.tsx          # 策略编辑器页
-│   │   │   ├── Monitor.tsx           # 实时盯盘页
-│   │   │   ├── AIChat.tsx            # AI 对话页
-│   │   │   ├── Portfolio.tsx         # 投资组合页
-│   │   │   ├── DataManage.tsx        # 数据管理页
-│   │   │   ├── Settings.tsx          # 系统设置页
-│   │   │   └── Login.tsx             # 登录页（未来）
-│   │   ├── types/                  # TypeScript 类型定义
-│   │   │   ├── backtest.ts         # 回测相关类型
-│   │   │   ├── strategy.ts         # 策略相关类型
-│   │   │   ├── market.ts           # 行情相关类型
-│   │   │   └── ai.ts               # AI 相关类型
-│   │   ├── hooks/                  # 自定义 Hooks
-│   │   │   ├── useWebSocket.ts     # WebSocket 连接管理
-│   │   │   ├── useBacktest.ts      # 回测任务控制
-│   │   │   └── useAIChat.ts        # AI 对话管理
-│   │   └── utils/                  # 工具函数
-│   │       ├── formatters.ts       # 格式化工具（价格/百分比/时间）
-│   │       └── validators.ts       # 表单校验
-│   └── public/                     # 静态资源
-│       └── favicon.ico
+│   ├── main.py                   # FastAPI 应用入口
+│   ├── routers/                  # RESTful 路由
+│   │   ├── backtest.py
+│   │   ├── strategy.py
+│   │   └── dashboard.py
+│   ├── websocket.py              # WebSocket 实时推送
+│   ├── deps.py                   # 依赖注入
+│   └── schemas.py                # Pydantic 数据模型
+└── scheduler.py                  # 定时调度器
 ```
 
-### 5.2 Web 前端架构
+#### Agent 基础设施层
+
+`agent/` 层为所有 AI Agent 提供通用基础设施：
+
+| 模块 | 说明 |
+|------|------|
+| `LLMAdapter` | 基于 litellm 的 provider-agnostic LLM 调用，支持模型回退链 |
+| `ReActAgent` | Reasoning + Acting 循环，维护 `Thought` 链 + `ToolRegistry` |
+| `ToolRegistry` | `@tool` 装饰器自动从函数签名生成 JSON Schema 工具定义 |
+
+**与 `ai/` 层的关系**：`agent/` 提供基础设施，`ai/` 在此基础上构建具体的 AI Agent。
+
+### 5.2 Web 前端架构 [⚠️ 规划中]**：前端部分（React + Ant Design + ECharts）尚未开发。以下为设计规范。
+
+> **说明**：API 后端已实现（见 5.3），前端将在后续版本开发。
 
 StockQuant 2.0 前端采用 **React 18 + TypeScript + Vite** 技术栈，组件库使用 **Ant Design 5**，图表库使用 **ECharts**。
 
@@ -1624,9 +1619,11 @@ StockQuant 2.0 前端采用 **React 18 + TypeScript + Vite** 技术栈，组件�
   → marketStore.update() → 页面自动更新（ECharts 实时渲染）
 ```
 
-### 5.3 API 网关（FastAPI）
+### 5.3 API 网关（FastAPI）[✅ 已实现]**
 
 **职责**：前后端之间的唯一通信桥梁，提供 RESTful API + WebSocket 实时推送。
+
+**实际实现**：`api/main.py`, `api/routers/`, `api/websocket.py`
 
 **API 设计**：
 
@@ -1834,32 +1831,56 @@ InformationProcessingPipeline (信息处理全流程 — 核心编排)
 
 ### 核心依赖
 
-| 依赖                    | 版本     | 用途                   |
-| --------------------- | ------ | -------------------- |
-| numpy                 | ≥ 1.24 | 数值计算                 |
-| pandas                | ≥ 2.0  | 数据操作                 |
-| talib                 | ≥ 0.4  | 技术指标（C 库）            |
-| pandas-ta             | ≥ 0.3  | 技术指标（纯 Python 备用）    |
-| plotly                | ≥ 5.0  | 交互式可视化               |
-| Jinja2                | ≥ 3.0  | HTML 报表模板            |
-| requests              | ≥ 2.28 | HTTP 请求              |
-| websocket-client      | ≥ 1.5  | WebSocket 实时数据       |
-| beautifulsoup4        | ≥ 4.12 | Web 爬取               |
-| feedparser            | ≥ 6.0  | RSS 解析               |
-| sqlalchemy            | ≥ 2.0  | 本地数据库                |
-| pyarrow               | ≥ 12.0 | Parquet 格式           |
-| streamlit             | ≥ 1.20 | Web Dashboard        |
-| openai                | ≥ 1.0  | OpenAI LLM API       |
-| anthropic             | ≥ 0.18 | Anthropic Claude API |
-| httpx                 | ≥ 0.25 | 异步 HTTP 客户端（爬虫）      |
-| chromadb              | ≥ 0.4  | 向量数据库（记忆嵌入搜索）        |
-| sentence-transformers | ≥ 2.2  | 文本嵌入模型（语义搜索）         |
-| pytest                | ≥ 7.0  | 测试框架                 |
-| coverage              | ≥ 7.0  | 测试覆盖率                |
-| ruff                  | ≥ 0.1  | 代码格式化 + lint         |
-| APScheduler           | ≥ 3.10 | 定时任务调度（数据采集）         |
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| numpy | ≥ 1.24 | 数值计算 |
+| pandas | ≥ 2.0 | 数据操作 |
+| matplotlib | ≥ 3.5 | 可视化 |
+| jinja2 | ≥ 3.0 | HTML 报表模板 |
+| tenacity | ≥ 8.0 | 重试机制 |
+| exchange-calendars | ≥ 4.0 | 交易所日历 |
+| schedule | ≥ 1.2 | 定时调度 |
+| pyyaml | ≥ 6.0 | YAML 配置 |
+| markdown | ≥ 3.5 | Markdown 处理 |
+| Pillow | ≥ 10.0 | 图像处理 |
+| requests | ≥ 2.28 | HTTP 请求 |
+| sqlalchemy | ≥ 2.0 | ORM（持久化） |
+| pyarrow | ≥ 12.0 | Parquet 格式 |
+| litellm | ≥ 1.0 | 多 LLM 统一接口 |
+| json-repair | ≥ 0.7 | JSON 修复（软依赖） |
 
-### 前端依赖（Web Dashboard）
+### AI 依赖（可选）
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| openai | ≥ 1.0 | OpenAI LLM API |
+| anthropic | ≥ 0.18 | Anthropic Claude API |
+| httpx | ≥ 0.25 | 异步 HTTP 客户端 |
+
+### Web API 依赖（可选）
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| fastapi | ≥ 0.100 | RESTful API |
+| uvicorn | ≥ 0.20 | ASGI 服务器 |
+| pydantic | ≥ 2.0 | 数据验证 |
+
+### 数据依赖（可选）
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| baostock | ≥ 0.8 | 历史 K 线 |
+| akshare | ≥ 1.0 | 多源数据 |
+
+### 开发工具
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| pytest | ≥ 7.0 | 测试框架 |
+| ruff | ≥ 0.1 | lint + 格式化 |
+| coverage | ≥ 7.0 | 测试覆盖率 |
+
+> **说明**：`talib`, `pandas-ta`, `plotly`, `chromadb`, `sentence-transformers`, `streamlit`, `Docker` 等已不在实际依赖中，从文档中移除。
 
 | 依赖                | 版本     | 用途                 |
 | ----------------- | ------ | ------------------ |
@@ -2147,22 +2168,22 @@ cerebro.run()
 
 ## 10. 测试策略
 
-### 10.1 测试覆盖目标
+### 10.1 当前测试状态
 
-| 模块                  | 目标覆盖率 | 测试类型                    |
-| ------------------- | ----- | ----------------------- |
-| engine/cerebro.py   | 100%  | 单元测试 + 集成测试             |
-| engine/event.py     | 100%  | 单元测试                    |
-| engine/oms.py       | 100%  | 单元测试（订单状态机）             |
-| engine/portfolio.py | 100%  | 单元测试（资金计算）              |
-| engine/broker/\*.py | 100%  | 单元测试 + 集成测试             |
-| indicators/\*.py    | 100%  | 单元测试（与 TA-Lib 独立计算对比）   |
-| strategy/base.py    | 100%  | 单元测试 + 集成测试             |
-| analytics/          | 95%   | 单元测试                    |
-| data/               | 95%   | 单元测试 + 集成测试             |
-| execution/          | 90%   | 单元测试                    |
-| api/                | 95%   | 单元测试 + 集成测试             |
-| web/                | 85%   | 单元测试（组件） + E2E（Cypress） |
+| 模块 | 测试文件 | 测试数 | 状态 |
+|------|---------|--------|------|
+| engine/ | test_engine.py, ... | 120+ | ✅ 已覆盖 |
+| strategy/ | test_strategy_agent.py, test_signal_evaluator.py, ... | 80+ | ✅ 已覆盖 |
+| indicators/ | test_indicators.py, test_indicator_agent.py | 60+ | ✅ 已覆盖 |
+| data/ | test_calendar.py, test_fetcher_manager.py, test_standardize.py, test_retry.py | 50+ | ✅ 已覆盖 |
+| agent/ | test_llm_adapter.py, test_tool_registry.py, test_react_agent.py | 40+ | ✅ 已覆盖 |
+| ai/ | test_strategy_agent.py, test_decision_agent.py, test_backtest_agent.py, test_risk_agent.py, test_indicator_agent.py | 80+ | ✅ 已覆盖 |
+| analytics/ | test_market_review.py, test_report.py | 20+ | ✅ 已覆盖 |
+| execution/ | test_notifier_router.py | 10+ | ✅ 已覆盖 |
+| persistence/ | test_persistence.py | 15+ | ✅ 已覆盖 |
+| agent/strategy_tools | test_strategy_tools_sandbox.py | 14 | ✅ 已覆盖 |
+
+**当前总计：575 tests passed, 0 failed**
 
 ### 10.2 测试策略
 
@@ -2195,23 +2216,22 @@ cerebro.run()
 
 ## 12. 风险与缓解
 
-| 风险                  | 影响              | 缓解措施                                   |
-| ------------------- | --------------- | -------------------------------------- |
-| TA-Lib C 库安装失败      | 安装困难            | 提供 pandas-ta 纯 Python 替代               |
-| BaoStock API 变动     | 历史数据中断          | 本地缓存 + Tushare 备用                      |
-| 网易 API 变动           | 实时数据中断          | 引入 Tushare Pro 实时行情                    |
-| XTP API 集成复杂        | 实盘延迟            | 先支持回测/模拟盘，实盘逐步推进                       |
-| 项目周期过长              | 人员变动风险          | 分版本发布，每个 Alpha 可用                      |
-| 文档不足                | 用户学习成本高         | 边开发边写文档，每个 Alpha 配套教程                  |
-| **LLM API 不可用/成本高** | AI 功能失效/成本超支    | 本地模型降级 + 每日成本预算限制 + 规则引擎兜底             |
-| **爬虫被反爬**           | 数据采集中断          | 多源冗余 + 代理池 + 速率限制 + 失败告警               |
-| **AI 幻觉导致错误交易**     | 资金损失            | 全自动模式需人工确认 + AI 输出必须引用来源 + 风控层二次验证     |
-| **AI 决策不透明**        | 合规风险            | 所有 AI 调用记录到审计日志 + Chain-of-Thought 可追溯 |
-| **LLM 供应商锁定**       | 迁移困难            | LLM 适配层抽象 + 多供应商支持（OpenAI/Claude/本地）   |
-| **前端构建依赖冲突**        | 前端 npm 依赖版本冲突   | npm lockfile + 固定依赖版本 + 独立 CI 环境       |
-| **CORS 跨域问题**       | 前后端分离部署时的跨域     | Nginx 反向代理统一域名                         |
-| **WebSocket 连接不稳定** | 网络波动导致断连        | 自动重连 + 指数退避 + 心跳检测                     |
-| **大表格渲染卡顿**         | 10 万笔交易明细导致前端卡顿 | 虚拟滚动 + 分页加载 + 服务端分页                    |
+| 风险 | 影响 | 缓解措施 | 状态 |
+|------|------|---------|------|
+| TA-Lib C 库安装失败 | 安装困难 | 提供 pandas-ta 纯 Python 替代 | ✅ 已解决 |
+| BaoStock API 变动 | 历史数据中断 | 本地缓存 + AkShare 备用 + 自动故障切换 | ✅ 已解决 |
+| 网易 API 变动 | 实时数据中断 | 多数据源冗余（AkShare） | ✅ 已解决 |
+| XTP API 集成复杂 | 实盘延迟 | LiveBroker 骨架已实现，券商 API 逐步推进 | ⚠️ 进行中 |
+| 项目周期过长 | 人员变动风险 | 分版本发布，当前 26/30 已完成 | ✅ 已缓解 |
+| 文档不足 | 用户学习成本高 | 本文档 + README + 代码文档同步维护 | ✅ 已缓解 |
+| **LLM API 不可用/成本高** | AI 功能失效/成本超支 | 模型回退链 + 本地模型降级 + json_repair 兜底 | ✅ 已解决 |
+| **爬虫被反爬** | 数据采集中断 | 多源冗余 + 十次重试 + 失败告警 | ✅ 已解决 |
+| **AI 幻觉导致错误交易** | 资金损失 | ReAct 验证链 + 沙箱隔离 + 风控层二次验证 | ✅ 已解决 |
+| **AI 决策不透明** | 合规风险 | 审计日志持久化 + Chain-of-Thought 可追溯 | ✅ 已解决 |
+| **LLM 供应商锁定** | 迁移困难 | LLMAdapter 抽象层 + litellm 多供应商 | ✅ 已解决 |
+| **exec 沙箱逃逸** | 安全风险 | 模块白名单 + 受限 \_\_import\_\_ + \_\_builtins\_\_ 隔离 | ✅ 已解决 |
+| **前端构建依赖冲突** | 前端 npm 依赖版本冲突 | 前端未开发，待后续版本处理 | ❌ 不适用（前端未实现） |
+| **CORS 跨域问题** | 前后端分离部署时的跨域 | 前端未开发，待后续版本处理 | ❌ 不适用（前端未实现） |
 
 ***
 

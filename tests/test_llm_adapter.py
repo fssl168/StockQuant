@@ -31,7 +31,7 @@ class TestLLMResponse:
 class TestLLMAdapterInit:
     def test_default_model(self):
         adapter = LLMAdapter()
-        assert adapter._model == "gpt-4"
+        assert adapter._model == "gpt-4o"
         assert adapter._fallback_models == []
 
     def test_custom_model_and_fallback(self):
@@ -42,6 +42,18 @@ class TestLLMAdapterInit:
     def test_api_key_stored(self):
         adapter = LLMAdapter(api_key="sk-test")
         assert adapter._api_key == "sk-test"
+
+    def test_api_key_from_env(self):
+        """无显式 API Key 时从环境变量读取。"""
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-env-key"}):
+            adapter = LLMAdapter()
+            assert adapter._api_key == "sk-env-key"
+
+    def test_explicit_key_overrides_env(self):
+        """显式 API Key 优先级高于环境变量。"""
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-env-key"}):
+            adapter = LLMAdapter(api_key="sk-explicit")
+            assert adapter._api_key == "sk-explicit"
 
 
 class TestLLMAdapterEnsureLiteLLM:
@@ -80,7 +92,7 @@ class TestLLMAdapterCall:
 
         assert result.content == "test response"
         assert result.reasoning_content == "thinking..."
-        assert result.model == "gpt-4"
+        assert result.model == "gpt-4o"
         assert result.usage == {"prompt_tokens": 10, "completion_tokens": 20}
 
     def test_call_uses_override_model(self):

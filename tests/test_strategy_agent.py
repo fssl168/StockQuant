@@ -386,3 +386,89 @@ def test_parse_pct():
 
     # 小于1的字符串数值
     assert _parse_pct("0.35") == pytest.approx(0.35)
+
+
+# ── 13. test_strategy_agent_edge_cases ──
+
+
+def test_strategy_agent_invalid_json_observation():
+    """observation 不是合法 JSON → 对应字段为 None/默认值。"""
+    with patch.object(StrategyAgent, "__init__", lambda self, **kwargs: None):
+        agent = StrategyAgent.__new__(StrategyAgent)
+        agent._react = MagicMock()
+
+        thoughts = [
+            Thought(
+                step=1,
+                thought="code",
+                action="generate_strategy_code",
+                action_input={},
+                observation="class X(BaseStrategy):\n    def on_start(self): pass\n    def on_bar(self, bars): pass",
+                state=ReActState.OBSERVING,
+            ),
+            Thought(
+                step=2,
+                thought="score",
+                action="score_strategy",
+                action_input={},
+                observation="not json at all",
+                state=ReActState.OBSERVING,
+            ),
+        ]
+        agent._react.run.return_value = ReActResult(
+            final_answer="done",
+            thoughts=thoughts,
+            tool_calls_made=2,
+            success=True,
+        )
+
+    result = agent.generate("test")
+    assert result.success is True
+    # score_strategy 的 JSON 解析失败 → total 为默认值 0
+    assert result.score.total == 0
+
+
+def test_strategy_agent_llm_failure():
+    """LLM 调用失败 → success=False, error 信息存在。"""
+    with patch.object(StrategyAgent, "__init__", lambda self, **kwargs: None):
+        agent = StrategyAgent.__new__(StrategyAgent)
+        agent._react = MagicMock()
+        agent._react.run.return_value = ReActResult(
+            final_answer="",
+            success=False,
+            error="API timeout",
+        )
+
+    result = agent.generate("test")
+    assert result.success is False
+    assert result.error == "API timeout"
+
+
+def test_strategy_agent_improve_sends_context():
+    """improve() 的 prompt 应包含原始代码和回测结果。"""
+    with patch.object(StrategyAgent, "__init__", lambda self, **kwargs: None):
+        agent = StrategyAgent.__new__(StrategyAgent)
+        agent._react = MagicMock()
+        agent._react.run.return_value = ReActResult(
+            final_answer="done",
+            thoughts=[
+                Thought(
+                    step=1,
+                    thought="improve",
+                    action="generate_strategy_code",
+                    action_input={},
+                    observation="class Improved(BaseStrategy):\n    def on_start(self): pass\n    def on_bar(self, bars): pass",
+                    state=ReActState.OBSERVING,
+                ),
+            ],
+            success=True,
+        )
+
+    result = agent.improve(
+        strategy_code="class OldStrategy(BaseStrategy): pass",
+        backtest_result={"Sharpe Ratio": 0.3, "Max Drawdown": "-30%"},
+    )
+    assert result.success is True
+    call_args = agent._react.run.call_args[0][0]
+    assert "OldStrategy" in call_args
+    assert "30%" in call_args

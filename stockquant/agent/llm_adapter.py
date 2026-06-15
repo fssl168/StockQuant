@@ -4,10 +4,23 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_api_key(api_key: Optional[str]) -> Optional[str]:
+    """解析 API Key：优先使用显式值，否则从环境变量读取。"""
+    if api_key:
+        return api_key
+    # 常见的 LLM API Key 环境变量名
+    for env_name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "LLM_API_KEY"):
+        val = os.environ.get(env_name)
+        if val:
+            return val
+    return None
 
 
 @dataclass
@@ -36,13 +49,13 @@ class LLMAdapter:
 
     def __init__(
         self,
-        model: str = "gpt-4",
+        model: str = "gpt-4o",
         api_key: Optional[str] = None,
         fallback_models: Optional[list[str]] = None,
         base_url: Optional[str] = None,
     ) -> None:
         self._model = model
-        self._api_key = api_key
+        self._api_key = _resolve_api_key(api_key)
         self._fallback_models = fallback_models or []
         self._base_url = base_url
         self._litellm: Any = None
