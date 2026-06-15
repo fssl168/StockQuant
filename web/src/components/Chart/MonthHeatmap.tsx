@@ -19,17 +19,17 @@ export default function MonthHeatmap({ data, height = 260 }: MonthHeatmapProps) 
         xAxis: {
           type: 'category',
           data: months.map((m) => m.slice(5)),
-          axisLine: { lineStyle: { color: '#333' } },
-          axisLabel: { color: '#666', fontSize: 10 },
+          axisLine: { lineStyle: { color: '#27272a' } },
+          axisLabel: { color: '#71717a', fontSize: 10 },
           axisTick: { show: false },
         },
         yAxis: {
           type: 'value',
           scale: true,
           axisLine: { show: false },
-          splitLine: { lineStyle: { color: '#1a1a1a' } },
+          splitLine: { lineStyle: { color: '#18181b' } },
           axisLabel: {
-            color: '#555',
+            color: '#71717a',
             fontSize: 10,
             formatter: (v: number) => v.toFixed(0) + '%',
           },
@@ -47,9 +47,9 @@ export default function MonthHeatmap({ data, height = 260 }: MonthHeatmapProps) 
         }],
         tooltip: {
           trigger: 'axis',
-          backgroundColor: '#141414',
-          borderColor: '#222',
-          textStyle: { color: '#f0f0f0', fontSize: 12 },
+          backgroundColor: '#18181b',
+          borderColor: '#27272a',
+          textStyle: { color: '#fafafa', fontSize: 12 },
           formatter: (params: unknown[]) => {
             const p = params[0] as { name: string; value: number }
             return `${p.name}\n${(p.value ?? 0).toFixed(2)}%`

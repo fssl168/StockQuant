@@ -16,17 +16,17 @@ export default function DrawdownChart({ data, height = 200 }: DrawdownChartProps
         xAxis: {
           type: 'category',
           data: data.map((_, i) => i + 1),
-          axisLine: { lineStyle: { color: '#333' } },
-          axisLabel: { color: '#555', fontSize: 10 },
+          axisLine: { lineStyle: { color: '#27272a' } },
+          axisLabel: { color: '#71717a', fontSize: 10 },
           axisTick: { show: false },
         },
         yAxis: {
           type: 'value',
           scale: true,
           axisLine: { show: false },
-          splitLine: { lineStyle: { color: '#1a1a1a' } },
+          splitLine: { lineStyle: { color: '#18181b' } },
           axisLabel: {
-            color: '#555',
+            color: '#71717a',
             fontSize: 10,
             formatter: (v: number) => (v * 100).toFixed(0) + '%',
           },
@@ -36,7 +36,7 @@ export default function DrawdownChart({ data, height = 200 }: DrawdownChartProps
           data: data.map((v) => v * 100),
           smooth: true,
           symbol: 'none',
-          lineStyle: { color: '#ef4444', width: 1.5 },
+          lineStyle: { color: '#ef4444', width: 2 },
           areaStyle: {
             color: {
               type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
@@ -49,9 +49,9 @@ export default function DrawdownChart({ data, height = 200 }: DrawdownChartProps
         }],
         tooltip: {
           trigger: 'axis',
-          backgroundColor: '#141414',
-          borderColor: '#222',
-          textStyle: { color: '#f0f0f0', fontSize: 12 },
+          backgroundColor: '#18181b',
+          borderColor: '#27272a',
+          textStyle: { color: '#fafafa', fontSize: 12 },
           formatter: (params: unknown[]) => {
             const p = params[0] as { value: number }
             return (p.value ?? 0).toFixed(1) + '%'
