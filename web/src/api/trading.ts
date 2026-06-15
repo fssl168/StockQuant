@@ -6,6 +6,24 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// ── Seeded PRNG for reproducible mock data ───────────────────
+
+function mulberry32(a: number) {
+  return function() {
+    let t = a += 0x6D2B79F5
+    t = Math.imul(t ^ t >>> 15, t | 1)
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61)
+    return ((t ^ t >>> 14) >>> 0) / 4294967296
+  }
+}
+
+const SEED = 42
+let rng = mulberry32(SEED)
+
+function nextRandom() {
+  return rng()
+}
+
 // ── Mock Data Generators ──────────────────────────────────────
 
 let mockOrderId = 100
@@ -79,7 +97,7 @@ function generateMockTrades(): TradeRecord[] {
     side: (i % 4 < 2 ? 'BUY' : 'SELL') as OrderSide,
     price: [1720.5, 148.2, 47.4, 1721.0, 147.8, 48.0][i % 6],
     quantity: [100, 200, 100, 50, 300, 200][i % 6],
-    commission: Number((Math.random() * 10 + 1).toFixed(2)),
+    commission: Number((nextRandom() * 10 + 1).toFixed(2)),
     timestamp: new Date(now.getTime() - (i + 1) * 300000).toISOString(),
   }))
 }
@@ -124,6 +142,15 @@ export async function placeOrder(req: {
   quantity: number
 }): Promise<Order> {
   await delay(800)
+
+  // Input validation
+  if (req.quantity <= 0) {
+    throw new Error('数量必须大于0')
+  }
+  if (req.price <= 0) {
+    throw new Error('价格必须大于0')
+  }
+
   const now = new Date().toISOString()
   const newOrder: Order = {
     id: `ORD-${++mockOrderId}`,
@@ -133,7 +160,7 @@ export async function placeOrder(req: {
     price: req.price,
     quantity: req.quantity,
     filledQty: req.type === 'MARKET' ? req.quantity : 0,
-    filledAvgPrice: req.type === 'MARKET' ? req.price * (1 + (Math.random() - 0.5) * 0.002) : 0,
+    filledAvgPrice: req.type === 'MARKET' ? req.price * (1 + (nextRandom() - 0.5) * 0.002) : 0,
     status: req.type === 'MARKET' ? 'FILLED' : 'SUBMITTED',
     createdAt: now,
     updatedAt: now,
@@ -177,4 +204,13 @@ export async function getPositions(): Promise<Position[]> {
 export async function getTrades(): Promise<TradeRecord[]> {
   await delay(MOCK_DELAY)
   return [...trades]
+}
+
+// ── Test Helpers ─────────────────────────────────────────────
+// Exported for test isolation — resets PRNG seed and mutable state
+
+export function __resetSeed(): void {
+  rng = mulberry32(SEED)
+  orders = generateMockOrders()
+  trades = generateMockTrades()
 }

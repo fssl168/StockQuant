@@ -60,14 +60,24 @@ export default function Trading() {
       message.error('数量必须为正数且是100的整数倍')
       return
     }
-    await placeOrder({ symbol, side, type: orderType, price, quantity })
-    message.success('下单成功')
-    setConfirmOpen(false)
+    try {
+      await placeOrder({ symbol, side, type: orderType, price, quantity })
+      message.success('下单成功')
+      setConfirmOpen(false)
+    } catch (err) {
+      console.error('[Trading] handlePlaceOrder failed:', err)
+      message.error('下单失败')
+    }
   }
 
   const handleCancel = async (orderId: string) => {
-    await cancelOrder(orderId)
-    message.success('撤单成功')
+    try {
+      await cancelOrder(orderId)
+      message.success('撤单成功')
+    } catch (err) {
+      console.error('[Trading] handleCancel failed:', err)
+      message.error('撤单失败')
+    }
   }
 
   // Status tag helper

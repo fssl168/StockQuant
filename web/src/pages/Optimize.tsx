@@ -80,9 +80,11 @@ export default function Optimize() {
   }
 
   // Param grid editing helpers
-  const updateParam = (index: number, field: keyof OptimizerParam, value: number | string) => {
+  const updateParam = <K extends keyof OptimizerParam>(
+    index: number, field: K, value: OptimizerParam[K]
+  ) => {
     setParams((prev) =>
-      prev.map((p, i) => (i === index ? { ...p, [field]: value as never } : p))
+      prev.map((p, i) => (i === index ? { ...p, [field]: value } : p))
     )
   }
 
@@ -133,7 +135,7 @@ export default function Optimize() {
                 <Input
                   value={t}
                   size="small"
-                  onChange={(e) => updateParam(i, 'name' as any, e.target.value)}
+                  onChange={(e) => updateParam(i, 'name', e.target.value)}
                   style={{ fontFamily: 'var(--font-mono)' }}
                 />
               ),

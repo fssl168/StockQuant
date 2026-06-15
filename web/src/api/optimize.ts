@@ -12,6 +12,7 @@ interface OptimizeTask {
 }
 
 let taskIdCounter = 0
+let globalGridCounter = 0
 const activeTasks = new Map<string, OptimizeTask>()
 
 function generateResult(rank: number, params: Record<string, number>): OptimizeResult {
@@ -39,11 +40,15 @@ function sampleParams(config: OptimizeConfig): Record<string, number> {
   for (const p of config.params) {
     const step = p.step ?? 1
     const range = p.max - p.min
-    const steps = range / step
-    const pick = config.method === 'random'
-      ? p.min + Math.floor(Math.random() * (steps + 1)) * step
-      : p.min + Math.floor(Math.random() * (steps + 1)) * step
-    result[p.name] = pick
+    const steps = Math.floor(range / step)
+    if (config.method === 'grid') {
+      const pickIndex = globalGridCounter % (steps + 1)
+      result[p.name] = p.min + pickIndex * step
+      globalGridCounter = Math.floor(globalGridCounter / (steps + 1))
+    } else {
+      // Random sampling
+      result[p.name] = p.min + Math.floor(Math.random() * (steps + 1)) * step
+    }
   }
   return result
 }

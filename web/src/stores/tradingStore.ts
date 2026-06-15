@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { BrokerMode, Order, AccountInfo, Position, TradeRecord, OrderSide, OrderType } from '../types'
 import * as tradingApi from '../api/trading'
+import { message } from 'antd'
 
 interface TradingState {
   brokerMode: BrokerMode
@@ -38,7 +39,9 @@ export const useTradingStore = create<TradingState>((set, get) => ({
         tradingApi.getTrades(),
       ])
       set({ account, orders, positions, trades, loading: false })
-    } catch {
+    } catch (err) {
+      console.error('[tradingStore] refreshAll failed:', err)
+      message.error('数据加载失败')
       set({ loading: false })
     }
   },
@@ -56,13 +59,21 @@ export const useTradingStore = create<TradingState>((set, get) => ({
         tradingApi.getPositions(),
       ])
       set({ account, positions })
-    } catch {
+    } catch (err) {
+      console.error('[tradingStore] placeOrder failed:', err)
+      message.error('下单失败，请重试')
       set({ placingOrder: false })
     }
   },
 
   cancelOrder: async (orderId) => {
-    await tradingApi.cancelOrder(orderId)
+    try {
+      await tradingApi.cancelOrder(orderId)
+    } catch (err) {
+      console.error('[tradingStore] cancelOrder failed:', err)
+      message.error('撤单失败')
+      return
+    }
     set((s) => ({
       orders: s.orders.map((o) =>
         o.id === orderId ? { ...o, status: 'CANCELLED' as const, updatedAt: new Date().toISOString() } : o,
