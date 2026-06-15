@@ -378,12 +378,10 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
   - `get_fundamental(symbol, metric, period)` → DataFrame
 - 内置数据源实现：
   - `BaoStockFeed`：历史 K 线（主力）
-  - `TuShareFeed`：基本面 + 新股 + 股票列表
-  - `NetEaseFeed`：实时 Tick
+  - `AkShareFeed`：财经数据（实时/历史）
   - `CSVFeed`：本地 CSV 文件
   - `ParquetFeed`：本地 Parquet 文件（高性能）
   - `SQLiteFeed`：SQLite 数据库
-  - `WebSocketFeed`：WebSocket 实时数据流（预留接口）
 - `DataCache` 层：
   - 首次请求时从数据源下载并缓存
   - 增量更新（只拉取新增数据）
@@ -1489,7 +1487,9 @@ stockquant/
 │   ├── __init__.py
 │   ├── llm_adapter.py            # LLMAdapter（litellm wrapper）
 │   ├── react_agent.py            # ReActAgent（Reasoning-Acting 循环）
-│   └── tool_registry.py          # @tool 装饰器 + ToolRegistry
+│   ├── tool_registry.py          # @tool 装饰器 + ToolRegistry
+│   ├── strategy_tools.py         # 策略生成工具集（6 工具）
+│   └── decision_tools.py         # 决策验证工具集（6 工具）
 ├── ai/                            # AI Agent
 │   ├── __init__.py
 │   ├── json_utils.py             # robust_json_parse（4 级 JSON 修复）
@@ -1961,15 +1961,14 @@ class MyStrategy(BaseStrategy):
 
 ```python
 from stockquant.engine import Cerebro
-from stockquant.data import DataFeed
-from stockquant.broker import BacktestBroker
-from stockquant.commission import AShareCommission
-from stockquant.slippage import PercentSlippage
+from stockquant.engine import BacktestBroker, CommissionInfo, AdaptiveSlippage
+from stockquant.engine import RiskManager
+from stockquant.data.providers import BaoStockFeed
 
 cerebro = Cerebro(
     cash=1_000_000,
-    broker=BacktestBroker(slippage=PercentSlippage(0.001)),
-    commission=AShareCommission(),
+    broker=BacktestBroker(),
+    commission=CommissionInfo(),
     risk_manager=RiskManager(
         max_position_pct=0.3,
         max_daily_loss_pct=0.02,
@@ -1977,7 +1976,7 @@ cerebro = Cerebro(
     ),
 )
 
-cerebro.add_data(DataFeed.baostock(
+cerebro.add_data(BaoStockFeed(
     symbols=["sh600519", "sz000858"],
     timeframe="1d",
     start="2020-01-01",
@@ -2001,35 +2000,28 @@ cerebro.show_report(results)
 ### AI 对话式策略开发
 
 ```python
-from stockquant.ai import AIOrchestrator
-
-ai = AIOrchestrator(
-    llm_provider="openai",
-    llm_model="gpt-4o",
-    data_sources=["baostock", "eastmoney", "xueqiu"],
-)
+from stockquant.ai import StrategyAgent
 
 # 自然语言生成策略
-strategy = ai.generate_strategy(
-    "在日线级别，当 MACD 金叉且东方财富论坛情绪超过 70% 时买入，"
+agent = StrategyAgent(model="deepseek/deepseek-chat")
+result = agent.generate(
+    "在日线级别，当 MACD 金叉且 RSI<30 时买入，"
     "仓位不超过总资产的 20%，止损 5%"
 )
 
-# AI 自动回测
-results = cerebro.backtest(strategy)
+# 查看结果
+print(result.code)       # 生成的策略代码
+print(result.score.total)  # AI 评分
+print(result.suggestions)  # 优化建议
 
-# AI 解读
-analysis = ai.analyze_backtest(results)
+# AI 回测解读
+from stockquant.ai import BacktestAgent
+
+backtest_agent = BacktestAgent()
+analysis = backtest_agent.analyze(result.backtest_result)
 print(analysis.summary)          # 自然语言总结
 print(analysis.issues)           # 问题列表
 print(analysis.suggestions)      # 改进建议
-
-# AI 盯盘
-ai.start_monitor(
-    symbols=["sh600519", "sz000858"],
-    notifier="dingtalk",
-    mode="advisory",  # advisory / semi-auto / auto
-)
 ```
 
 ### AI 配置

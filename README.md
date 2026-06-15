@@ -54,7 +54,7 @@ pip install -e ".[pandas-ta]"  # 纯 Python 实现
 
 ```python
 from stockquant import Cerebro, BaseStrategy, BacktestBroker, CommissionInfo
-from stockquant.data import BaoStockFeed
+from stockquant.data.providers import BaoStockFeed
 
 # 定义策略
 class MyStrategy(BaseStrategy):
@@ -62,26 +62,27 @@ class MyStrategy(BaseStrategy):
     parameters = {"fast": 5, "slow": 20}
 
     def on_start(self):
-        self.ma_fast = self.EMA(period=self.parameters["fast"])
-        self.ma_slow = self.EMA(period=self.parameters["slow"])
+        self.ma_fast = self.EMA(self.data, self.parameters["fast"])
+        self.ma_slow = self.EMA(self.data, self.parameters["slow"])
 
     def on_bar(self, bars):
+        bar = bars["sh600519"]
         if self.ma_fast.crossed_above(self.ma_slow):
-            self.order_market(self.data.close[0], 100)
+            self.order_market(bar, 100)
         elif self.ma_fast.crossed_below(self.ma_slow):
             self.close_all()
 
 # 运行回测
 cerebro = Cerebro()
 cerebro.add_data(BaoStockFeed(
-    symbol="sh600519",
+    symbols=["sh600519"],
     timeframe="1d",
-    start_date="2023-01-01",
-    end_date="2024-12-31",
+    start="2023-01-01",
+    end="2024-12-31",
 ))
 cerebro.add_strategy(MyStrategy, fast=5, slow=20)
-cerebro.set_broker(BacktestBroker())
-cerebro.set_commission(CommissionInfo(stamp_tax=0.0005))
+cerebro.broker = BacktestBroker()
+cerebro.commission = CommissionInfo(stamp_tax=0.0005)
 results = cerebro.run()
 
 # 查看报告
@@ -91,17 +92,12 @@ cerebro.show_report(results)
 ### 使用 AI 生成策略
 
 ```python
-from stockquant.ai import StrategyAgent, NewsSearcher
-from stockquant.data import DataFetcherManager
+from stockquant.ai import StrategyAgent
 
 # 初始化 AI Agent
-fetcher = DataFetcherManager()
-searcher = NewsSearcher()
 agent = StrategyAgent(
-    model="gpt-4o",
+    model="deepseek/deepseek-chat",  # 或 "gpt-4o"
     api_key="your-api-key",
-    fetcher_manager=fetcher,
-    news_searcher=searcher,
 )
 
 # 自然语言 → 策略代码（完整 ReAct 推理链路）
@@ -114,13 +110,11 @@ print(result.validation.errors)  # 验证结果
 ### AI 辅助决策
 
 ```python
-from stockquant.ai import DecisionAgent
+from stockquant.ai import DecisionAgent, DecisionMode
 
 decision = DecisionAgent(
     model="gpt-4o",
-    mode="semi_auto",  # auto / semi_auto / read_only
-    fetcher_manager=fetcher,
-    news_searcher=searcher,
+    mode=DecisionMode.SEMI_AUTO,  # DecisionMode.AUTO / SEMI_AUTO / READ_ONLY
 )
 
 advice = decision.evaluate({
@@ -311,19 +305,25 @@ StockQuant v1.x 已标记为 EOL（End of Life）。v2.0 采用全新 API，不�
 
 ```python
 # v2 写法（推荐）
-from stockquant import BaseStrategy, Cerebro, BaoStockFeed
+from stockquant import BaseStrategy, Cerebro
+from stockquant.data.providers import BaoStockFeed
 
 class MyStrategy(BaseStrategy):
     def on_start(self):
-        self.MACD = self.MACD()
+        self.macd = self.MACD(self.data, fast=12, slow=26, signal=9)
 
     def on_bar(self, bars):
-        if self.MACD.line1.crossed_above(self.MACD.line2):
-            self.order_market(self.data.close[0], 100)
+        bar = bars["sh600519"]
+        if self.macd["MACD"].crossed_above(self.macd["MACDSignal"]):
+            self.order_market(bar, 100)
 
 cerebro = Cerebro()
-cerebro.add_data(BaoStockFeed(symbol="sh600519", timeframe="1d",
-                               start_date="2023-01-01", end_date="2024-12-31"))
+cerebro.add_data(BaoStockFeed(
+    symbols=["sh600519"],
+    timeframe="1d",
+    start="2023-01-01",
+    end="2024-12-31",
+))
 cerebro.add_strategy(MyStrategy)
 results = cerebro.run()
 ```
