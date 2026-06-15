@@ -133,3 +133,147 @@ DSA 自动生成 `reports/report_YYYYMMDD.md` 文件。SQ 的 ReportGenerator �
 | **遗漏** | 异常处理 + 重试 | ⬆️ **高（数据源必备）** |
 | **遗漏** | 数据列标准化 | ⬆️ **高（数据源必备）** |
 | **遗漏** | LLM 工具调用 | ⬆️ **高（Agent 必备）** |
+
+---
+
+## 四、遗漏项深度分析
+
+### 4.1 JSON 响应修复机制（高优先级 — AI 集成必备）
+
+**问题**：LLM 输出的 JSON 经常格式异常（尾随逗号、布尔值大小写、Markdown 代码块包裹、注释等），不做修复则 AI 功能不可用。
+
+**DSA 方案**：`json_repair` 库 + 四级渐进降级
+
+```
+Level 1: Markdown 代码块提取 → json.loads() → 失败则 repair_json()
+Level 2: 原始文本 → json.loads()
+Level 3: 原始文本 → repair_json() → json.loads()
+Level 4: 花括号定位提取 → json.loads() → 失败则 repair_json()
+```
+
+另外还有手动预处理：移除 `//`/`/* */` 注释、修复尾随逗号、`True`→`true`/`False`→`false`。
+
+**SQ 借鉴方案**：
+- 新增 `stockquant/ai/json_utils.py`
+- 实现 `robust_json_parse(content: str) -> dict | None`，复用 DSA 的四级降级策略
+- 在 BacktestAgent/SignalAgent 的 LLM 输出解析中使用
+- 依赖：`json-repair>=0.7` 加入 `extras_require.ai`
+
+---
+
+### 4.2 LLM Tool Calling 能力（高优先级 — Agent 必备）
+
+**问题**：ReAct Agent 需要模型原生工具调用（function calling），不是简单的 prompt injection。没有 Tool Calling，Agent 无法动态选择工具、并行执行、多轮推理。
+
+**DSA 方案**：`LLMToolAdapter.call_with_tools()` + `ToolRegistry.to_openai_tools()`
+
+```
+工具定义流程：
+  ToolDefinition(name, description, parameters) → to_openai_tool() → OpenAI tools 格式
+  @tool 装饰器 → 自动从函数签名推断参数类型
+
+调用流程：
+  call_with_tools(messages, tools)
+    → 模型降级链（主模型 → fallback 模型）
+    → litellm.completion(messages, tools=tools)
+    → 解析 response.choices[0].message.tool_calls
+    → 返回 LLMResponse(content, tool_calls, reasoning_content, usage)
+
+关键：litellm 统一适配层，所有 provider 工具声明用 OpenAI 格式，底层自动转换
+```
+
+**SQ 借鉴方案**：
+- 新增 `stockquant/agent/llm_adapter.py`（参考 DSA 的 LLMToolAdapter）
+- 新增 `stockquant/agent/tool_registry.py`（工具注册 + OpenAI schema 生成）
+- `@tool` 装饰器：从函数签名自动推断参数类型
+- 内置工具：`get_kline`、`calculate_indicator`、`run_backtest`、`search_news`
+- 与现有 `BaseStrategy` 和 `SignalManager` 集成
+
+---
+
+### 4.3 数据标准化列模式（高优先级 — 数据源必备）
+
+**问题**：不同数据源返回的列名不同（BaoStock 用 `date/open/high/low/close/volume`，AkShare 用 `日期/开盘/收盘`），SQ 当前无统一格式，多源切换时下游代码无法兼容。
+
+**DSA 方案**：`STANDARD_COLUMNS` + 四步流水线
+
+```python
+STANDARD_COLUMNS = ['date', 'open', 'high', 'low', 'close', 'volume', 'amount', 'pct_chg']
+
+四步流水线：
+  _fetch_raw_data()   → 各数据源原始格式
+  _normalize_data()   → 列名映射到 STANDARD_COLUMNS
+  _clean_data()       → 类型转换 + 去空 + 排序
+  _calculate_indicators() → 自动追加 ma5/ma10/ma20/volume_ratio
+```
+
+**SQ 借鉴方案**：
+- 在 `stockquant/data/feed.py` 中定义 `STANDARD_COLUMNS`
+- 所有 DataFeed 子类的 `get_dataframe()` 输出统一为 STANDARD_COLUMNS 格式
+- 新增 `normalize_columns()` 和 `clean_dataframe()` 工具函数
+- BarData 从 STANDARD_COLUMNS 构建，确保数据一致性
+
+---
+
+### 4.4 异常层次体系 + tenacity 重试（高优先级 — 数据源必备）
+
+**问题**：SQ 当前只有 `raise ValueError`，无异常分类，无重试机制。网络请求失败直接崩溃，无法区分限流/超时/数据源不可用。
+
+**DSA 方案**：异常层次 + tenacity + 双重防护
+
+```
+异常层次：
+  DataFetchError
+    ├── RateLimitError          → 不重试，触发故障切换
+    └── DataSourceUnavailableError → 不重试，触发故障切换
+
+tenacity 重试配置：
+  网络瞬态错误（ConnectionError/TimeoutError）→ 指数退避重试（2-30秒，最多3次）
+  限流错误（RateLimitError）→ 不重试，交给 DataFetcherManager 切换数据源
+
+双重防护：
+  tenacity：处理网络瞬态错误（自动重试）
+  DataFetcherManager：处理数据源级错误（自动切换）
+
+防封禁：
+  random_sleep(1-3秒)：每次请求前随机延迟
+  EfinanceFetcher：stop_after_attempt(1)，不重试（东财对频繁请求敏感）
+```
+
+**SQ 借鉴方案**：
+- 新增 `stockquant/data/exceptions.py`
+  - `DataFetchError` 基类
+  - `RateLimitError`（限流，不重试，触发切换）
+  - `DataSourceUnavailableError`（数据源不可用，触发切换）
+  - `DataValidationError`（数据格式异常）
+- 所有 DataFeed 子类使用 `@retry` 装饰器
+- 依赖：`tenacity>=8.0` 加入 `install_requires`（核心依赖）
+- DataFeedManager 捕获 `RateLimitError` 触发故障切换
+
+---
+
+## 五、修正后的优先级总表
+
+| 优先级 | 借鉴方向 | 来源 | 说明 |
+|--------|----------|------|------|
+| **P0** | 多数据源自动故障切换 | DSA DataFetcherManager | 解决单源脆弱问题 |
+| **P0** | 异常层次 + tenacity 重试 | DSA DataFetchError + tenacity | 数据源可靠性基础设施 |
+| **P0** | 数据列标准化 | DSA STANDARD_COLUMNS | 多源切换的前提条件 |
+| **P0** | 交易日历 | DSA exchange-calendars | 修复 T+1 bug |
+| **P0** | AI 接入 LiteLLM | DSA GeminiAnalyzer | 让 AI 模块真正可用 |
+| **P0** | JSON 响应修复 | DSA json_repair + 四级降级 | AI 集成的必要前提 |
+| **P0** | LLM Tool Calling | DSA LLMToolAdapter | Agent 的核心基础设施 |
+| **P1** | ReAct Agent | DSA AgentExecutor | 智能策略问股 |
+| **P1** | 策略 YAML 配置 | DSA 11 个 YAML 策略 | 降低策略编写门槛 |
+| **P1** | 通知渠道扩展 | DSA 10+ 渠道 | 提升通知能力 |
+| **P1** | Markdown 转图片 | DSA md2img | 通知生产必备 |
+| **P1** | 数据持久化 | DSA SQLAlchemy ORM | 回测结果/行情持久化 |
+| **P1** | 定时调度 | DSA schedule + 交易日检查 | 自动化运行 |
+| **P2** | 大盘复盘 | DSA 三段式复盘 | 市场整体视角 |
+| **P2** | 信号级回测评价 | DSA BacktestEngine | AI 信号准确率评估 |
+| **P2** | 消息分批/路由 | DSA 按渠道分批 | 通知体验优化 |
+| **P2** | 报告文件保存 | DSA report_YYYYMMDD.md | 报表持久化 |
+
+> **P0 = 阻塞性依赖**（不做则后续功能无法实现）
+> **P1 = 核心功能**（显著提升平台能力）
+> **P2 = 体验优化**（锦上添花）
