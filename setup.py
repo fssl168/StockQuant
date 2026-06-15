@@ -30,6 +30,7 @@ setup(
         "dev": ["pytest>=7.0", "ruff>=0.1", "coverage>=7.0"],
         "ai": ["openai>=1.0", "anthropic>=0.18", "httpx>=0.25", "json-repair>=0.7", "litellm>=1.0"],
         "web": ["fastapi>=0.100", "uvicorn>=0.20", "pydantic>=2.0"],
+        "dashboard": ["streamlit>=1.20", "plotly>=5.0"],
     },
     url="https://github.com/fssl168/quantclaw",
     author="wolfqiu",

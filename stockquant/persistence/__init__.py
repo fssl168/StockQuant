@@ -18,6 +18,10 @@ from stockquant.persistence.repository import (
     get_kline,
     save_analysis,
     list_analyses,
+    save_audit_log,
+    list_audit_logs,
+    get_audit_log,
+    save_chat_message,
 )
 
 __all__ = [
@@ -35,4 +39,8 @@ __all__ = [
     "get_kline",
     "save_analysis",
     "list_analyses",
+    "save_audit_log",
+    "list_audit_logs",
+    "get_audit_log",
+    "save_chat_message",
 ]

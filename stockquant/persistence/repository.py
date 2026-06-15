@@ -339,3 +339,43 @@ def get_audit_log(engine_url: str, log_id: int) -> Optional[Dict]:
             "user_confirmed": bool(row.user_confirmed) if row.user_confirmed is not None else None,
             "created_at": row.created_at,
         }
+
+
+def save_chat_message(
+    engine_url: str,
+    conversation_id: str,
+    role: str,
+    content: str,
+    metadata: Optional[Dict] = None,
+) -> int:
+    """保存对话消息。
+
+    Parameters
+    ----------
+    engine_url : str
+        SQLAlchemy 引擎 URL
+    conversation_id : str
+        会话 ID（映射到 session_id）
+    role : str
+        消息角色 (user/assistant/system)
+    content : str
+        消息内容
+    metadata : dict | None
+        附加元数据
+
+    Returns
+    -------
+    int
+        保存的消息 ID
+    """
+    engine = _get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        row = ChatMessage(
+            session_id=conversation_id,
+            role=role,
+            content=content,
+        )
+        session.add(row)
+        session.commit()
+        return row.id
