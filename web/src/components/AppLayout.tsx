@@ -11,6 +11,8 @@ import {
   Code,
   Database,
   ArrowSquareOut,
+  CurrencyCircleDollar,
+  SlidersHorizontal,
 } from '@phosphor-icons/react'
 import { useNavigate, useLocation } from 'react-router-dom'
 
@@ -23,6 +25,8 @@ const menuItems = [
   { key: '/strategy', icon: <Code size={20} weight="fill" />, label: '策略' },
   { key: '/data', icon: <Database size={20} weight="fill" />, label: '数据' },
   { key: '/monitor', icon: <Eye size={20} weight="fill" />, label: '盯盘' },
+  { key: '/trading', icon: <CurrencyCircleDollar size={20} weight="fill" />, label: '交易' },
+  { key: '/optimize', icon: <SlidersHorizontal size={20} weight="fill" />, label: '优化' },
   { key: '/portfolio', icon: <TrendUp size={20} weight="fill" />, label: '组合' },
   { key: '/ai-chat', icon: <ChatCenteredText size={20} weight="fill" />, label: 'AI 对话' },
   { key: '/settings', icon: <Gear size={20} weight="fill" />, label: '设置' },

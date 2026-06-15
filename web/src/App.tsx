@@ -12,6 +12,8 @@ const Monitor = lazy(() => import('./pages/Monitor'))
 const AIChat = lazy(() => import('./pages/AIChat'))
 const Portfolio = lazy(() => import('./pages/Portfolio'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Trading = lazy(() => import('./pages/Trading'))
+const Optimize = lazy(() => import('./pages/Optimize'))
 
 function PageLoader() {
   return (
@@ -36,6 +38,8 @@ export default function App() {
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/ai-chat" element={<AIChat />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/trading" element={<Trading />} />
+            <Route path="/optimize" element={<Optimize />} />
           </Routes>
         </Suspense>
       </AppLayout>

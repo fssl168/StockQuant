@@ -166,3 +166,74 @@ export interface CacheStats {
   last_update: string
   symbol_count: number
 }
+
+// ====== Trading Types ======
+export type BrokerMode = 'paper' | 'live'
+export type OrderSide = 'BUY' | 'SELL'
+export type OrderType = 'MARKET' | 'LIMIT' | 'STOP'
+export type OrderStatus = 'PENDING' | 'SUBMITTED' | 'PARTIAL_FILLED' | 'FILLED' | 'CANCELLED' | 'REJECTED'
+
+export interface Order {
+  id: string
+  symbol: string
+  side: OrderSide
+  type: OrderType
+  price: number
+  quantity: number
+  filledQty: number
+  filledAvgPrice: number
+  status: OrderStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AccountInfo {
+  totalEquity: number
+  cash: number
+  frozenCash: number
+  marketValue: number
+  availableCash: number
+  dailyPnl: number
+  dailyPnlPct: number
+}
+
+export interface TradeRecord {
+  id: string
+  orderId: string
+  symbol: string
+  side: OrderSide
+  price: number
+  quantity: number
+  commission: number
+  timestamp: string
+}
+
+// ====== Optimizer Types ======
+export interface OptimizerParam {
+  name: string
+  min: number
+  max: number
+  step?: number
+  value?: number
+}
+
+export interface OptimizeConfig {
+  strategyId: string
+  params: OptimizerParam[]
+  method: 'grid' | 'random' | 'walkforward'
+  targetMetric: string
+  maxIters?: number
+  nJobs?: number
+}
+
+export interface OptimizeResult {
+  rank: number
+  params: Record<string, number>
+  metrics: {
+    sharpeRatio?: number
+    totalReturn?: number
+    maxDrawdown?: number
+    winRate?: number
+    totalTrades?: number
+  }
+}

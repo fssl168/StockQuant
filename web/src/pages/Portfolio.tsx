@@ -1,10 +1,12 @@
-import { Card, Row, Col, Table, Typography, Tag } from 'antd'
-import { ArrowUpRight, ArrowDownRight } from '@phosphor-icons/react'
+import { Card, Row, Col, Table, Typography, Tag, Button } from 'antd'
+import { ArrowUpRight, ArrowDownRight, CurrencyCircleDollar } from '@phosphor-icons/react'
 import ReactECharts from 'echarts-for-react'
+import { useNavigate } from 'react-router-dom'
 
 const { Title, Text } = Typography
 
 export default function Portfolio() {
+  const navigate = useNavigate()
   const positions = [
     { key: '1', symbol: 'sh600519', name: '贵州茅台', shares: 100, cost: 1680, price: 1725.5, pnl: 4550, pnlPct: 2.71 },
     { key: '2', symbol: 'sz000858', name: '五粮液', shares: 500, cost: 152, price: 148.3, pnl: -1850, pnlPct: -2.43 },
@@ -53,7 +55,12 @@ export default function Portfolio() {
 
   return (
     <div style={{ maxWidth: 1200 }}>
-      <Title level={4} style={{ marginBottom: 4, fontWeight: 600, fontSize: 16 }}>投资组合</Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <Title level={4} style={{ margin: 0, fontWeight: 600, fontSize: 16 }}>投资组合</Title>
+        <Button type="primary" size="small" icon={<CurrencyCircleDollar size={14} />} onClick={() => navigate('/trading')}>
+          快捷交易
+        </Button>
+      </div>
       <Text type="secondary" style={{ display: 'block', marginBottom: 20, fontSize: 12 }}>
         持仓汇总与盈亏分析
       </Text>
@@ -92,10 +99,10 @@ export default function Portfolio() {
                 series: [{
                   type: 'pie', radius: ['40%', '70%'], center: ['50%', '55%'],
                   avoidLabelOverlap: false,
-                  label: { show: true, fontSize: 11, color: 'var(--color-text-secondary)' },
+                  label: { show: true, fontSize: 11, color: '#a1a1aa' },
                   data: industryData,
                   itemStyle: { borderRadius: 4 },
-                  color: ['var(--color-brand-primary)', '#10b981', '#f59e0b', '#6366f1'],
+                  color: ['#3b82f6', '#10b981', '#f59e0b', '#2563eb'],
                 }],
               }}
               style={{ height: 200 }}
@@ -106,8 +113,8 @@ export default function Portfolio() {
               option={{
                 tooltip: { trigger: 'axis' },
                 grid: { left: 60, right: 8, top: 8, bottom: 24 },
-                xAxis: { type: 'category', data: positions.map((p) => p.symbol), axisLine: { lineStyle: { color: 'var(--color-bg-elevated)' } } },
-                yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: 'var(--color-bg-surface)' } }, axisLabel: { color: 'var(--color-text-tertiary)', fontSize: 10, formatter: (v: number) => `¥${v >= 1000 ? (v/1000).toFixed(0)+'k' : v}` } },
+                xAxis: { type: 'category', data: positions.map((p) => p.symbol), axisLine: { lineStyle: { color: '#111113' } } },
+                yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: '#18181b' } }, axisLabel: { color: '#71717a', fontSize: 10, formatter: (v: number) => `¥${v >= 1000 ? (v/1000).toFixed(0)+'k' : v}` } },
                 series: [{
                   type: 'bar', data: pnlData, barMaxWidth: 30,
                   itemStyle: { borderRadius: [2, 2, 0, 0] },
