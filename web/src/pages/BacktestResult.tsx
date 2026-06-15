@@ -1,73 +1,148 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Card, Row, Col, Tag, Table, Descriptions, Alert, Spin } from 'antd'
-import { ArrowLeftOutlined } from '@ant-design/icons'
-import { backtestApi, type BacktestTask } from '@/api/backtest'
-import ReactECharts from 'echarts-for-react'
+import { Row, Col, Card, Table, Button, Typography, Tag, Alert } from 'antd'
+import { ArrowCounterClockwise, Sparkle } from '@phosphor-icons/react'
+import { backtestApi } from '@/api/dashboard'
+import EquityChart from '@/components/Chart/EquityChart'
+import DrawdownChart from '@/components/Chart/DrawdownChart'
+import MonthHeatmap from '@/components/Chart/MonthHeatmap'
+import MetricTable from '@/components/Table/MetricTable'
+import type { BacktestMetrics, Trade } from '@/types'
+
+const { Title, Text } = Typography
 
 export default function BacktestResult() {
   const { id } = useParams<{ id: string }>()
-  const [task, setTask] = useState<BacktestTask | null>(null)
+  const [task, setTask] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!id) return
     backtestApi.get(id)
       .then(setTask)
-      .catch(() => {})
+      .catch(() => setTask(null))
       .finally(() => setLoading(false))
   }, [id])
 
-  if (loading) return <Spin size="large" />
-  if (!task) return <Alert message="回测任务不存在" type="error" />
+  if (loading) return <div style={{ textAlign: 'center', padding: 80 }}><Typography.Text type="secondary">加载中...</Typography.Text></div>
+  if (!task) return <Alert message="Backtest task not found" type="error" />
 
-  const equityData = (task.equity_curve as unknown[][])?.map((p) => p[1]) ?? []
+  const equityData = (task.equity_curve as number[] ?? [])
+  const metrics = task.metrics as BacktestMetrics ?? {}
+
+  // Generate drawdown data from equity curve
+  const drawdownData = equityData.length > 0 ? (() => {
+    let peak = equityData[0]
+    return equityData.map((v) => {
+      if (v > peak) peak = v
+      return (v - peak) / peak
+    })
+  })() : []
+
+  // Generate monthly returns
+  const monthlyReturns: Record<string, number> = (metrics['Monthly Returns'] as Record<string, number>) ?? {}
+
+  const metricItems = [
+    { label: '年化收益', value: metrics['Annualized Return'] ?? '-', suffix: '%', color: (v: number | string) => typeof v === 'number' ? (v >= 0 ? '#10b981' : '#ef4444') : '#f0f0f0' },
+    { label: '最大回撤', value: metrics['Max Drawdown'] ?? '-', suffix: '%', color: '#ef4444' },
+    { label: '夏普', value: metrics['Sharpe Ratio'] ?? '-', suffix: '', color: () => '#0066FF' },
+    { label: 'Sortino', value: metrics['Sortino Ratio'] ?? '-', suffix: '', color: () => '#0066FF' },
+    { label: 'Calmar', value: metrics['Calmar Ratio'] ?? '-', suffix: '', color: () => '#0066FF' },
+    { label: '胜率', value: metrics['Win Rate'] ?? '-', suffix: '%', color: () => '#10b981' },
+    { label: '总交易', value: metrics['Total Trades'] ?? '-', suffix: '', color: () => '#f0f0f0' },
+    { label: 'SQN', value: metrics['SQN (System Quality Number)'] ?? '-', suffix: '', color: () => '#0066FF' },
+  ]
+
+  const tradeColumns = [
+    { title: '时间', dataIndex: 'time', key: 'time', width: 150, render: (d: string) => new Date(d).toLocaleString() },
+    { title: '标的', dataIndex: 'symbol', key: 'symbol', width: 100, render: (s: string) => <Text style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{s}</Text> },
+    { title: '方向', dataIndex: 'direction', key: 'direction', width: 70, render: (d: string) => (
+      <Tag color={d === 'BUY' ? 'green' : d === 'SELL' ? 'red' : 'default'}>{d}</Tag>
+    )},
+    { title: '数量', dataIndex: 'size', key: 'size', width: 80, render: (v: number) => v.toLocaleString() },
+    { title: '价格', dataIndex: 'price', key: 'price', width: 100, render: (v: number) => v.toFixed(2) },
+    { title: '盈亏', dataIndex: 'pnl', key: 'pnl', width: 100, render: (v: number | null) => v != null ? (
+      <Text style={{ color: v >= 0 ? '#10b981' : '#ef4444', fontFamily: 'var(--font-mono)' }}>
+        {v >= 0 ? '+' : ''}{v.toFixed(0)}
+      </Text>
+    ) : <Text type="secondary">-</Text> },
+  ]
 
   return (
-    <div>
-      <Link to="/backtest"><Button icon={<ArrowLeftOutlined />} style={{ marginBottom: 16 }}>返回</Button></Link>
-      <h2>{task.strategy_name}</h2>
+    <div style={{ maxWidth: 1400 }}>
+      <Link to="/backtest" style={{ marginBottom: 16, display: 'inline-block' }}>
+        <Button icon={<ArrowCounterClockwise size={16} />} size="small">返回</Button>
+      </Link>
 
-      <Row gutter={[16, 16]}>
-        <Col span={4}><Card><DescriptItem label="年化收益" value={task.metrics['Annualized Return']} /></Card></Col>
-        <Col span={4}><Card><DescriptItem label="最大回撤" value={task.metrics['Max Drawdown']} /></Card></Col>
-        <Col span={4}><Card><DescriptItem label="夏普比率" value={task.metrics['Sharpe Ratio']} /></Card></Col>
-        <Col span={4}><Card><DescriptItem label="胜率" value={task.metrics['Win Rate']} /></Card></Col>
-        <Col span={4}><Card><DescriptItem label="总交易" value={task.metrics['Total Trades']} /></Card></Col>
-        <Col span={4}><Card><DescriptItem label="SQN" value={task.metrics['SQN (System Quality Number)']} /></Card></Col>
+      <div style={{ display: 'flex', alignItems: 'start', gap: 12, marginBottom: 20 }}>
+        <Title level={4} style={{ margin: 0, flex: 1, fontSize: 16, fontWeight: 600 }}>{task.strategy_name}</Title>
+        <Tag color={task.status === 'completed' ? 'green' : 'blue'}>{task.status}</Tag>
+      </div>
+
+      {/* Metric cards */}
+      <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
+        {metricItems.map((m) => (
+          <Col xs={24} sm={12} md={8} lg={6} key={m.label}>
+            <Card size="small" styles={{ body: { padding: '8px 12px', textAlign: 'center' } }}>
+              <div style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+                {m.label}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 600, fontFamily: 'var(--font-mono)', color: typeof m.color === 'function' ? m.color(m.value as number) : m.color }}>
+                {typeof m.value === 'number' ? m.value.toFixed(2) : m.value}{m.suffix}
+              </div>
+            </Card>
+          </Col>
+        ))}
       </Row>
 
-      <Card title="资金曲线" style={{ marginTop: 16 }}>
-        <ReactECharts
-          option={{
-            xAxis: { type: 'category', data: equityData.map((_, i) => i + 1) },
-            yAxis: { type: 'value' },
-            series: [{ type: 'line', data: equityData, smooth: true, areaStyle: {} }],
-          }}
-          style={{ height: 300 }}
+      {/* Equity curve */}
+      <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>权益曲线</span>} styles={{ body: { padding: '12px' } }} style={{ marginBottom: 12 }}>
+        <EquityChart data={equityData} height={220} />
+      </Card>
+
+      {/* Drawdown + Monthly returns */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+        <Col xs={24} lg={12}>
+          <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>回撤曲线</span>} styles={{ body: { padding: '12px' } }}>
+            <DrawdownChart data={drawdownData} height={180} />
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>月度收益</span>} styles={{ body: { padding: '12px' } }}>
+            <MonthHeatmap data={monthlyReturns} height={180} />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 30+ Metrics */}
+      <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>完整指标</span>} styles={{ body: { padding: 0 } }}>
+        <MetricTable metrics={metrics} />
+      </Card>
+
+      {/* Trades */}
+      <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>交易明细</span>} styles={{ body: { padding: '0' } }} style={{ marginTop: 12 }}>
+        <Table
+          dataSource={task.trades as Trade[] ?? []}
+          rowKey={(_, i) => String(i)}
+          pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 笔` }}
+          size="small"
+          scroll={{ x: 500 }}
+          columns={tradeColumns}
         />
       </Card>
 
-      <Card title="交易明细" style={{ marginTop: 16 }}>
-        <Table dataSource={task.trades} rowKey={(r, i) => i} pagination={{ pageSize: 20 }} size="small"
-          columns={[
-            { title: '时间', dataIndex: 'time', key: 'time' },
-            { title: '代码', dataIndex: 'symbol', key: 'symbol' },
-            { title: '方向', dataIndex: 'direction', key: 'direction', render: (d: string) => <Tag color={d === 'BUY' ? 'green' : 'red'}>{d}</Tag> },
-            { title: '数量', dataIndex: 'size', key: 'size' },
-            { title: '价格', dataIndex: 'price', key: 'price' },
-          ]}
-        />
+      {/* AI Insight */}
+      <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Sparkle size={16} weight="fill" style={{ color: '#a855f7' }} /> AI 解读
+      </span>} styles={{ body: { padding: '16px' } }} style={{ marginTop: 12 }}>
+        <Text type="secondary" style={{ fontSize: 13, lineHeight: 1.7 }}>
+          该策略年化收益 {metrics['Annualized Return']?.toFixed(1) ?? '-'}%，最大回撤 {(metrics['Max Drawdown'] as number)?.toFixed(1) ?? '-'}%。
+          {metrics['Sharpe Ratio'] && (metrics['Sharpe Ratio'] as number) >= 1
+            ? '夏普比率表现良好，风险调整后收益较优。'
+            : '建议优化风控参数以降低回撤。'}
+          共 {metrics['Total Trades']} 笔交易，胜率 {(metrics['Win Rate'] as number)?.toFixed(0) ?? '-'}%。
+        </Text>
       </Card>
-    </div>
-  )
-}
-
-function DescriptItem({ label, value }: { label: string; value: unknown }) {
-  return (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: 12, color: '#999' }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 600 }}>{value ?? 'N/A'}</div>
     </div>
   )
 }
