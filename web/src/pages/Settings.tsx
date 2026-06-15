@@ -1,13 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   Card, Collapse, Button, InputNumber, Switch, Select, Slider, Input, Space, Typography,
-  Modal, Tag, Badge, FloatButton,
+  Modal, Tag, Badge, FloatButton, Steps,
 } from 'antd'
 import {
   Warning, Sparkle, Rocket, Bell,
   Laptop, Coin, Wallet, Target, Clock,
   WifiHigh, FunnelSimple, ArrowsClockwise,
-  CheckCircle, XCircle,
+  CheckCircle, XCircle, ArrowCounterClockwise,
   Brain, Notebook,
 } from '@phosphor-icons/react'
 
@@ -41,7 +41,7 @@ interface GroupEntry {
 const GROUPS: GroupEntry[] = [
   {
     key: 'system_control', label: '系统总控', icon: 'Laptop',
-    iconComponent: <Laptop size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <Laptop size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'trading.mode', value: 'simulator', defaultValue: 'simulator', value_type: 'select', label: '交易模式', description: '平台运行模式', secret: false, options: [{ value: 'backtest', label: '回测模式' }, { value: 'simulator', label: '模拟盘' }, { value: 'live', label: '实盘' }] },
       { key: 'system.log_level', value: 'INFO', defaultValue: 'INFO', value_type: 'select', label: '日志级别', description: '日志详细程度', secret: false, options: [{ value: 'DEBUG', label: 'DEBUG' }, { value: 'INFO', label: 'INFO' }, { value: 'WARNING', label: 'WARNING' }, { value: 'ERROR', label: 'ERROR' }] },
@@ -51,7 +51,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'data_source', label: '数据源', icon: 'Coin',
-    iconComponent: <Coin size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <Coin size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'data_provider.source', value: 'akshare', defaultValue: 'akshare', value_type: 'select', label: '默认数据源', description: '主用数据提供商', secret: false, options: [{ value: 'baostock', label: 'BaoStock' }, { value: 'akshare', label: 'AkShare' }, { value: 'csv', label: 'CSV' }, { value: 'parquet', label: 'Parquet' }] },
       { key: 'data_provider.api_key', value: '', defaultValue: '', value_type: 'password', label: 'API Key', description: '数据源认证密钥', secret: true },
@@ -62,7 +62,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'trading_cost', label: '交易成本', icon: 'Wallet',
-    iconComponent: <Wallet size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <Wallet size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'system.commission_rate', value: 0.00025, defaultValue: 0.00025, value_type: 'float', label: '佣金费率', description: '买卖双向佣金', secret: false, min: 0, max: 0.003, step: 0.00001, scale: 100000, unit: '%', slider: true },
       { key: 'system.min_commission', value: 5, defaultValue: 5, value_type: 'number', label: '最低佣金', description: '单笔最低收费（元）', secret: false, min: 0, max: 50, step: 0.5 },
@@ -71,7 +71,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'execution_params', label: '执行参数', icon: 'Target',
-    iconComponent: <Target size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <Target size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'system.slippage', value: 0, defaultValue: 0, value_type: 'float', label: '滑点', description: '固定滑点（元）', secret: false, min: 0, max: 1, step: 0.01, scale: 100, unit: '元', slider: true },
       { key: 'system.lot_size', value: 100, defaultValue: 100, value_type: 'number', label: '最小交易单位', description: 'A 股 100 股整数倍', secret: false, min: 100, max: 1000, step: 100 },
@@ -80,7 +80,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'trading_session', label: '交易时段', icon: 'Clock',
-    iconComponent: <Clock size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <Clock size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'system.morning_open', value: '09:30', defaultValue: '09:30', value_type: 'string', label: '早盘开盘', description: 'A 股早盘开始时间', secret: false },
       { key: 'system.morning_close', value: '11:30', defaultValue: '11:30', value_type: 'string', label: '早盘收盘', description: 'A 股早盘结束时间', secret: false },
@@ -90,7 +90,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'broker_channel', label: '券商通道', icon: 'Connection',
-    iconComponent: <WifiHigh size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <WifiHigh size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'trading.broker', value: 'simulator', defaultValue: 'simulator', value_type: 'select', label: 'Broker 类型', description: '交易通道类型', secret: false, options: [{ value: 'simulator', label: '模拟器' }, { value: 'qmt', label: 'QMT' }, { value: 'xtp', label: 'XTP' }] },
       { key: 'trading.poll_interval_sec', value: 1, defaultValue: 1, value_type: 'number', label: '轮询间隔', description: '行情刷新间隔（秒）', secret: false, min: 0.1, max: 60, step: 0.1 },
@@ -110,7 +110,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'ai_model', label: 'AI 模型', icon: 'MagicStick',
-    iconComponent: <Brain size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <Brain size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'ai_model.provider', value: 'openai', defaultValue: 'openai', value_type: 'select', label: 'LLM Provider', description: 'AI 模型提供商', secret: false, options: [{ value: 'openai', label: 'OpenAI' }, { value: 'anthropic', label: 'Anthropic' }, { value: 'deepseek', label: 'DeepSeek' }] },
       { key: 'ai_model.api_url', value: '', defaultValue: '', value_type: 'string', label: 'API URL', description: '模型接口地址', secret: false },
@@ -122,7 +122,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'evolution', label: '策略进化', icon: 'Rocket',
-    iconComponent: <Rocket size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <Rocket size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'evolution.enabled', value: false, defaultValue: false, value_type: 'boolean', label: '启用进化', description: '开启 AI 策略自动进化', secret: false },
       { key: 'evolution.llm_provider', value: 'openai', defaultValue: 'openai', value_type: 'select', label: '进化 LLM', description: '策略进化专用模型', secret: false, options: [{ value: 'openai', label: 'OpenAI' }, { value: 'anthropic', label: 'Anthropic' }] },
@@ -133,7 +133,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'notification', label: '通知推送', icon: 'Bell',
-    iconComponent: <Bell size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <Bell size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'notification.dingtalk_webhook', value: '', defaultValue: '', value_type: 'password', label: 'DingTalk Webhook', description: '', secret: true },
       { key: 'notification.wechat_webhook', value: '', defaultValue: '', value_type: 'password', label: '企业微信 Webhook', description: '', secret: true },
@@ -143,7 +143,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'fundamental_adapter', label: '基本面适配', icon: 'Document',
-    iconComponent: <Notebook size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <Notebook size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'fundamental_adapter.enabled', value: false, defaultValue: false, value_type: 'boolean', label: '启用基本面', description: '', secret: false },
       { key: 'fundamental_adapter.apply_in_backtest', value: true, defaultValue: true, value_type: 'boolean', label: '回测中应用', description: '', secret: false },
@@ -152,7 +152,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'signal', label: '信号管理', icon: 'FunnelSimple',
-    iconComponent: <FunnelSimple size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <FunnelSimple size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'signal.dedup_cooldown_sec', value: 300, defaultValue: 300, value_type: 'number', label: '去重冷却', description: '重复信号冷却时间（秒）', secret: false, min: 0, max: 3600, step: 30 },
       { key: 'signal.dedup_audit_rejected', value: true, defaultValue: true, value_type: 'boolean', label: '审计拒绝信号', description: '', secret: false },
@@ -160,7 +160,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'history_sync', label: '历史同步', icon: 'ArrowsClockwise',
-    iconComponent: <ArrowsClockwise size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <ArrowsClockwise size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'history_sync.write_mode', value: 'append', defaultValue: 'append', value_type: 'select', label: '写入模式', description: '', secret: false, options: [{ value: 'append', label: '追加' }, { value: 'overwrite', label: '覆盖' }] },
       { key: 'history_sync.interval_minutes', value: 60, defaultValue: 60, value_type: 'number', label: '同步间隔（分钟）', description: '', secret: false, min: 5, max: 1440, step: 5 },
@@ -169,7 +169,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'kafka_messaging', label: '消息总线', icon: 'Connection',
-    iconComponent: <WifiHigh size={16} weight="fill" style={{ color: '#0066FF' }} />,
+    iconComponent: <WifiHigh size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'kafka.enabled', value: false, defaultValue: false, value_type: 'boolean', label: '启用 Kafka', description: '', secret: false },
       { key: 'kafka.bootstrap_servers', value: 'localhost:9092', defaultValue: 'localhost:9092', value_type: 'string', label: 'Bootstrap 服务器', description: '', secret: false },
@@ -180,6 +180,7 @@ const GROUPS: GroupEntry[] = [
 
 export default function Settings() {
   const [viewMode, setViewMode] = useState<'wizard' | 'expert'>('expert')
+  const [wizardStep, setWizardStep] = useState(0)
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(new Set())
   const [adminModal, setAdminModal] = useState(false)
@@ -330,8 +331,8 @@ export default function Settings() {
         backdropFilter: 'blur(8px)',
       }}>
         <div>
-          <Title level={5} style={{ margin: 0, fontWeight: 600, fontSize: 14, color: '#f0f0f0' }}>
-            <Sparkle size={16} weight="fill" style={{ color: '#a855f7', marginRight: 8 }} />
+          <Title level={5} style={{ margin: 0, fontWeight: 600, fontSize: 14, color: 'var(--color-text-primary)' }}>
+            <Sparkle size={16} weight="fill" style={{ color: 'var(--color-info)', marginRight: 8 }} />
             运行配置中心
           </Title>
           <Text type="secondary" style={{ fontSize: 12 }}>所有修改保存后热生效，无需重启服务</Text>
@@ -375,11 +376,113 @@ export default function Settings() {
       {/* Wizard Mode */}
       {viewMode === 'wizard' && (
         <div>
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Card size="small" styles={{ body: { padding: 20 } }}>
-              <Text>向导模式已移除，请使用专家模式。</Text>
-            </Card>
-          </Space>
+          <Steps
+            current={wizardStep}
+            size="small"
+            style={{ marginBottom: 20 }}
+            items={[
+              { title: '交易模式', icon: <Laptop size={16} weight="fill" /> },
+              { title: '数据源', icon: <Coin size={16} weight="fill" /> },
+              { title: '回测设置', icon: <ArrowsClockwise size={16} weight="fill" /> },
+              { title: '风控参数', icon: <Warning size={16} weight="fill" /> },
+              { title: '完成', icon: <Rocket size={16} weight="fill" /> },
+            ]}
+          />
+          <Card size="small" styles={{ body: { padding: 24 } }}>
+            {/* Step 0: Trading Mode */}
+            {wizardStep === 0 && (
+              <Space direction="vertical" style={{ width: '100%' }} size={16}>
+                <Title level={5} style={{ margin: 0 }}>基础配置</Title>
+                <Text type="secondary">设置交易模式和初始资金</Text>
+                {GROUPS[0].items.map((item) => renderControl(item))}
+              </Space>
+            )}
+            {/* Step 1: Data Source */}
+            {wizardStep === 1 && (
+              <Space direction="vertical" style={{ width: '100%' }} size={16}>
+                <Title level={5} style={{ margin: 0 }}>数据源</Title>
+                <Text type="secondary">配置数据提供商和缓存</Text>
+                {GROUPS[1].items.map((item) => renderControl(item))}
+              </Space>
+            )}
+            {/* Step 2: Backtest Engine */}
+            {wizardStep === 2 && (
+              <Space direction="vertical" style={{ width: '100%' }} size={16}>
+                <Title level={5} style={{ margin: 0 }}>回测引擎</Title>
+                <Text type="secondary">回测执行参数</Text>
+                {GROUPS[2].items.map((item) => renderControl(item))}
+              </Space>
+            )}
+            {/* Step 3: Risk Control */}
+            {wizardStep === 3 && (
+              <Space direction="vertical" style={{ width: '100%' }} size={16}>
+                <Title level={5} style={{ margin: 0 }}>风险控制</Title>
+                <Text type="secondary">仓位和止损策略</Text>
+                {GROUPS[3].items.map((item) => renderControl(item))}
+              </Space>
+            )}
+            {/* Step 4: Summary & Save */}
+            {wizardStep === 4 && (
+              <Space direction="vertical" style={{ width: '100%' }} size={12} align="center">
+                <CheckCircle size={48} weight="fill" style={{ color: '#10b981' }} />
+                <Title level={4} style={{ margin: 0 }}>配置就绪</Title>
+                <Text type="secondary">已准备保存以下配置项</Text>
+                <div style={{ width: '100%', background: 'var(--color-bg-elevated)', borderRadius: 8, padding: 16 }}>
+                  {[0, 1, 2, 3].flatMap((gi) =>
+                    GROUPS[gi].items.filter((item) => item.value !== item.defaultValue).map((item) => (
+                      <div key={item.key} style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        padding: '6px 0', borderBottom: '1px solid var(--color-bg-surface)',
+                        fontSize: 13,
+                      }}>
+                        <Text>{item.label}</Text>
+                        <Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                          {String(item.value)}
+                        </Text>
+                      </div>
+                    ))
+                  ).length > 0 ? (
+                    [0, 1, 2, 3].flatMap((gi) =>
+                      GROUPS[gi].items.filter((item) => item.value !== item.defaultValue).map((item) => (
+                        <div key={item.key} style={{
+                          display: 'flex', justifyContent: 'space-between',
+                          padding: '6px 0', borderBottom: '1px solid var(--color-bg-surface)',
+                          fontSize: 13,
+                        }}>
+                          <Text>{item.label}</Text>
+                          <Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                            {String(item.value)}
+                          </Text>
+                        </div>
+                      ))
+                    )
+                  ) : (
+                    <Text type="secondary">无修改项（使用默认值）</Text>
+                  )}
+                </div>
+              </Space>
+            )}
+          </Card>
+
+          {/* Navigation */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
+            <Button
+              disabled={wizardStep === 0}
+              icon={<ArrowCounterClockwise size={14} />}
+              onClick={() => setWizardStep((s) => s - 1)}
+            >
+              上一步
+            </Button>
+            {wizardStep < 4 ? (
+              <Button type="primary" onClick={() => setWizardStep((s) => s + 1)}>
+                下一步
+              </Button>
+            ) : (
+              <Button type="primary" icon={<Rocket size={16} weight="fill" />} onClick={handleSave} loading={saving}>
+                保存配置
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -419,14 +522,14 @@ export default function Settings() {
                       <div>
                         <Text style={{ fontSize: 12, fontWeight: 500 }}>{item.label}</Text>
                         {item.description && (
-                          <div style={{ fontSize: 11, color: '#555', marginTop: 1 }}>{item.description}</div>
+                          <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 1 }}>{item.description}</div>
                         )}
                       </div>
                       {renderControl(item)}
                       {isDirty ? (
                         <CheckCircle size={14} weight="fill" style={{ color: '#f59e0b', cursor: 'pointer' }} />
                       ) : (
-                        <XCircle size={14} weight="fill" style={{ color: '#333' }} />
+                        <XCircle size={14} weight="fill" style={{ color: 'var(--color-bg-elevated)' }} />
                       )}
                     </div>
                   )

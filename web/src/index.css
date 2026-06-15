@@ -157,3 +157,66 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Markdown rendering styles ─────────────────────────── */
+
+.ant-list-item-meta-description p { margin: 0 0 8px 0; }
+.ant-list-item-meta-description p:last-child { margin-bottom: 0; }
+.ant-list-item-meta-description code {
+  background: var(--color-bg-elevated);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-brand-primary);
+}
+.ant-list-item-meta-description pre {
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.ant-list-item-meta-description pre code {
+  background: none;
+  padding: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+.ant-list-item-meta-description ul,
+.ant-list-item-meta-description ol {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+.ant-list-item-meta-description li { margin-bottom: 4px; }
+.ant-list-item-meta-description table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.ant-list-item-meta-description th,
+.ant-list-item-meta-description td {
+  border: 1px solid var(--color-border-default);
+  padding: 6px 10px;
+  text-align: left;
+}
+.ant-list-item-meta-description th {
+  background: var(--color-bg-elevated);
+  font-weight: 600;
+}
+.ant-list-item-meta-description blockquote {
+  border-left: 3px solid var(--color-brand-primary);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--color-text-tertiary);
+}
+.ant-list-item-meta-description strong { color: var(--color-text-primary); }
+.ant-list-item-meta-description h1,
+.ant-list-item-meta-description h2,
+.ant-list-item-meta-description h3,
+.ant-list-item-meta-description h4 {
+  color: var(--color-text-primary);
+  margin: 12px 0 6px;
+}

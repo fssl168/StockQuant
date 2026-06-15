@@ -1,10 +1,38 @@
-import { useEffect } from 'react'
-import { Table, Button, Card, Space, Tag, Row, Col } from 'antd'
+import { useEffect, useState } from 'react'
+import { Table, Button, Card, Space, Tag, Row, Col, Typography, Input, DatePicker } from 'antd'
 import { Database, Download } from '@phosphor-icons/react'
+import ReactECharts from 'echarts-for-react'
+import dayjs from 'dayjs'
 import { useDataStore } from '@/stores/dataStore'
+
+const { Title, Text } = Typography
 
 export default function Data() {
   const { sources, cacheStats } = useDataStore()
+
+  // K-line query state
+  const [klineSymbol, setKlineSymbol] = useState('sh600519')
+  const [klineDates, setKlineDates] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs().subtract(60, 'day'), dayjs()])
+  const [klineLoading, setKlineLoading] = useState(false)
+
+  function generateMockKline(symbol: string, days: number) {
+    const data: [number, number, number, number, number][] = []
+    let basePrice = symbol.includes('600519') ? 1700 : symbol.includes('000858') ? 150 : 50
+    const dates: string[] = []
+    for (let i = days; i >= 0; i--) {
+      const d = dayjs().subtract(i, 'day').format('YYYY-MM-DD')
+      dates.push(d)
+      const open = basePrice + (Math.random() - 0.48) * basePrice * 0.02
+      const close = open + (Math.random() - 0.48) * basePrice * 0.03
+      const high = Math.max(open, close) + Math.random() * basePrice * 0.01
+      const low = Math.min(open, close) - Math.random() * basePrice * 0.01
+      data.push([open, close, low, high, 0] as [number, number, number, number, number]) // ECharts candlestick: [open, close, lowest, high, volume]
+      basePrice = close
+    }
+    return { dates, data }
+  }
+
+  const klineData = generateMockKline(klineSymbol, 60)
 
   useEffect(() => {
     void 0
@@ -31,10 +59,10 @@ export default function Data() {
 
   return (
     <div style={{ maxWidth: 1200 }}>
-      <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>数据管理</div>
-      <div style={{ color: '#555', display: 'block', marginBottom: 20, fontSize: 12 }}>
+      <Title level={4} style={{ marginBottom: 4, fontWeight: 600, fontSize: 16 }}>数据管理</Title>
+      <Text type="secondary" style={{ display: 'block', marginBottom: 20, fontSize: 12 }}>
         数据源配置、缓存管理与采集日志
-      </div>
+      </Text>
 
       {/* Cache stats */}
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
@@ -46,14 +74,59 @@ export default function Data() {
         ].map((s) => (
           <Col xs={24} sm={12} md={6} key={s.label}>
             <Card size="small" styles={{ body: { padding: '10px 14px' } }}>
-              <div style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
-              <div style={{ fontSize: 15, fontWeight: 600, fontFamily: 'var(--font-mono)', marginTop: 2, color: '#f0f0f0' }}>
+              <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
+              <div style={{ fontSize: 15, fontWeight: 600, fontFamily: 'var(--font-mono)', marginTop: 2, color: 'var(--color-text-primary)' }}>
                 {s.value}
               </div>
             </Card>
           </Col>
         ))}
       </Row>
+
+      {/* K-line query */}
+      <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Database size={14} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> K 线查询
+      </span>} style={{ marginBottom: 16 }}>
+        <Space style={{ marginBottom: 12 }} size={8} wrap>
+          <Input
+            value={klineSymbol}
+            onChange={(e) => setKlineSymbol(e.target.value)}
+            placeholder="股票代码 (e.g. sh600519)"
+            size="small"
+            style={{ width: 180 }}
+          />
+          <DatePicker.RangePicker
+            value={klineDates}
+            onChange={(v) => { if (v?.[0] && v?.[1]) setKlineDates([v[0], v[1]]) }}
+            size="small"
+            format="YYYY-MM-DD"
+          />
+          <Button type="primary" size="small" icon={<Database size={14} />} loading={klineLoading} onClick={() => setKlineLoading(true)}>
+            查询
+          </Button>
+        </Space>
+        <ReactECharts
+          option={{
+            tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+            grid: { left: 60, right: 8, top: 8, bottom: 24 },
+            xAxis: { type: 'category', data: klineData.dates, axisLine: { lineStyle: { color: 'var(--color-border-default)' } }, axisLabel: { color: 'var(--color-text-tertiary)', fontSize: 10 } },
+            yAxis: { scale: true, splitLine: { lineStyle: { color: 'var(--color-bg-surface)' } }, axisLabel: { color: 'var(--color-text-tertiary)', fontSize: 10, formatter: (v: number) => v.toFixed(0) } },
+            series: [{
+              type: 'candlestick',
+              data: klineData.data,
+              itemStyle: {
+                color: '#ef4444',        // 阳线红 (A 股惯例)
+                color0: '#10b981',       // 阴线绿
+                borderColor: '#ef4444',
+                borderColor0: '#10b981',
+              },
+            }],
+            dataZoom: [{ type: 'inside', start: 30, end: 100 }],
+          }}
+          style={{ height: 320 }}
+          notMerge={true}
+        />
+      </Card>
 
       {/* Data sources */}
       <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>数据源配置</span>} styles={{ body: { padding: '0' } }} style={{ marginBottom: 12 }}>
@@ -84,7 +157,7 @@ export default function Data() {
               </Tag>
             )},
             { title: '记录数', dataIndex: 'records', key: 'records', width: 80, render: (v: number) => v.toLocaleString() },
-            { title: '备注', key: 'note', render: (_: any, r: any) => r.note ? <span style={{ fontSize: 11, color: '#888' }}>{r.note}</span> : null },
+            { title: '备注', key: 'note', render: (_: any, r: any) => r.note ? <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{r.note}</span> : null },
           ]}
           rowKey={(r: any) => r.key}
           pagination={false}

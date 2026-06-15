@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Row, Col, Card, Table, Button, Typography, Tag, Alert } from 'antd'
+import { Row, Col, Card, Table, Button, Typography, Tag, Alert, Skeleton } from 'antd'
 import { ArrowCounterClockwise, Sparkle } from '@phosphor-icons/react'
 import { backtestApi } from '@/api/dashboard'
 import EquityChart from '@/components/Chart/EquityChart'
@@ -24,7 +24,23 @@ export default function BacktestResult() {
       .finally(() => setLoading(false))
   }, [id])
 
-  if (loading) return <div style={{ textAlign: 'center', padding: 80 }}><Typography.Text type="secondary">加载中...</Typography.Text></div>
+  if (loading) return (
+    <div style={{ maxWidth: 1400 }}>
+      <Skeleton active paragraph={{ rows: 2 }} style={{ marginBottom: 16 }} />
+      <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
+        {[...Array(8)].map((_, i) => (
+          <Col key={i} xs={24} sm={12} md={8} lg={6}>
+            <Card size="small"><Skeleton active paragraph={{ rows: 1 }} /></Card>
+          </Col>
+        ))}
+      </Row>
+      <Skeleton active paragraph={{ rows: 6 }} style={{ marginBottom: 12 }} />
+      <Row gutter={[12, 12]}>
+        <Col span={24}><Skeleton active paragraph={{ rows: 4 }} /></Col>
+      </Row>
+      <Skeleton active paragraph={{ rows: 3 }} />
+    </div>
+  )
   if (!task) return <Alert message="Backtest task not found" type="error" />
 
   const equityData = (task.equity_curve as number[] ?? [])
@@ -43,14 +59,14 @@ export default function BacktestResult() {
   const monthlyReturns: Record<string, number> = (metrics['Monthly Returns'] as Record<string, number>) ?? {}
 
   const metricItems = [
-    { label: '年化收益', value: metrics['Annualized Return'] ?? '-', suffix: '%', color: (v: number | string) => typeof v === 'number' ? (v >= 0 ? '#10b981' : '#ef4444') : '#f0f0f0' },
+    { label: '年化收益', value: metrics['Annualized Return'] ?? '-', suffix: '%', color: (v: number | string) => typeof v === 'number' ? (v >= 0 ? '#10b981' : '#ef4444') : 'var(--color-text-primary)' },
     { label: '最大回撤', value: metrics['Max Drawdown'] ?? '-', suffix: '%', color: '#ef4444' },
-    { label: '夏普', value: metrics['Sharpe Ratio'] ?? '-', suffix: '', color: () => '#0066FF' },
-    { label: 'Sortino', value: metrics['Sortino Ratio'] ?? '-', suffix: '', color: () => '#0066FF' },
-    { label: 'Calmar', value: metrics['Calmar Ratio'] ?? '-', suffix: '', color: () => '#0066FF' },
+    { label: '夏普', value: metrics['Sharpe Ratio'] ?? '-', suffix: '', color: () => 'var(--color-brand-primary)' },
+    { label: 'Sortino', value: metrics['Sortino Ratio'] ?? '-', suffix: '', color: () => 'var(--color-brand-primary)' },
+    { label: 'Calmar', value: metrics['Calmar Ratio'] ?? '-', suffix: '', color: () => 'var(--color-brand-primary)' },
     { label: '胜率', value: metrics['Win Rate'] ?? '-', suffix: '%', color: () => '#10b981' },
-    { label: '总交易', value: metrics['Total Trades'] ?? '-', suffix: '', color: () => '#f0f0f0' },
-    { label: 'SQN', value: metrics['SQN (System Quality Number)'] ?? '-', suffix: '', color: () => '#0066FF' },
+    { label: '总交易', value: metrics['Total Trades'] ?? '-', suffix: '', color: () => 'var(--color-text-primary)' },
+    { label: 'SQN', value: metrics['SQN (System Quality Number)'] ?? '-', suffix: '', color: () => 'var(--color-brand-primary)' },
   ]
 
   const tradeColumns = [
@@ -84,7 +100,7 @@ export default function BacktestResult() {
         {metricItems.map((m) => (
           <Col xs={24} sm={12} md={8} lg={6} key={m.label}>
             <Card size="small" styles={{ body: { padding: '8px 12px', textAlign: 'center' } }}>
-              <div style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+              <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
                 {m.label}
               </div>
               <div style={{ fontSize: 15, fontWeight: 600, fontFamily: 'var(--font-mono)', color: typeof m.color === 'function' ? m.color(m.value as number) : m.color }}>
@@ -133,7 +149,7 @@ export default function BacktestResult() {
 
       {/* AI Insight */}
       <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Sparkle size={16} weight="fill" style={{ color: '#a855f7' }} /> AI 解读
+        <Sparkle size={16} weight="fill" style={{ color: 'var(--color-info)' }} /> AI 解读
       </span>} styles={{ body: { padding: '16px' } }} style={{ marginTop: 12 }}>
         <Text type="secondary" style={{ fontSize: 13, lineHeight: 1.7 }}>
           该策略年化收益 {metrics['Annualized Return']?.toFixed(1) ?? '-'}%，最大回撤 {(metrics['Max Drawdown'] as number)?.toFixed(1) ?? '-'}%。

@@ -69,8 +69,8 @@ export default function Portfolio() {
         ].map((s) => (
           <Col xs={24} sm={12} md={6} key={s.label}>
             <Card size="small" styles={{ body: { padding: '10px 14px' } }}>
-              <div style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
-              <div style={{ fontSize: 15, fontWeight: 600, fontFamily: 'var(--font-mono)', marginTop: 2, color: s.color || '#f0f0f0' }}>
+              <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
+              <div style={{ fontSize: 15, fontWeight: 600, fontFamily: 'var(--font-mono)', marginTop: 2, color: s.color || 'var(--color-text-primary)' }}>
                 {s.value}
               </div>
             </Card>
@@ -92,10 +92,10 @@ export default function Portfolio() {
                 series: [{
                   type: 'pie', radius: ['40%', '70%'], center: ['50%', '55%'],
                   avoidLabelOverlap: false,
-                  label: { show: true, fontSize: 11, color: '#888' },
+                  label: { show: true, fontSize: 11, color: 'var(--color-text-secondary)' },
                   data: industryData,
                   itemStyle: { borderRadius: 4 },
-                  color: ['#0066FF', '#10b981', '#f59e0b', '#6366f1'],
+                  color: ['var(--color-brand-primary)', '#10b981', '#f59e0b', '#6366f1'],
                 }],
               }}
               style={{ height: 200 }}
@@ -106,8 +106,8 @@ export default function Portfolio() {
               option={{
                 tooltip: { trigger: 'axis' },
                 grid: { left: 60, right: 8, top: 8, bottom: 24 },
-                xAxis: { type: 'category', data: positions.map((p) => p.symbol), axisLine: { lineStyle: { color: '#333' } } },
-                yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: '#1a1a1a' } }, axisLabel: { color: '#555', fontSize: 10, formatter: (v: number) => `¥${v >= 1000 ? (v/1000).toFixed(0)+'k' : v}` } },
+                xAxis: { type: 'category', data: positions.map((p) => p.symbol), axisLine: { lineStyle: { color: 'var(--color-bg-elevated)' } } },
+                yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: 'var(--color-bg-surface)' } }, axisLabel: { color: 'var(--color-text-tertiary)', fontSize: 10, formatter: (v: number) => `¥${v >= 1000 ? (v/1000).toFixed(0)+'k' : v}` } },
                 series: [{
                   type: 'bar', data: pnlData, barMaxWidth: 30,
                   itemStyle: { borderRadius: [2, 2, 0, 0] },

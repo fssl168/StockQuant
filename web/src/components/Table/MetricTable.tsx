@@ -47,7 +47,7 @@ function formatMetric(key: string, value: unknown): React.ReactNode {
   }
 
   return (
-    <Text style={{ color: colorMap[key] || '#f0f0f0', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+    <Text style={{ color: colorMap[key] || 'var(--color-text-primary)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
       {num.toFixed(2)}{suffix}
     </Text>
   )
@@ -64,7 +64,7 @@ export default function MetricTable({ metrics }: MetricTableProps) {
         if (visibleRows.length === 0) return null
         return (
           <div key={group.label} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, fontWeight: 600 }}>
+            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, fontWeight: 600 }}>
               {group.label}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
@@ -72,13 +72,13 @@ export default function MetricTable({ metrics }: MetricTableProps) {
                 <div
                   key={r.key}
                   style={{
-                    background: 'rgba(255,255,255,0.02)',
+                    background: 'var(--color-bg-hover)',
                     borderRadius: 6,
                     padding: '8px 12px',
-                    border: '1px solid #1a1a1a',
+                    border: '1px solid var(--color-border-default)',
                   }}
                 >
-                  <div style={{ fontSize: 11, color: '#555', marginBottom: 4 }}>{r.key}</div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>{r.key}</div>
                   {formatMetric(r.key, r.value)}
                 </div>
               ))}

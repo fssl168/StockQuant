@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Form, Input, InputNumber, Button, Card, Typography, Select, Row, Col } from 'antd'
+import { Form, Input, InputNumber, Button, Card, Typography, Select, Row, Col, DatePicker } from 'antd'
+import dayjs from 'dayjs'
 import { Play, Code } from '@phosphor-icons/react'
 import { useBacktestStore } from '@/stores/backtestStore'
 import { useNotificationStore } from '@/stores/notificationStore'
@@ -52,8 +53,8 @@ export default function Backtest() {
       await submitTask({
         strategy_name: values.strategy_name as string,
         symbols: String(values.symbols).split(',').map((s: string) => s.trim()),
-        start_date: values.start_date as string,
-        end_date: values.end_date as string,
+        start_date: typeof values.start_date === 'string' ? values.start_date : dayjs.isDayjs(values.start_date) ? (values.start_date as dayjs.Dayjs).format('YYYY-MM-DD') : '',
+        end_date: typeof values.end_date === 'string' ? values.end_date : dayjs.isDayjs(values.end_date) ? (values.end_date as dayjs.Dayjs).format('YYYY-MM-DD') : '',
         cash: values.cash as number,
         strategy_code: values.strategy_code as string,
         commission_type: 'ashare',
@@ -76,7 +77,7 @@ export default function Backtest() {
 
       <Form form={form} layout="vertical" onFinish={handleSubmit} initialValues={{ cash: 1_000_000, commission_type: 'ashare', slippage_type: 'none' }}>
         <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Code size={16} weight="fill" style={{ color: '#0066FF' }} /> 策略配置
+          <Code size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> 策略配置
         </span>} styles={{ body: { padding: 16 } }} style={{ marginBottom: 16 }}>
           <Form.Item label="策略名称" name="strategy_name" rules={[{ required: true, message: '必填' }]}>
             <Input placeholder="e.g. Dual MA Crossover" />
@@ -89,7 +90,7 @@ export default function Backtest() {
           </Form.Item>
 
           <Form.Item label="策略代码" name="strategy_code" rules={[{ required: true, message: '必填' }]}>
-            <div style={{ border: '1px solid var(--surface-border)', borderRadius: 6, overflow: 'hidden' }}>
+            <div style={{ border: '1px solid var(--color-border-default)', borderRadius: 6, overflow: 'hidden' }}>
               <Editor
                 height={300}
                 defaultLanguage="python"
@@ -125,12 +126,12 @@ export default function Backtest() {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item label="开始日期" name="start_date" rules={[{ required: true, message: '必填' }]}>
-                <Input placeholder="YYYY-MM-DD" />
+                <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" placeholder="选择开始日期" />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item label="结束日期" name="end_date" rules={[{ required: true, message: '必填' }]}>
-                <Input placeholder="YYYY-MM-DD" />
+                <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" placeholder="选择结束日期" />
               </Form.Item>
             </Col>
           </Row>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Row, Col, Card, Table, Tag, Typography, Empty } from 'antd'
+import { Row, Col, Card, Table, Tag, Typography, Empty, Skeleton } from 'antd'
 import { TrendUp, Warning, ArrowUpRight, Sparkle } from '@phosphor-icons/react'
 import { dashboardApi } from '@/api/dashboard'
 import EquityChart from '@/components/Chart/EquityChart'
@@ -22,7 +22,7 @@ function MetricCard({ label, value, icon, color }: MetricCardProps) {
     >
       <div style={{ color, opacity: 0.7, display: 'flex', alignItems: 'center' }}>{icon}</div>
       <div>
-        <div style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1.2 }}>
+        <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1.2 }}>
           {label}
         </div>
         <div style={{ fontSize: 18, fontWeight: 600, fontFamily: 'var(--font-mono)', color, lineHeight: 1.3 }}>
@@ -71,7 +71,7 @@ export default function Dashboard() {
       label: '总权益',
       value: '¥1.23M',
       icon: <TrendUp size={20} weight="bold" />,
-      color: '#fafafa',
+      color: 'var(--color-text-primary)',
     },
     {
       label: '今日盈亏',
@@ -83,7 +83,7 @@ export default function Dashboard() {
       label: '持仓数',
       value: '3',
       icon: <Sparkle size={20} weight="bold" />,
-      color: '#fafafa',
+      color: 'var(--color-text-primary)',
     },
     {
       label: '年化收益',
@@ -93,7 +93,7 @@ export default function Dashboard() {
             {(annualizedReturn * 100).toFixed(1)}%
           </Text>,
       icon: <TrendUp size={20} weight="bold" />,
-      color: isNaN(annualizedReturn) ? '#71717a' : (annualizedReturn >= 0 ? '#10b981' : '#ef4444'),
+      color: isNaN(annualizedReturn) ? 'var(--color-text-tertiary)' : (annualizedReturn >= 0 ? '#10b981' : '#ef4444'),
     },
     {
       label: '最大回撤',
@@ -103,7 +103,7 @@ export default function Dashboard() {
             {(maxDrawdown * 100).toFixed(1)}%
           </Text>,
       icon: <Warning size={20} weight="bold" />,
-      color: isNaN(maxDrawdown) ? '#71717a' : '#ef4444',
+      color: isNaN(maxDrawdown) ? 'var(--color-text-tertiary)' : '#ef4444',
     },
     {
       label: '夏普比率',
@@ -113,7 +113,7 @@ export default function Dashboard() {
             {sharpeRatio.toFixed(2)}
           </Text>,
       icon: <TrendUp size={20} weight="bold" />,
-      color: isNaN(sharpeRatio) ? '#71717a' : (sharpeRatio >= 1 ? '#10b981' : sharpeRatio >= 0 ? '#f59e0b' : '#ef4444'),
+      color: isNaN(sharpeRatio) ? 'var(--color-text-tertiary)' : (sharpeRatio >= 1 ? '#10b981' : sharpeRatio >= 0 ? '#f59e0b' : '#ef4444'),
     },
   ]
 
@@ -175,7 +175,7 @@ export default function Dashboard() {
 
   return (
     <div style={{ maxWidth: 1400 }}>
-      <Title level={5} style={{ margin: '0 0 16px', color: '#fafafa', fontWeight: 600, letterSpacing: '0.03em' }}>
+      <Title level={5} style={{ margin: '0 0 16px', color: 'var(--color-text-primary)', fontWeight: 600, letterSpacing: '0.03em' }}>
         系统概览
       </Title>
 
@@ -197,9 +197,7 @@ export default function Dashboard() {
             styles={{ body: { padding: '12px' } }}
           >
             {loading ? (
-              <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#71717a' }}>
-                <Text type="secondary">加载中...</Text>
-              </div>
+              <Skeleton active paragraph={{ rows: 8 }} />
             ) : (
               <EquityChart
                 data={Array.from({ length: 30 }, () => 1_000_000 + Math.random() * 200_000)}
@@ -218,7 +216,7 @@ export default function Dashboard() {
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description={
-                  <span style={{ color: '#71717a', fontSize: 12 }}>
+                  <span style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }}>
                     <Sparkle size={24} weight="duotone" style={{ color: '#3b82f6', marginBottom: 8, display: 'block' }} />
                     暂无活跃信号
                   </span>
@@ -242,7 +240,7 @@ export default function Dashboard() {
                       style={{
                         fontSize: 12,
                         fontWeight: 500,
-                        color: '#e4e4e7',
+                        color: 'var(--color-text-secondary)',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -253,7 +251,7 @@ export default function Dashboard() {
                     <div
                       style={{
                         fontSize: 11,
-                        color: '#71717a',
+                        color: 'var(--color-text-tertiary)',
                         marginTop: 2,
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
@@ -266,7 +264,7 @@ export default function Dashboard() {
                   <span
                     style={{
                       fontSize: 10,
-                      color: '#52525b',
+                      color: 'var(--color-text-disabled)',
                       fontFamily: 'var(--font-mono)',
                       whiteSpace: 'nowrap',
                       marginLeft: 12,
