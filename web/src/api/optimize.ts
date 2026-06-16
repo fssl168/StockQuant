@@ -1,4 +1,7 @@
+import client from './client'
 import { OptimizeConfig, OptimizeResult } from '../types'
+
+const USE_MOCK = !import.meta.env.VITE_API_URL
 
 // ── Mock Optimizer Engine ────────────────────────────────────
 
@@ -53,10 +56,9 @@ function sampleParams(config: OptimizeConfig): Record<string, number> {
   return result
 }
 
-/**
- * Run optimization — returns task ID for polling/streaming.
- */
-export async function runOptimization(config: OptimizeConfig): Promise<string> {
+// ── Mock Implementations ──────────────────────────────────────
+
+async function mockRunOptimization(config: OptimizeConfig): Promise<string> {
   const taskId = `OPT-${++taskIdCounter}`
   const totalIters = config.maxIters ?? 20
 
@@ -94,7 +96,7 @@ export async function runOptimization(config: OptimizeConfig): Promise<string> {
   return taskId
 }
 
-export async function getOptimizeStatus(taskId: string): Promise<{
+async function mockGetOptimizeStatus(taskId: string): Promise<{
   status: string
   progress: number
   results: OptimizeResult[]
@@ -108,11 +110,7 @@ export async function getOptimizeStatus(taskId: string): Promise<{
   }
 }
 
-/**
- * Stream optimization progress via async generator.
- * Yields a result object every ~400ms until completion.
- */
-export async function* streamOptimizeProgress(
+async function* mockStreamOptimizeProgress(
   taskId: string,
 ): AsyncGenerator<{ progress: number; currentParams: Record<string, number>; bestResult?: OptimizeResult }> {
   const task = activeTasks.get(taskId)
@@ -137,4 +135,40 @@ export async function* streamOptimizeProgress(
     currentParams: {},
     bestResult: sorted[0],
   }
+}
+
+// ── API Functions ────────────────────────────────────────────
+
+/**
+ * Run optimization — returns task ID for polling/streaming.
+ */
+export async function runOptimization(config: OptimizeConfig): Promise<string> {
+  if (USE_MOCK) return mockRunOptimization(config)
+  const data: any = await client.post('/backtest/optimize', config)
+  return data.task_id
+}
+
+export async function getOptimizeStatus(taskId: string): Promise<{
+  status: string
+  progress: number
+  results: OptimizeResult[]
+}> {
+  if (USE_MOCK) return mockGetOptimizeStatus(taskId)
+  return client.get(`/backtest/optimize/${taskId}`) as any
+}
+
+/**
+ * Stream optimization progress via async generator.
+ * Yields a result object every ~400ms until completion.
+ * SSE streaming requires backend support — mock only for now.
+ */
+export async function* streamOptimizeProgress(
+  taskId: string,
+): AsyncGenerator<{ progress: number; currentParams: Record<string, number>; bestResult?: OptimizeResult }> {
+  if (USE_MOCK) {
+    yield* mockStreamOptimizeProgress(taskId)
+    return
+  }
+  // TODO: Replace with real SSE streaming when backend supports it
+  yield* mockStreamOptimizeProgress(taskId)
 }

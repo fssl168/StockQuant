@@ -15,7 +15,7 @@ interface UseWebSocketReturn {
   close: () => void
 }
 
-export function useWebSocket(url: string): UseWebSocketReturn {
+export function useWebSocket(url: string | null): UseWebSocketReturn {
   const wsRef = useRef<WebSocket | null>(null)
   const [connected, setConnected] = useState(false)
   const [messages, setMessages] = useState<WSMessage[]>([])
@@ -25,8 +25,15 @@ export function useWebSocket(url: string): UseWebSocketReturn {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const connect = useCallback(() => {
+    if (!url) return
     try {
-      const ws = new WebSocket(url)
+      // 将相对路径转换为完整的 ws:// URL
+      let wsUrl = url
+      if (url.startsWith('/')) {
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+        wsUrl = `${proto}//${window.location.host}${url}`
+      }
+      const ws = new WebSocket(wsUrl)
       wsRef.current = ws
 
       ws.onopen = () => {
@@ -47,7 +54,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         lastMessageRef.current = null
         setMessages([])
         reconnectAttempts.current += 1
-        if (reconnectAttempts.current < maxReconnectAttempts) {
+        if (url && reconnectAttempts.current < maxReconnectAttempts) {
           reconnectTimerRef.current = setTimeout(connect, 1000 * reconnectAttempts.current)
         }
       }

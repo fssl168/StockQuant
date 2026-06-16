@@ -4,34 +4,10 @@ import { TrendUp, Warning, ArrowUpRight, Sparkle } from '@phosphor-icons/react'
 import { dashboardApi } from '@/api/dashboard'
 import EquityChart from '@/components/Chart/EquityChart'
 import { useNotificationStore } from '@/stores/notificationStore'
+import MetricCard from '@/components/Card/MetricCard'
+import NotificationList from '@/components/AI/NotificationList'
 
 const { Text, Title } = Typography
-
-interface MetricCardProps {
-  label: string
-  value: React.ReactNode
-  icon: React.ReactNode
-  color: string
-}
-
-function MetricCard({ label, value, icon, color }: MetricCardProps) {
-  return (
-    <Card
-      size="small"
-      styles={{ body: { padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 } }}
-    >
-      <div style={{ color, opacity: 0.7, display: 'flex', alignItems: 'center' }}>{icon}</div>
-      <div>
-        <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1.2 }}>
-          {label}
-        </div>
-        <div style={{ fontSize: 18, fontWeight: 600, fontFamily: 'var(--font-mono)', color, lineHeight: 1.3 }}>
-          {value}
-        </div>
-      </div>
-    </Card>
-  )
-}
 
 export default function Dashboard() {
   const [metrics, setMetrics] = useState<Record<string, unknown>>({})
@@ -68,53 +44,61 @@ export default function Dashboard() {
 
   const metricItems = [
     {
-      label: '总权益',
+      title: '总权益',
       value: '¥1.23M',
-      icon: <TrendUp size={20} weight="bold" />,
-      color: 'var(--color-text-primary)',
+      prefix: <TrendUp size={20} weight="bold" />,
+      valueStyle: { color: 'var(--color-text-primary)' },
     },
     {
-      label: '今日盈亏',
-      value: <Text style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>+¥12,345</Text>,
-      icon: <ArrowUpRight size={20} weight="bold" />,
-      color: '#10b981',
+      title: '今日盈亏',
+      value: '+¥12,345',
+      prefix: <ArrowUpRight size={20} weight="bold" />,
+      valueStyle: { color: '#10b981' },
     },
     {
-      label: '持仓数',
+      title: '持仓数',
       value: '3',
-      icon: <Sparkle size={20} weight="bold" />,
-      color: 'var(--color-text-primary)',
+      prefix: <Sparkle size={20} weight="bold" />,
+      valueStyle: { color: 'var(--color-text-primary)' },
     },
     {
-      label: '年化收益',
-      value: isNaN(annualizedReturn)
-        ? <Text type="secondary">-</Text>
-        : <Text style={{ color: annualizedReturn >= 0 ? '#10b981' : '#ef4444', fontFamily: 'var(--font-mono)' }}>
-            {(annualizedReturn * 100).toFixed(1)}%
-          </Text>,
-      icon: <TrendUp size={20} weight="bold" />,
-      color: isNaN(annualizedReturn) ? 'var(--color-text-tertiary)' : (annualizedReturn >= 0 ? '#10b981' : '#ef4444'),
+      title: '年化收益',
+      value: isNaN(annualizedReturn) ? '-' : annualizedReturn * 100,
+      suffix: isNaN(annualizedReturn) ? undefined : '%',
+      precision: 1,
+      prefix: <TrendUp size={20} weight="bold" />,
+      valueStyle: { color: isNaN(annualizedReturn) ? 'var(--color-text-tertiary)' : (annualizedReturn >= 0 ? '#10b981' : '#ef4444') },
     },
     {
-      label: '最大回撤',
-      value: isNaN(maxDrawdown)
-        ? <Text type="secondary">-</Text>
-        : <Text style={{ color: '#ef4444', fontFamily: 'var(--font-mono)' }}>
-            {(maxDrawdown * 100).toFixed(1)}%
-          </Text>,
-      icon: <Warning size={20} weight="bold" />,
-      color: isNaN(maxDrawdown) ? 'var(--color-text-tertiary)' : '#ef4444',
+      title: '最大回撤',
+      value: isNaN(maxDrawdown) ? '-' : maxDrawdown * 100,
+      suffix: isNaN(maxDrawdown) ? undefined : '%',
+      precision: 1,
+      prefix: <Warning size={20} weight="bold" />,
+      valueStyle: { color: isNaN(maxDrawdown) ? 'var(--color-text-tertiary)' : '#ef4444' },
     },
     {
-      label: '夏普比率',
-      value: isNaN(sharpeRatio)
-        ? <Text type="secondary">-</Text>
-        : <Text style={{ color: sharpeRatio >= 1 ? '#10b981' : sharpeRatio >= 0 ? '#f59e0b' : '#ef4444', fontFamily: 'var(--font-mono)' }}>
-            {sharpeRatio.toFixed(2)}
-          </Text>,
-      icon: <TrendUp size={20} weight="bold" />,
-      color: isNaN(sharpeRatio) ? 'var(--color-text-tertiary)' : (sharpeRatio >= 1 ? '#10b981' : sharpeRatio >= 0 ? '#f59e0b' : '#ef4444'),
+      title: '夏普比率',
+      value: isNaN(sharpeRatio) ? '-' : sharpeRatio,
+      precision: 2,
+      prefix: <TrendUp size={20} weight="bold" />,
+      valueStyle: { color: isNaN(sharpeRatio) ? 'var(--color-text-tertiary)' : (sharpeRatio >= 1 ? '#10b981' : sharpeRatio >= 0 ? '#f59e0b' : '#ef4444') },
     },
+  ]
+
+  const mergedNotifications = [
+    ...(signals as any[]).map((s: any) => ({
+      type: s.type ?? 'signal',
+      title: s.title ?? s.reason ?? 'Signal',
+      message: s.message ?? s.symbol ?? '',
+      time: s.time ?? '',
+    })),
+    ...notifications.slice(0, 4).map((n) => ({
+      type: n.type,
+      title: n.title,
+      message: n.message,
+      time: n.time,
+    })),
   ]
 
   const backtestColumns = [
@@ -182,7 +166,7 @@ export default function Dashboard() {
       {/* Metric grid */}
       <Row gutter={[12, 8]} style={{ marginBottom: 20 }}>
         {metricItems.map((m) => (
-          <Col xs={24} sm={12} md={8} lg={4} key={m.label}>
+          <Col xs={24} sm={12} md={8} lg={4} key={m.title}>
             <MetricCard {...m} />
           </Col>
         ))}
@@ -212,69 +196,7 @@ export default function Dashboard() {
             title={<span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em' }}>AI 信号</span>}
             styles={{ body: { padding: '12px 16px' } }}
           >
-            {signals.length === 0 && notifications.length === 0 && (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={
-                  <span style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }}>
-                    <Sparkle size={24} weight="duotone" style={{ color: '#3b82f6', marginBottom: 8, display: 'block' }} />
-                    暂无活跃信号
-                  </span>
-                }
-              />
-            )}
-            <div style={{ maxHeight: 220, overflow: 'auto' }}>
-              {([...signals, ...notifications.slice(0, 4)] as any[]).slice(0, 5).map((s: any) => (
-                <div
-                  key={s.id ?? s.title}
-                  style={{
-                    padding: '10px 0',
-                    borderBottom: '1px solid var(--color-border-default)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 500,
-                        color: 'var(--color-text-secondary)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {s.title ?? s.reason ?? 'Signal'}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--color-text-tertiary)',
-                        marginTop: 2,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {s.message ?? s.symbol ?? ''}
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      fontSize: 10,
-                      color: 'var(--color-text-disabled)',
-                      fontFamily: 'var(--font-mono)',
-                      whiteSpace: 'nowrap',
-                      marginLeft: 12,
-                    }}
-                  >
-                    {s.time ?? ''}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <NotificationList notifications={mergedNotifications} maxItems={5} />
           </Card>
         </Col>
       </Row>

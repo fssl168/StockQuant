@@ -1,10 +1,14 @@
-import { useState } from 'react'
-import { Form, Input, InputNumber, Button, Card, Typography, Select, Row, Col, DatePicker } from 'antd'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Form, Input, Button, Card, Typography, Select } from 'antd'
 import dayjs from 'dayjs'
 import { Play, Code } from '@phosphor-icons/react'
 import { useBacktestStore } from '@/stores/backtestStore'
 import { useNotificationStore } from '@/stores/notificationStore'
+import { useWebSocket } from '@/hooks/useWebSocket'
 import Editor from '@monaco-editor/react'
+import DataSelector from '@/components/Backtest/DataSelector'
+import ParamForm from '@/components/Backtest/ParamForm'
 
 const { Title, Text } = Typography
 const { Option } = Select
@@ -39,9 +43,24 @@ const TEMPLATES = [
 
 export default function Backtest() {
   const [form] = Form.useForm()
+  const navigate = useNavigate()
   const submitTask = useBacktestStore((s) => s.submitTask)
   const addNotification = useNotificationStore((s) => s.add)
   const [submitting, setSubmitting] = useState(false)
+  const [progressTaskId, setProgressTaskId] = useState<string | null>(null)
+  const { messages: wsMessages } = useWebSocket(
+    progressTaskId ? `/api/ws/backtest/${progressTaskId}` : null
+  )
+
+  // 监听 WS 进度消息
+  useEffect(() => {
+    if (wsMessages.length === 0) return
+    const latest = wsMessages[wsMessages.length - 1]
+    if (latest.type === 'complete' && progressTaskId) {
+      navigate(`/backtest/${progressTaskId}`)
+      setProgressTaskId(null)
+    }
+  }, [wsMessages, progressTaskId, navigate])
 
   const handleTemplateSelect = () => {
     form.setFieldValue('strategy_code', DEFAULT_CODE)
@@ -50,7 +69,7 @@ export default function Backtest() {
   const handleSubmit = async (values: Record<string, unknown>) => {
     setSubmitting(true)
     try {
-      await submitTask({
+      const result = await submitTask({
         strategy_name: values.strategy_name as string,
         symbols: String(values.symbols).split(',').map((s: string) => s.trim()),
         start_date: typeof values.start_date === 'string' ? values.start_date : dayjs.isDayjs(values.start_date) ? (values.start_date as dayjs.Dayjs).format('YYYY-MM-DD') : '',
@@ -61,6 +80,18 @@ export default function Backtest() {
         slippage_type: 'none',
       })
       addNotification({ type: 'info', title: 'Backtest submitted', message: values.strategy_name as string, time: new Date().toLocaleTimeString() })
+      // Navigate to result page
+      const taskId = (result as unknown as { task_id?: string })?.task_id ?? 'latest'
+      setProgressTaskId(taskId)
+      // 如果 WS 不可用，2 秒后直接跳转
+      setTimeout(() => {
+        setProgressTaskId((currentId) => {
+          if (currentId) {
+            navigate(`/backtest/${taskId}`)
+          }
+          return null
+        })
+      }, 2000)
     } catch (err: unknown) {
       console.error(err instanceof Error ? err.message : 'Submission failed')
     } finally {
@@ -106,66 +137,8 @@ export default function Backtest() {
           </Form.Item>
         </Card>
 
-        <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>数据配置</span>} styles={{ body: { padding: 16 } }} style={{ marginBottom: 16 }}>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="标的" name="symbols" rules={[{ required: true, message: '必填' }]}>
-                <Input placeholder="逗号分隔: sh600519, sz000858" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="数据源" name="data_source">
-                <Select defaultValue="baostock" style={{ width: '100%' }}>
-                  <Option value="baostock">BaoStock</Option>
-                  <Option value="akshare">AkShare</Option>
-                  <Option value="csv">CSV</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="开始日期" name="start_date" rules={[{ required: true, message: '必填' }]}>
-                <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" placeholder="选择开始日期" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="结束日期" name="end_date" rules={[{ required: true, message: '必填' }]}>
-                <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" placeholder="选择结束日期" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item label="初始资金" name="cash" rules={[{ required: true }]}>
-            <InputNumber min={10000} step={100000} style={{ width: '100%' }} formatter={(v) => `¥ ${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
-          </Form.Item>
-        </Card>
-
-        <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>执行参数</span>} styles={{ body: { padding: 16 } }} style={{ marginBottom: 16 }}>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item label="佣金类型" name="commission_type">
-                <Select>
-                  <Option value="ashare">A 股</Option>
-                  <Option value="none">无</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="滑点" name="slippage_type">
-                <Select>
-                  <Option value="none">无</Option>
-                  <Option value="fixed">固定</Option>
-                  <Option value="percent">百分比</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="风控熔断" name="max_drawdown">
-                <InputNumber min={5} max={50} step={1} style={{ width: '100%' }} formatter={(v) => `${v}%`} parser={(v) => Number(v || '0') as any} defaultValue={15} />
-              </Form.Item>
-            </Col>
-          </Row>
-        </Card>
+        <DataSelector form={form} />
+        <ParamForm form={form} />
 
         <Form.Item style={{ marginBottom: 0 }}>
           <Button

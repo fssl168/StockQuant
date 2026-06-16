@@ -1,19 +1,27 @@
-import { useEffect, useState } from 'react'
-import { Table, Button, Card, Space, Tag, Row, Col, Typography, Input, DatePicker } from 'antd'
+import { useState, useEffect } from 'react'
+import { Table, Button, Card, Space, Tag, Typography, Input, DatePicker } from 'antd'
 import { Database, Download } from '@phosphor-icons/react'
 import ReactECharts from 'echarts-for-react'
 import dayjs from 'dayjs'
 import { useDataStore } from '@/stores/dataStore'
+import { dataApi } from '@/api/data'
+import CacheStats from '@/components/Data/CacheStats'
 
 const { Title, Text } = Typography
 
 export default function Data() {
-  const { sources, cacheStats } = useDataStore()
+  const { sources, cacheStats, fetchSources, fetchCacheStats } = useDataStore()
+
+  useEffect(() => {
+    fetchSources()
+    fetchCacheStats()
+  }, [])
 
   // K-line query state
   const [klineSymbol, setKlineSymbol] = useState('sh600519')
   const [klineDates, setKlineDates] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs().subtract(60, 'day'), dayjs()])
   const [klineLoading, setKlineLoading] = useState(false)
+  const [klineResult, setKlineResult] = useState<{ dates: string[]; data: [number, number, number, number, number][] } | null>(null)
 
   function generateMockKline(symbol: string, days: number) {
     const data: [number, number, number, number, number][] = []
@@ -32,11 +40,28 @@ export default function Data() {
     return { dates, data }
   }
 
-  const klineData = generateMockKline(klineSymbol, 60)
+  const klineData = klineResult ?? generateMockKline(klineSymbol, 60)
 
-  useEffect(() => {
-    void 0
-  }, [])
+  const handleFetchKline = () => {
+    setKlineLoading(true)
+    const start = klineDates[0].format('YYYY-MM-DD')
+    const end = klineDates[1].format('YYYY-MM-DD')
+    dataApi.fetchKline(klineSymbol, 'auto', start, end)
+      .then((data) => {
+        if (data && (data as any).data) {
+          setKlineResult((data as any).data)
+        } else if (Array.isArray(data) && data.length > 0) {
+          // API returned raw kline array
+          setKlineResult({ dates: data.map((_: any, i: number) => dayjs().subtract(i, 'day').format('YYYY-MM-DD')), data: data })
+        }
+      })
+      .catch(() => {
+        // Fallback to mock
+        const result = generateMockKline(klineSymbol, 60)
+        setKlineResult(result)
+      })
+      .finally(() => setKlineLoading(false))
+  }
 
   const dataSourceColumns = [
     { title: '数据源', dataIndex: 'provider', key: 'provider', width: 120, render: (p: string) => <strong>{p}</strong> },
@@ -65,23 +90,14 @@ export default function Data() {
       </Text>
 
       {/* Cache stats */}
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        {[
-          { label: '缓存大小', value: cacheStats ? `${cacheStats.total_size_mb.toFixed(1)} MB` : '-', icon: <Database size={16} /> },
-          { label: '命中率', value: cacheStats ? `${(cacheStats.hit_rate * 100).toFixed(0)}%` : '-', icon: <Database size={16} /> },
-          { label: '标的数', value: cacheStats ? cacheStats.symbol_count : '-', icon: <Database size={16} /> },
-          { label: '最后更新', value: cacheStats ? cacheStats.last_update : '-', icon: <Database size={16} /> },
-        ].map((s) => (
-          <Col xs={24} sm={12} md={6} key={s.label}>
-            <Card size="small" styles={{ body: { padding: '10px 14px' } }}>
-              <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
-              <div style={{ fontSize: 15, fontWeight: 600, fontFamily: 'var(--font-mono)', marginTop: 2, color: 'var(--color-text-primary)' }}>
-                {s.value}
-              </div>
-            </Card>
-          </Col>
-        ))}
-      </Row>
+      <div style={{ marginBottom: 16 }}>
+        <CacheStats
+          sizeMb={cacheStats ? cacheStats.total_size_mb : 0}
+          hitRate={cacheStats ? cacheStats.hit_rate : 0}
+          symbolCount={cacheStats ? cacheStats.symbol_count : 0}
+          lastUpdate={cacheStats ? cacheStats.last_update : '-'}
+        />
+      </div>
 
       {/* K-line query */}
       <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -101,7 +117,7 @@ export default function Data() {
             size="small"
             format="YYYY-MM-DD"
           />
-          <Button type="primary" size="small" icon={<Database size={14} />} loading={klineLoading} onClick={() => setKlineLoading(true)}>
+          <Button type="primary" size="small" icon={<Database size={14} />} loading={klineLoading} onClick={handleFetchKline}>
             查询
           </Button>
         </Space>
@@ -109,8 +125,8 @@ export default function Data() {
           option={{
             tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
             grid: { left: 60, right: 8, top: 8, bottom: 24 },
-            xAxis: { type: 'category', data: klineData.dates, axisLine: { lineStyle: { color: 'var(--color-border-default)' } }, axisLabel: { color: 'var(--color-text-tertiary)', fontSize: 10 } },
-            yAxis: { scale: true, splitLine: { lineStyle: { color: 'var(--color-bg-surface)' } }, axisLabel: { color: 'var(--color-text-tertiary)', fontSize: 10, formatter: (v: number) => v.toFixed(0) } },
+            xAxis: { type: 'category', data: klineData.dates, axisLine: { lineStyle: { color: '#27272a' } }, axisLabel: { color: '#a1a1aa', fontSize: 10 } },
+            yAxis: { scale: true, splitLine: { lineStyle: { color: '#18181b' } }, axisLabel: { color: '#a1a1aa', fontSize: 10, formatter: (v: number) => v.toFixed(0) } },
             series: [{
               type: 'candlestick',
               data: klineData.data,
@@ -132,12 +148,12 @@ export default function Data() {
       <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>数据源配置</span>} styles={{ body: { padding: '0' } }} style={{ marginBottom: 12 }}>
         <Table
           dataSource={sources.length > 0 ? sources : [
-            { provider: 'BaoStock' },
-            { provider: 'AkShare' },
-            { provider: 'CSV 本地' },
+            { provider: 'BaoStock', enabled: true },
+            { provider: 'AkShare', enabled: true },
+            { provider: 'CSV 本地', enabled: true },
           ]}
           columns={dataSourceColumns}
-          rowKey={(r: any) => r.key}
+          rowKey="provider"
           pagination={false}
           size="small"
         />
@@ -159,7 +175,7 @@ export default function Data() {
             { title: '记录数', dataIndex: 'records', key: 'records', width: 80, render: (v: number) => v.toLocaleString() },
             { title: '备注', key: 'note', render: (_: any, r: any) => r.note ? <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{r.note}</span> : null },
           ]}
-          rowKey={(r: any) => r.key}
+          rowKey="key"
           pagination={false}
           size="small"
         />

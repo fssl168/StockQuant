@@ -17,7 +17,7 @@ export default function DrawdownChart({ data, height = 200 }: DrawdownChartProps
           type: 'category',
           data: data.map((_, i) => i + 1),
           axisLine: { lineStyle: { color: '#27272a' } },
-          axisLabel: { color: '#71717a', fontSize: 10 },
+          axisLabel: { color: '#a1a1aa', fontSize: 10 },
           axisTick: { show: false },
         },
         yAxis: {
@@ -26,7 +26,7 @@ export default function DrawdownChart({ data, height = 200 }: DrawdownChartProps
           axisLine: { show: false },
           splitLine: { lineStyle: { color: '#18181b' } },
           axisLabel: {
-            color: '#71717a',
+            color: '#a1a1aa',
             fontSize: 10,
             formatter: (v: number) => (v * 100).toFixed(0) + '%',
           },

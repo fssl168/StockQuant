@@ -22,7 +22,7 @@ export default function EquityChart({ data, height = 280 }: EquityChartProps) {
           type: 'category',
           data: data.map((_, i) => i + 1),
           axisLine: { lineStyle: { color: '#27272a' } },
-          axisLabel: { color: '#71717a', fontSize: 10 },
+          axisLabel: { color: '#a1a1aa', fontSize: 10 },
           axisTick: { show: false },
         },
         yAxis: {
@@ -31,7 +31,7 @@ export default function EquityChart({ data, height = 280 }: EquityChartProps) {
           axisLine: { show: false },
           splitLine: { lineStyle: { color: '#18181b' } },
           axisLabel: {
-            color: '#71717a',
+            color: '#a1a1aa',
             fontSize: 10,
             formatter: (v: number) => {
               if (diff > 1_000_000) return (v / 1_000_000).toFixed(1) + 'M'

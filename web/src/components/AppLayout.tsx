@@ -15,6 +15,8 @@ import {
   SlidersHorizontal,
 } from '@phosphor-icons/react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useWebSocket } from '@/hooks/useWebSocket'
+import { useNotificationStore } from '@/stores/notificationStore'
 
 const { Header, Sider, Content } = Layout
 
@@ -41,6 +43,22 @@ export default function AppLayout({ children }: Props) {
   const location = useLocation()
   const [time, setTime] = useState(new Date())
   const [apiLatency, setApiLatency] = useState<number | null>(null)
+
+  const { messages: notifMessages } = useWebSocket('/api/ws/notification')
+
+  useEffect(() => {
+    if (notifMessages.length === 0) return
+    const latest = notifMessages[notifMessages.length - 1]
+    if (latest.type === 'notification' || latest.type === 'alert') {
+      const data = latest.data as { type?: string; title?: string; message?: string }
+      useNotificationStore.getState().add({
+        type: (data.type ?? 'info') as 'signal' | 'alert' | 'info',
+        title: data.title ?? '系统通知',
+        message: data.message ?? '',
+        time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      })
+    }
+  }, [notifMessages])
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000)

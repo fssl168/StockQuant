@@ -1,20 +1,34 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Row, Col, Card, Table, Button, Typography, Tag, Alert, Skeleton } from 'antd'
-import { ArrowCounterClockwise, Sparkle } from '@phosphor-icons/react'
+import { Row, Col, Card, Button, Typography, Tag, Alert, Skeleton } from 'antd'
+import { ArrowCounterClockwise } from '@phosphor-icons/react'
 import { backtestApi } from '@/api/dashboard'
+import { analyzeBacktest } from '@/api/ai'
 import EquityChart from '@/components/Chart/EquityChart'
 import DrawdownChart from '@/components/Chart/DrawdownChart'
 import MonthHeatmap from '@/components/Chart/MonthHeatmap'
 import MetricTable from '@/components/Table/MetricTable'
+import InsightCard from '@/components/AI/InsightCard'
+import TradeTable from '@/components/Table/TradeTable'
 import type { BacktestMetrics, Trade } from '@/types'
 
-const { Title, Text } = Typography
+const { Title } = Typography
 
 export default function BacktestResult() {
   const { id } = useParams<{ id: string }>()
-  const [task, setTask] = useState<any>(null)
+  interface BacktestTaskData {
+    task_id: string
+    strategy_name: string
+    status: string
+    metrics: BacktestMetrics
+    equity_curve: number[]
+    trades: Trade[]
+    error: string | null
+  }
+  const [task, setTask] = useState<BacktestTaskData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [aiInsight, setAiInsight] = useState<string | null>(null)
+  const [insightLoading, setInsightLoading] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -23,6 +37,19 @@ export default function BacktestResult() {
       .catch(() => setTask(null))
       .finally(() => setLoading(false))
   }, [id])
+
+  const fetchInsight = async () => {
+    if (!id) return
+    setInsightLoading(true)
+    try {
+      const result = await analyzeBacktest(id)
+      setAiInsight(result.insight)
+    } catch {
+      setAiInsight('AI 解读暂时不可用，请稍后重试。')
+    } finally {
+      setInsightLoading(false)
+    }
+  }
 
   if (loading) return (
     <div style={{ maxWidth: 1400 }}>
@@ -69,20 +96,14 @@ export default function BacktestResult() {
     { label: 'SQN', value: metrics['SQN (System Quality Number)'] ?? '-', suffix: '', color: () => 'var(--color-brand-primary)' },
   ]
 
-  const tradeColumns = [
-    { title: '时间', dataIndex: 'time', key: 'time', width: 150, render: (d: string) => new Date(d).toLocaleString() },
-    { title: '标的', dataIndex: 'symbol', key: 'symbol', width: 100, render: (s: string) => <Text style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{s}</Text> },
-    { title: '方向', dataIndex: 'direction', key: 'direction', width: 70, render: (d: string) => (
-      <Tag color={d === 'BUY' ? 'green' : d === 'SELL' ? 'red' : 'default'}>{d}</Tag>
-    )},
-    { title: '数量', dataIndex: 'size', key: 'size', width: 80, render: (v: number) => v.toLocaleString() },
-    { title: '价格', dataIndex: 'price', key: 'price', width: 100, render: (v: number) => v.toFixed(2) },
-    { title: '盈亏', dataIndex: 'pnl', key: 'pnl', width: 100, render: (v: number | null) => v != null ? (
-      <Text style={{ color: v >= 0 ? '#10b981' : '#ef4444', fontFamily: 'var(--font-mono)' }}>
-        {v >= 0 ? '+' : ''}{v.toFixed(0)}
-      </Text>
-    ) : <Text type="secondary">-</Text> },
-  ]
+  const tradeRows = (task.trades as Trade[] ?? []).map((t) => ({
+    date: t.time,
+    symbol: t.symbol,
+    side: t.direction,
+    quantity: t.size,
+    price: t.price,
+    pnl: t.pnl,
+  }))
 
   return (
     <div style={{ maxWidth: 1400 }}>
@@ -136,29 +157,14 @@ export default function BacktestResult() {
       </Card>
 
       {/* Trades */}
-      <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>交易明细</span>} styles={{ body: { padding: '0' } }} style={{ marginTop: 12 }}>
-        <Table
-          dataSource={task.trades as Trade[] ?? []}
-          rowKey={(_, i) => String(i)}
-          pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 笔` }}
-          size="small"
-          scroll={{ x: 500 }}
-          columns={tradeColumns}
-        />
-      </Card>
+      <div style={{ marginTop: 12 }}>
+        <TradeTable trades={tradeRows} />
+      </div>
 
       {/* AI Insight */}
-      <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Sparkle size={16} weight="fill" style={{ color: 'var(--color-info)' }} /> AI 解读
-      </span>} styles={{ body: { padding: '16px' } }} style={{ marginTop: 12 }}>
-        <Text type="secondary" style={{ fontSize: 13, lineHeight: 1.7 }}>
-          该策略年化收益 {metrics['Annualized Return']?.toFixed(1) ?? '-'}%，最大回撤 {(metrics['Max Drawdown'] as number)?.toFixed(1) ?? '-'}%。
-          {metrics['Sharpe Ratio'] && (metrics['Sharpe Ratio'] as number) >= 1
-            ? '夏普比率表现良好，风险调整后收益较优。'
-            : '建议优化风控参数以降低回撤。'}
-          共 {metrics['Total Trades']} 笔交易，胜率 {(metrics['Win Rate'] as number)?.toFixed(0) ?? '-'}%。
-        </Text>
-      </Card>
+      <div style={{ marginTop: 12 }}>
+        <InsightCard insight={aiInsight} loading={insightLoading} onGenerate={fetchInsight} />
+      </div>
     </div>
   )
 }

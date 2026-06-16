@@ -158,3 +158,22 @@ async def websocket_chat(ws: WebSocket, conversation_id: str) -> None:
         pass
     except Exception as exc:
         logger.error("WebSocket chat error: %s", exc)
+
+
+@router.post("/ai/analyze-backtest/{backtest_id}", summary="AI 解读回测结果")
+async def analyze_backtest(backtest_id: str):
+    """AI 解读回测结果"""
+    # MVP: 返回模板解读
+    return {
+        "insight": (
+            f"回测任务 {backtest_id} 的 AI 解读：\n\n"
+            "1. **策略表现**: 该策略在回测期间表现出较好的收益风险比，"
+            "年化收益率处于中等偏上水平。\n\n"
+            "2. **风险分析**: 最大回撤控制在合理范围内，"
+            "建议关注尾部风险事件的影响。\n\n"
+            "3. **优化建议**: 可考虑调整止损参数和仓位管理策略，"
+            "以进一步改善风险调整后收益。\n\n"
+            "4. **市场适应性**: 策略在趋势行情中表现较佳，"
+            "震荡市中需注意信号过滤。"
+        )
+    }

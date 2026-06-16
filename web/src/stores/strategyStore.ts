@@ -7,6 +7,7 @@ interface StrategyState {
   loading: boolean
   fetchStrategies: () => Promise<void>
   createStrategy: (data: Omit<Strategy, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
+  updateStrategy: (id: string, data: { name: string; code: string }) => Promise<void>
   deleteStrategy: (id: string) => Promise<void>
   currentStrategy: Strategy | null
   setCurrentStrategy: (s: Strategy | null) => void
@@ -31,6 +32,12 @@ export const useStrategyStore = create<StrategyState>((set) => ({
       const created = await strategyApi.create(data)
       set((st) => ({ strategies: [...st.strategies, created] }))
     } catch { /* ignore */ }
+  },
+  updateStrategy: async (id, data) => {
+    await strategyApi.update(id, data)
+    set((state) => ({
+      strategies: state.strategies.map((s) => s.id === id ? { ...s, ...data } : s)
+    }))
   },
   deleteStrategy: async (id) => {
     try {

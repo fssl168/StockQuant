@@ -9,7 +9,7 @@ import time
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
-from stockquant.api.routers import backtest, strategy, dashboard, monitor, ai_chat, comparison
+from stockquant.api.routers import backtest, strategy, dashboard, monitor, ai_chat, comparison, notification, data, settings, trading, portfolio, optimize
 from stockquant.api.websocket import ws_manager
 
 _APP_VERSION = "2.0.0-dev"
@@ -49,6 +49,12 @@ def create_app() -> FastAPI:
     app.include_router(monitor.router, prefix="/api", tags=["盯盘"])
     app.include_router(ai_chat.router, prefix="/api", tags=["AI 对话"])
     app.include_router(comparison.router, prefix="/api", tags=["策略对比"])
+    app.include_router(notification.router, prefix="/api", tags=["通知"])
+    app.include_router(data.router, prefix="/api", tags=["数据管理"])
+    app.include_router(settings.router, prefix="/api", tags=["设置"])
+    app.include_router(trading.router, prefix="/api", tags=["交易"])
+    app.include_router(portfolio.router, prefix="/api", tags=["投资组合"])
+    app.include_router(optimize.router, prefix="/api", tags=["参数优化"])
 
     # WebSocket 端点
     @app.websocket("/ws")

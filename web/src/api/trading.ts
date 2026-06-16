@@ -1,4 +1,7 @@
+import client from './client'
 import { Order, OrderSide, OrderType, AccountInfo, Position, TradeRecord } from '../types'
+
+const USE_MOCK = !import.meta.env.VITE_API_URL
 
 const MOCK_DELAY = 500
 
@@ -122,19 +125,19 @@ const mockAccount: AccountInfo = {
 let orders = generateMockOrders()
 let trades = generateMockTrades()
 
-// ── API Functions ────────────────────────────────────────────
+// ── Mock Implementations ──────────────────────────────────────
 
-export async function getAccount(): Promise<AccountInfo> {
+async function mockGetAccount(): Promise<AccountInfo> {
   await delay(MOCK_DELAY)
   return { ...mockAccount }
 }
 
-export async function getOrders(): Promise<Order[]> {
+async function mockGetOrders(): Promise<Order[]> {
   await delay(MOCK_DELAY)
   return [...orders]
 }
 
-export async function placeOrder(req: {
+async function mockPlaceOrder(req: {
   symbol: string
   side: OrderSide
   type: OrderType
@@ -187,7 +190,7 @@ export async function placeOrder(req: {
   return newOrder
 }
 
-export async function cancelOrder(orderId: string): Promise<void> {
+async function mockCancelOrder(orderId: string): Promise<void> {
   await delay(400)
   orders = orders.map((o) =>
     o.id === orderId && (o.status === 'PENDING' || o.status === 'SUBMITTED')
@@ -196,14 +199,52 @@ export async function cancelOrder(orderId: string): Promise<void> {
   )
 }
 
-export async function getPositions(): Promise<Position[]> {
+async function mockGetPositions(): Promise<Position[]> {
   await delay(MOCK_DELAY)
   return [...mockPositions]
 }
 
-export async function getTrades(): Promise<TradeRecord[]> {
+async function mockGetTrades(): Promise<TradeRecord[]> {
   await delay(MOCK_DELAY)
   return [...trades]
+}
+
+// ── API Functions ────────────────────────────────────────────
+
+export async function getAccount(): Promise<AccountInfo> {
+  if (USE_MOCK) return mockGetAccount()
+  return client.get<AccountInfo>('/trading/account') as any
+}
+
+export async function getOrders(): Promise<Order[]> {
+  if (USE_MOCK) return mockGetOrders()
+  return client.get<Order[]>('/trading/orders') as any
+}
+
+export async function placeOrder(req: {
+  symbol: string
+  side: OrderSide
+  type: OrderType
+  price: number
+  quantity: number
+}): Promise<Order> {
+  if (USE_MOCK) return mockPlaceOrder(req)
+  return client.post<Order>('/trading/order', req) as any
+}
+
+export async function cancelOrder(orderId: string): Promise<void> {
+  if (USE_MOCK) return mockCancelOrder(orderId)
+  await client.delete(`/trading/order/${orderId}`)
+}
+
+export async function getPositions(): Promise<Position[]> {
+  if (USE_MOCK) return mockGetPositions()
+  return client.get<Position[]>('/trading/positions') as any
+}
+
+export async function getTrades(): Promise<TradeRecord[]> {
+  if (USE_MOCK) return mockGetTrades()
+  return client.get<TradeRecord[]>('/trading/trades') as any
 }
 
 // ── Test Helpers ─────────────────────────────────────────────

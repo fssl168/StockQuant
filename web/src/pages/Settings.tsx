@@ -4,12 +4,15 @@ import {
   Modal, Tag, Badge, FloatButton, Steps,
 } from 'antd'
 import {
-  Warning, Sparkle, Rocket, Bell,
+  Warning, Sparkle, Rocket, Bell, Brain,
   Laptop, Coin, Wallet, Target, Clock,
   WifiHigh, FunnelSimple, ArrowsClockwise,
   CheckCircle, XCircle, ArrowCounterClockwise,
-  Brain, Notebook,
+  Notebook,
 } from '@phosphor-icons/react'
+import LLMConfigForm from '@/components/Settings/LLMConfigForm'
+import AgentToggles from '@/components/Settings/AgentToggles'
+import NotifierForm from '@/components/Settings/NotifierForm'
 
 const { Title, Text } = Typography
 
@@ -28,6 +31,7 @@ interface SettingEntry {
   unit?: string
   slider?: boolean
   options?: { value: string; label: string }[]
+  when?: { field: string; values: string[] }
 }
 
 interface GroupEntry {
@@ -54,9 +58,9 @@ const GROUPS: GroupEntry[] = [
     iconComponent: <Coin size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'data_provider.source', value: 'akshare', defaultValue: 'akshare', value_type: 'select', label: '默认数据源', description: '主用数据提供商', secret: false, options: [{ value: 'baostock', label: 'BaoStock' }, { value: 'akshare', label: 'AkShare' }, { value: 'csv', label: 'CSV' }, { value: 'parquet', label: 'Parquet' }] },
-      { key: 'data_provider.api_key', value: '', defaultValue: '', value_type: 'password', label: 'API Key', description: '数据源认证密钥', secret: true },
-      { key: 'data_provider.api_url', value: '', defaultValue: '', value_type: 'string', label: 'API URL', description: '数据源接口地址', secret: false },
-      { key: 'baostock.enabled', value: true, defaultValue: true, value_type: 'boolean', label: '启用 BaoStock', description: '使用 BaoStock 作为备用数据源', secret: false },
+      { key: 'data_provider.api_key', value: '', defaultValue: '', value_type: 'password', label: 'API Key', description: '数据源认证密钥', secret: true, when: { field: 'data_provider.source', values: ['akshare', 'parquet'] } },
+      { key: 'data_provider.api_url', value: '', defaultValue: '', value_type: 'string', label: 'API URL', description: '数据源接口地址', secret: false, when: { field: 'data_provider.source', values: ['akshare', 'parquet'] } },
+      { key: 'baostock.enabled', value: true, defaultValue: true, value_type: 'boolean', label: '启用 BaoStock', description: '使用 BaoStock 作为备用数据源', secret: false, when: { field: 'data_provider.source', values: ['baostock'] } },
       { key: 'data_provider.duckdb_path', value: '', defaultValue: '', value_type: 'string', label: 'DuckDB 路径', description: '本地分析数据库路径', secret: false },
     ],
   },
@@ -99,7 +103,7 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'risk_control', label: '风控阈值', icon: 'Warning',
-    iconComponent: <Warning size={16} weight="fill" style={{ color: '#f59e0b' }} />,
+    iconComponent: <Warning size={16} weight="fill" style={{ color: 'var(--color-warning)' }} />,
     items: [
       { key: 'risk_control.max_stop_loss_pct', value: 0.08, defaultValue: 0.08, value_type: 'float', label: '单笔止损', description: '单笔最大亏损比例', secret: false, min: 0.01, max: 0.3, step: 0.01, scale: 100, unit: '%', slider: true },
       { key: 'risk_control.max_pos_per_stock', value: 0.3, defaultValue: 0.3, value_type: 'float', label: '单票仓位', description: '单只股票最大仓位占比', secret: false, min: 0.05, max: 1, step: 0.05, scale: 100, unit: '%', slider: true },
@@ -110,36 +114,18 @@ const GROUPS: GroupEntry[] = [
   },
   {
     key: 'ai_model', label: 'AI 模型', icon: 'MagicStick',
-    iconComponent: <Brain size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
-    items: [
-      { key: 'ai_model.provider', value: 'openai', defaultValue: 'openai', value_type: 'select', label: 'LLM Provider', description: 'AI 模型提供商', secret: false, options: [{ value: 'openai', label: 'OpenAI' }, { value: 'anthropic', label: 'Anthropic' }, { value: 'deepseek', label: 'DeepSeek' }] },
-      { key: 'ai_model.api_url', value: '', defaultValue: '', value_type: 'string', label: 'API URL', description: '模型接口地址', secret: false },
-      { key: 'ai_model.api_key', value: '', defaultValue: '', value_type: 'password', label: 'API Key', description: '模型认证密钥', secret: true },
-      { key: 'ai_model.model', value: 'gpt-4o', defaultValue: 'gpt-4o', value_type: 'select', label: '模型', description: '使用的具体模型', secret: false, options: [{ value: 'gpt-4o', label: 'GPT-4o' }, { value: 'gpt-4', label: 'GPT-4' }, { value: 'claude-3-opus', label: 'Claude 3 Opus' }] },
-      { key: 'ai_model.temperature', value: 0.3, defaultValue: 0.3, value_type: 'float', label: 'Temperature', description: '生成随机性控制', secret: false, min: 0, max: 2, step: 0.1, scale: 10, slider: true },
-      { key: 'ai_model.timeout_sec', value: 30, defaultValue: 30, value_type: 'number', label: '超时秒数', description: 'LLM 调用超时（秒）', secret: false, min: 5, max: 120, step: 5 },
-    ],
+    iconComponent: null,
+    items: [],
   },
   {
     key: 'evolution', label: '策略进化', icon: 'Rocket',
-    iconComponent: <Rocket size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
-    items: [
-      { key: 'evolution.enabled', value: false, defaultValue: false, value_type: 'boolean', label: '启用进化', description: '开启 AI 策略自动进化', secret: false },
-      { key: 'evolution.llm_provider', value: 'openai', defaultValue: 'openai', value_type: 'select', label: '进化 LLM', description: '策略进化专用模型', secret: false, options: [{ value: 'openai', label: 'OpenAI' }, { value: 'anthropic', label: 'Anthropic' }] },
-      { key: 'evolution.llm_model', value: 'gpt-4o', defaultValue: 'gpt-4o', value_type: 'select', label: '进化模型', description: '', secret: false, options: [{ value: 'gpt-4o', label: 'GPT-4o' }, { value: 'claude-3-opus', label: 'Claude 3 Opus' }] },
-      { key: 'evolution.llm_temperature', value: 0.5, defaultValue: 0.5, value_type: 'float', label: '进化温度', description: '', secret: false, min: 0, max: 2, step: 0.1, scale: 10, slider: true },
-      { key: 'evolution.llm_retry', value: 3, defaultValue: 3, value_type: 'number', label: '重试次数', description: '进化失败重试次数', secret: false, min: 0, max: 10, step: 1 },
-    ],
+    iconComponent: null,
+    items: [],
   },
   {
     key: 'notification', label: '通知推送', icon: 'Bell',
-    iconComponent: <Bell size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
-    items: [
-      { key: 'notification.dingtalk_webhook', value: '', defaultValue: '', value_type: 'password', label: 'DingTalk Webhook', description: '', secret: true },
-      { key: 'notification.wechat_webhook', value: '', defaultValue: '', value_type: 'password', label: '企业微信 Webhook', description: '', secret: true },
-      { key: 'notification.telegram_bot_token', value: '', defaultValue: '', value_type: 'password', label: 'Telegram Bot Token', description: '', secret: true },
-      { key: 'notification.email_enabled', value: false, defaultValue: false, value_type: 'boolean', label: '邮件通知', description: '启用邮件推送', secret: false },
-    ],
+    iconComponent: null,
+    items: [],
   },
   {
     key: 'fundamental_adapter', label: '基本面适配', icon: 'Document',
@@ -178,6 +164,12 @@ const GROUPS: GroupEntry[] = [
   },
 ]
 
+const isVisible = (item: SettingEntry, allValues: Record<string, unknown>): boolean => {
+  if (!item.when) return true
+  const fieldValue = allValues[item.when.field]
+  return item.when.values.includes(String(fieldValue))
+}
+
 export default function Settings() {
   const [viewMode, setViewMode] = useState<'wizard' | 'expert'>('expert')
   const [wizardStep, setWizardStep] = useState(0)
@@ -192,6 +184,22 @@ export default function Settings() {
   useEffect(() => {
     const initial: Record<string, unknown> = {}
     GROUPS.forEach((g) => g.items.forEach((item) => { initial[item.key] = item.value }))
+    // Also include default values for extracted component keys
+    initial['ai_model.provider'] = 'openai'
+    initial['ai_model.api_url'] = ''
+    initial['ai_model.api_key'] = ''
+    initial['ai_model.model'] = 'gpt-4o'
+    initial['ai_model.temperature'] = 0.3
+    initial['ai_model.timeout_sec'] = 30
+    initial['evolution.enabled'] = false
+    initial['evolution.llm_provider'] = 'openai'
+    initial['evolution.llm_model'] = 'gpt-4o'
+    initial['evolution.llm_temperature'] = 0.5
+    initial['evolution.llm_retry'] = 3
+    initial['notification.dingtalk_webhook'] = ''
+    initial['notification.wechat_webhook'] = ''
+    initial['notification.telegram_bot_token'] = ''
+    initial['notification.email_enabled'] = false
     setValues(initial)
   }, [])
 
@@ -199,8 +207,25 @@ export default function Settings() {
     setValues((prev) => ({ ...prev, [key]: newVal }))
     setDirtyKeys((prev) => {
       const next = new Set(prev)
-      const group = GROUPS.flatMap((g) => g.items).find((i) => i.key === key)
-      if (group && newVal !== group.defaultValue) next.add(key)
+      // Check against defaults from all sources
+      const allDefaults: Record<string, unknown> = {}
+      GROUPS.forEach((g) => g.items.forEach((item) => { allDefaults[item.key] = item.defaultValue }))
+      allDefaults['ai_model.provider'] = 'openai'
+      allDefaults['ai_model.api_url'] = ''
+      allDefaults['ai_model.api_key'] = ''
+      allDefaults['ai_model.model'] = 'gpt-4o'
+      allDefaults['ai_model.temperature'] = 0.3
+      allDefaults['ai_model.timeout_sec'] = 30
+      allDefaults['evolution.enabled'] = false
+      allDefaults['evolution.llm_provider'] = 'openai'
+      allDefaults['evolution.llm_model'] = 'gpt-4o'
+      allDefaults['evolution.llm_temperature'] = 0.5
+      allDefaults['evolution.llm_retry'] = 3
+      allDefaults['notification.dingtalk_webhook'] = ''
+      allDefaults['notification.wechat_webhook'] = ''
+      allDefaults['notification.telegram_bot_token'] = ''
+      allDefaults['notification.email_enabled'] = false
+      if (newVal !== allDefaults[key]) next.add(key)
       else next.delete(key)
       return next
     })
@@ -223,6 +248,21 @@ export default function Settings() {
   const handleDiscard = () => {
     const initial: Record<string, unknown> = {}
     GROUPS.forEach((g) => g.items.forEach((item) => { initial[item.key] = item.value }))
+    initial['ai_model.provider'] = 'openai'
+    initial['ai_model.api_url'] = ''
+    initial['ai_model.api_key'] = ''
+    initial['ai_model.model'] = 'gpt-4o'
+    initial['ai_model.temperature'] = 0.3
+    initial['ai_model.timeout_sec'] = 30
+    initial['evolution.enabled'] = false
+    initial['evolution.llm_provider'] = 'openai'
+    initial['evolution.llm_model'] = 'gpt-4o'
+    initial['evolution.llm_temperature'] = 0.5
+    initial['evolution.llm_retry'] = 3
+    initial['notification.dingtalk_webhook'] = ''
+    initial['notification.wechat_webhook'] = ''
+    initial['notification.telegram_bot_token'] = ''
+    initial['notification.email_enabled'] = false
     setValues(initial)
     setDirtyKeys(new Set())
   }
@@ -320,8 +360,8 @@ export default function Settings() {
     <div style={{ maxWidth: 1000 }}>
       {/* Banner */}
       <div style={{
-        background: 'linear-gradient(135deg, rgba(168,85,247,0.15) 0%, rgba(0,102,255,0.15) 100%)',
-        border: '1px solid rgba(168,85,247,0.2)',
+        background: 'linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.04) 100%)',
+        border: '1px solid rgba(59,130,246,0.2)',
         borderRadius: 8,
         padding: '14px 20px',
         marginBottom: 20,
@@ -332,7 +372,7 @@ export default function Settings() {
       }}>
         <div>
           <Title level={5} style={{ margin: 0, fontWeight: 600, fontSize: 14, color: 'var(--color-text-primary)' }}>
-            <Sparkle size={16} weight="fill" style={{ color: 'var(--color-info)', marginRight: 8 }} />
+            <Sparkle size={16} weight="fill" style={{ color: 'var(--color-brand-primary)', marginRight: 8 }} />
             运行配置中心
           </Title>
           <Text type="secondary" style={{ fontSize: 12 }}>所有修改保存后热生效，无需重启服务</Text>
@@ -402,7 +442,7 @@ export default function Settings() {
               <Space direction="vertical" style={{ width: '100%' }} size={16}>
                 <Title level={5} style={{ margin: 0 }}>数据源</Title>
                 <Text type="secondary">配置数据提供商和缓存</Text>
-                {GROUPS[1].items.map((item) => renderControl(item))}
+                {GROUPS[1].items.filter((item) => isVisible(item, values)).map((item) => renderControl(item))}
               </Space>
             )}
             {/* Step 2: Backtest Engine */}
@@ -424,7 +464,7 @@ export default function Settings() {
             {/* Step 4: Summary & Save */}
             {wizardStep === 4 && (
               <Space direction="vertical" style={{ width: '100%' }} size={12} align="center">
-                <CheckCircle size={48} weight="fill" style={{ color: '#10b981' }} />
+                <CheckCircle size={48} weight="fill" style={{ color: 'var(--color-success)' }} />
                 <Title level={4} style={{ margin: 0 }}>配置就绪</Title>
                 <Text type="secondary">已准备保存以下配置项</Text>
                 <div style={{ width: '100%', background: 'var(--color-bg-elevated)', borderRadius: 8, padding: 16 }}>
@@ -493,17 +533,58 @@ export default function Settings() {
           expandIconPosition="right"
           defaultActiveKey={allExpanded ? GROUPS.map((g) => g.key) : []}
           style={{ background: 'transparent' }}
-          items={GROUPS.map((g) => ({
-            key: g.key,
-            label: (
-              <Space style={{ fontSize: 13, fontWeight: 600 }}>
-                {g.iconComponent} {g.label}
-                <Tag color="default" style={{ fontSize: 11, margin: 0 }}>{g.items.length}</Tag>
-              </Space>
-            ),
-            children: (
-              <Space direction="vertical" style={{ width: '100%' }} size={10}>
-                {g.items.map((item) => {
+          items={GROUPS.map((g) => {
+            // Handle extracted component groups
+            if (g.key === 'ai_model') {
+              return {
+                key: g.key,
+                label: (
+                  <Space style={{ fontSize: 13, fontWeight: 600 }}>
+                    <Brain size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> {g.label}
+                    <Tag color="default" style={{ fontSize: 11, margin: 0 }}>6</Tag>
+                  </Space>
+                ),
+                children: <LLMConfigForm values={values} onChange={handleValueChange} />,
+              }
+            }
+            if (g.key === 'evolution') {
+              return {
+                key: g.key,
+                label: (
+                  <Space style={{ fontSize: 13, fontWeight: 600 }}>
+                    <Rocket size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> {g.label}
+                    <Tag color="default" style={{ fontSize: 11, margin: 0 }}>5</Tag>
+                  </Space>
+                ),
+                children: <AgentToggles values={values} onChange={handleValueChange} />,
+              }
+            }
+            if (g.key === 'notification') {
+              return {
+                key: g.key,
+                label: (
+                  <Space style={{ fontSize: 13, fontWeight: 600 }}>
+                    <Bell size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> {g.label}
+                    <Tag color="default" style={{ fontSize: 11, margin: 0 }}>4</Tag>
+                  </Space>
+                ),
+                children: <NotifierForm values={values} onChange={handleValueChange} />,
+              }
+            }
+
+            const visibleItems = g.items.filter((item) => isVisible(item, values))
+            if (visibleItems.length === 0) return null
+            return {
+              key: g.key,
+              label: (
+                <Space style={{ fontSize: 13, fontWeight: 600 }}>
+                  {g.iconComponent} {g.label}
+                  <Tag color="default" style={{ fontSize: 11, margin: 0 }}>{visibleItems.length}</Tag>
+                </Space>
+              ),
+              children: (
+                <Space direction="vertical" style={{ width: '100%' }} size={10}>
+                  {visibleItems.map((item) => {
                   const isDirty = dirtyKeys.has(item.key)
                   return (
                     <div
@@ -527,7 +608,7 @@ export default function Settings() {
                       </div>
                       {renderControl(item)}
                       {isDirty ? (
-                        <CheckCircle size={14} weight="fill" style={{ color: '#f59e0b', cursor: 'pointer' }} />
+                        <CheckCircle size={14} weight="fill" style={{ color: 'var(--color-warning)', cursor: 'pointer' }} />
                       ) : (
                         <XCircle size={14} weight="fill" style={{ color: 'var(--color-bg-elevated)' }} />
                       )}
@@ -536,7 +617,8 @@ export default function Settings() {
                 })}
               </Space>
             ),
-          }))}
+          }
+          }).filter((item): item is NonNullable<typeof item> => item !== null)}
         />
       )}
 

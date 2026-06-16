@@ -7,8 +7,8 @@ export const aiApi = {
   clear: (id: string) => client.delete(`/chat/${id}`) as Promise<void>,
 }
 
-export async function streamChat(conversationId: string, message: string): Promise<string> {
-  const res = await fetch('/api/chat', {
+export async function* streamChat(conversationId: string, message: string): AsyncGenerator<string> {
+  const res = await fetch('/api/ai/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ conversation_id: conversationId, message }),
@@ -17,12 +17,27 @@ export async function streamChat(conversationId: string, message: string): Promi
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
-  let fullText = ''
+  let buffer = ''
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
-    const chunk = decoder.decode(value, { stream: true })
-    fullText += chunk
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const data = line.slice(6)
+        if (data === '[DONE]') return
+        yield data
+      } else if (line.trim() && !line.startsWith(':')) {
+        yield line
+      }
+    }
   }
-  return fullText
+  if (buffer.trim()) yield buffer
+}
+
+export async function analyzeBacktest(backtestId: string): Promise<{ insight: string }> {
+  const { data } = await client.post(`/ai/analyze-backtest/${backtestId}`)
+  return data as { insight: string }
 }
