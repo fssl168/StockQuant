@@ -19,13 +19,13 @@ export default function Dashboard() {
   useEffect(() => {
     Promise.all([
       dashboardApi.metrics()
-        .then((r: any) => setMetrics(r.metrics ?? {}))
+        .then((r: any) => { if (r) setMetrics(r.metrics ?? {}) })
         .catch(() => {}),
       dashboardApi.signals()
-        .then((r: unknown[]) => setSignals(r))
+        .then((r: unknown[]) => { if (r) setSignals(r) })
         .catch(() => setSignals([])),
       dashboardApi.recentBacktests()
-        .then((r: unknown[]) => setTasks(r))
+        .then((r: unknown[]) => { if (r) setTasks(r) })
         .catch(() => setTasks([])),
     ]).finally(() => setLoading(false))
   }, [])

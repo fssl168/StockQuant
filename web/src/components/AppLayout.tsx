@@ -43,8 +43,9 @@ export default function AppLayout({ children }: Props) {
   const location = useLocation()
   const [time, setTime] = useState(new Date())
   const [apiLatency, setApiLatency] = useState<number | null>(null)
+  const [backendAvailable, setBackendAvailable] = useState(false)
 
-  const { messages: notifMessages } = useWebSocket('/api/ws/notification')
+  const { messages: notifMessages } = useWebSocket(backendAvailable ? '/ws/notification' : null)
 
   useEffect(() => {
     if (notifMessages.length === 0) return
@@ -69,10 +70,12 @@ export default function AppLayout({ children }: Props) {
     const check = async () => {
       const start = performance.now()
       try {
-        await fetch('/api/health', { method: 'HEAD', signal: AbortSignal.timeout(3000) })
+        const res = await fetch('/api/health', { method: 'HEAD', signal: AbortSignal.timeout(3000) })
         setApiLatency(Math.round(performance.now() - start))
+        setBackendAvailable(res.ok)
       } catch {
         setApiLatency(null)
+        setBackendAvailable(false)
       }
     }
     check()

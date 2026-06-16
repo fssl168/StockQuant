@@ -7,9 +7,7 @@ import logging
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-
-from stockquant.api.websocket import ws_manager
+from fastapi import APIRouter, HTTPException
 
 logger = logging.getLogger("stockquant.api.backtest")
 
@@ -102,16 +100,3 @@ async def delete_backtest(task_id: str):
     logger.info(f"回测任务已删除: {task_id}")
     return {"success": True, "task_id": task_id}
 
-
-@router.websocket("/ws/backtest/{task_id}")
-async def backtest_progress(websocket: WebSocket, task_id: str):
-    """回测进度实时推送"""
-    await ws_manager.connect(websocket, task_id)
-    try:
-        await websocket.send_json({"type": "connected", "data": {"task_id": task_id}})
-        while True:
-            await websocket.receive_text()  # keep alive
-    except WebSocketDisconnect:
-        pass
-    finally:
-        await ws_manager.disconnect(websocket, task_id)

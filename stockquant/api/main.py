@@ -56,7 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(portfolio.router, prefix="/api", tags=["投资组合"])
     app.include_router(optimize.router, prefix="/api", tags=["参数优化"])
 
-    # WebSocket 端点
+    # WebSocket 端点 — 统一路径 /ws/*
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
         """WebSocket 连接入口"""
@@ -64,12 +64,63 @@ def create_app() -> FastAPI:
         try:
             await websocket.send_json({"type": "connected", "data": {"status": "ok"}})
             while True:
-                # 保持连接，等待消息
                 await websocket.receive_text()
         except Exception:
             pass
         finally:
             await ws_manager.disconnect(websocket)
+
+    @app.websocket("/ws/notification")
+    async def notification_ws(websocket: WebSocket):
+        """系统通知实时推送"""
+        await ws_manager.connect(websocket, "notification")
+        try:
+            await websocket.send_json({"type": "connected", "data": {"channel": "notification"}})
+            while True:
+                await websocket.receive_text()
+        except Exception:
+            pass
+        finally:
+            await ws_manager.disconnect(websocket, "notification")
+
+    @app.websocket("/ws/monitor")
+    async def monitor_ws(websocket: WebSocket):
+        """实时告警推送"""
+        await ws_manager.connect(websocket, "monitor")
+        try:
+            await websocket.send_json({"type": "connected", "data": {"channel": "monitor"}})
+            while True:
+                await websocket.receive_text()
+        except Exception:
+            pass
+        finally:
+            await ws_manager.disconnect(websocket, "monitor")
+
+    @app.websocket("/ws/backtest/{task_id}")
+    async def backtest_ws(websocket: WebSocket, task_id: str):
+        """回测进度实时推送"""
+        await ws_manager.connect(websocket, task_id)
+        try:
+            await websocket.send_json({"type": "connected", "data": {"task_id": task_id}})
+            while True:
+                await websocket.receive_text()
+        except Exception:
+            pass
+        finally:
+            await ws_manager.disconnect(websocket, task_id)
+
+    @app.websocket("/ws/chat/{conversation_id}")
+    async def chat_ws(websocket: WebSocket, conversation_id: str):
+        """AI 对话实时推送"""
+        await ws_manager.connect(websocket, f"chat_{conversation_id}")
+        try:
+            await websocket.send_json({"type": "connected", "data": {"conversation_id": conversation_id}})
+            while True:
+                await websocket.receive_text()
+        except Exception:
+            pass
+        finally:
+            await ws_manager.disconnect(websocket, f"chat_{conversation_id}")
 
     # MVP 共享存储注入到路由模块
     backtest.set_storage(_backtest_tasks)

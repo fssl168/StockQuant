@@ -26,7 +26,7 @@ export default function Monitor() {
   })
 
   const { messages: wsMessages, connected: wsConnected } = useWebSocket(
-    running ? '/api/monitor/ws/monitor' : null
+    running ? '/ws/monitor' : null
   )
 
   // 处理 WS 消息

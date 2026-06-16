@@ -49,7 +49,7 @@ export default function Backtest() {
   const [submitting, setSubmitting] = useState(false)
   const [progressTaskId, setProgressTaskId] = useState<string | null>(null)
   const { messages: wsMessages } = useWebSocket(
-    progressTaskId ? `/api/ws/backtest/${progressTaskId}` : null
+    progressTaskId ? `/ws/backtest/${progressTaskId}` : null
   )
 
   // 监听 WS 进度消息

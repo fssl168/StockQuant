@@ -2,14 +2,18 @@ import axios from 'axios'
 
 const client = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: 5000,
   headers: { 'Content-Type': 'application/json' },
 })
 
 client.interceptors.response.use(
   (r) => r.data,
-  (err) => {
-    const msg = err.response?.data?.detail || err.message || '请求失败'
+  (error) => {
+    if (error.response?.status >= 500) {
+      console.warn(`API ${error.config?.url} returned ${error.response.status}`)
+      return null
+    }
+    const msg = error.response?.data?.detail || error.message || '请求失败'
     return Promise.reject(new Error(msg))
   },
 )

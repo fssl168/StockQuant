@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Card, Space, Tag, Typography, Input, DatePicker } from 'antd'
+import { Table, Button, Card, Space, Tag, Typography, Input, DatePicker, Switch } from 'antd'
 import { Database, Download } from '@phosphor-icons/react'
 import ReactECharts from 'echarts-for-react'
 import dayjs from 'dayjs'
@@ -22,6 +22,28 @@ export default function Data() {
   const [klineDates, setKlineDates] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs().subtract(60, 'day'), dayjs()])
   const [klineLoading, setKlineLoading] = useState(false)
   const [klineResult, setKlineResult] = useState<{ dates: string[]; data: [number, number, number, number, number][] } | null>(null)
+  const [clearingCache, setClearingCache] = useState(false)
+
+  const handleClearCache = async () => {
+    setClearingCache(true)
+    try {
+      await dataApi.clearCache()
+      fetchCacheStats()
+    } catch {
+      // ignore
+    } finally {
+      setClearingCache(false)
+    }
+  }
+
+  const handleToggleSource = async (provider: string, enabled: boolean) => {
+    try {
+      await dataApi.updateSource({ provider, enabled } as any)
+      fetchSources()
+    } catch {
+      // ignore
+    }
+  }
 
   function generateMockKline(symbol: string, days: number) {
     const data: [number, number, number, number, number][] = []
@@ -41,6 +63,18 @@ export default function Data() {
   }
 
   const klineData = klineResult ?? generateMockKline(klineSymbol, 60)
+
+  const previewData = klineResult && (klineResult as any).data
+    ? (klineResult as any).dates.slice(-10).map((d: string, i: number) => {
+        const idx = (klineResult as any).dates.length - 10 + i
+        const row = (klineResult as any).data[idx]
+        return { date: d, open: row?.[0], close: row?.[1], low: row?.[2], high: row?.[3], volume: row?.[4] }
+      })
+    : klineData.dates.slice(-10).map((d: string, i: number) => {
+        const idx = klineData.dates.length - 10 + i
+        const row = klineData.data[idx]
+        return { date: d, open: row?.[0], close: row?.[1], low: row?.[2], high: row?.[3], volume: row?.[4] }
+      })
 
   const handleFetchKline = () => {
     setKlineLoading(true)
@@ -65,7 +99,13 @@ export default function Data() {
 
   const dataSourceColumns = [
     { title: '数据源', dataIndex: 'provider', key: 'provider', width: 120, render: (p: string) => <strong>{p}</strong> },
-    { title: '状态', key: 'status', width: 80, render: () => <Tag color="green">活跃</Tag> },
+    { title: '状态', key: 'status', width: 80, render: (_: any, r: any) => (
+      <Switch
+        size="small"
+        checked={r.enabled !== false}
+        onChange={(checked) => handleToggleSource(r.provider, checked)}
+      />
+    ) },
     { title: '最后更新', key: 'last', width: 160, render: () => '2026-06-15 15:00' },
     { title: '记录数', key: 'records', width: 100, render: () => '1,234,567' },
     { title: '操作', key: 'action', width: 120, render: () => (
@@ -90,13 +130,16 @@ export default function Data() {
       </Text>
 
       {/* Cache stats */}
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <CacheStats
           sizeMb={cacheStats ? cacheStats.total_size_mb : 0}
           hitRate={cacheStats ? cacheStats.hit_rate : 0}
           symbolCount={cacheStats ? cacheStats.symbol_count : 0}
           lastUpdate={cacheStats ? cacheStats.last_update : '-'}
         />
+        <Button size="small" danger onClick={handleClearCache} loading={clearingCache}>
+          清除缓存
+        </Button>
       </div>
 
       {/* K-line query */}
@@ -141,6 +184,24 @@ export default function Data() {
           }}
           style={{ height: 320 }}
           notMerge={true}
+        />
+      </Card>
+
+      {/* Data preview */}
+      <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>数据预览</span>} style={{ marginBottom: 12 }}>
+        <Table
+          dataSource={previewData}
+          columns={[
+            { title: '日期', dataIndex: 'date', key: 'date', width: 120 },
+            { title: '开盘', dataIndex: 'open', key: 'open', width: 90, render: (v: number) => v?.toFixed(2) },
+            { title: '收盘', dataIndex: 'close', key: 'close', width: 90, render: (v: number) => v?.toFixed(2) },
+            { title: '最高', dataIndex: 'high', key: 'high', width: 90, render: (v: number) => v?.toFixed(2) },
+            { title: '最低', dataIndex: 'low', key: 'low', width: 90, render: (v: number) => v?.toFixed(2) },
+            { title: '成交量', dataIndex: 'volume', key: 'volume', width: 100, render: (v: number) => v?.toLocaleString() },
+          ]}
+          rowKey="date"
+          pagination={{ pageSize: 5, size: 'small' }}
+          size="small"
         />
       </Card>
 

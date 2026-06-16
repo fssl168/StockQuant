@@ -7,7 +7,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from stockquant.ai.chat_agent import ChatAgent
@@ -19,7 +19,7 @@ from stockquant.ai.chat_tools import (
     search_news,
 )
 
-router = APIRouter(prefix="/api/ai", tags=["ai"])
+router = APIRouter(prefix="/ai", tags=["ai"])
 
 logger = logging.getLogger("stockquant.ai")
 
@@ -134,33 +134,7 @@ def tool_search_news(symbol: str, limit: int = 5) -> Dict[str, Any]:
     return json.loads(result) if isinstance(result, str) else result
 
 
-@router.websocket("/ws/chat/{conversation_id}")
-async def websocket_chat(ws: WebSocket, conversation_id: str) -> None:
-    """WebSocket 实时对话。"""
-    await ws.accept()
-    try:
-        while True:
-            # 接收消息
-            data = await ws.receive_text()
-            message = json.loads(data).get("message", "")
-            if not message:
-                continue
-
-            agent = _get_chat_agent()
-            reply = agent.chat(message, conversation_id=conversation_id)
-
-            # 发送回复
-            await ws.send_text(json.dumps({
-                "type": "message",
-                "content": reply,
-            }, ensure_ascii=False))
-    except WebSocketDisconnect:
-        pass
-    except Exception as exc:
-        logger.error("WebSocket chat error: %s", exc)
-
-
-@router.post("/ai/analyze-backtest/{backtest_id}", summary="AI 解读回测结果")
+@router.post("/analyze-backtest/{backtest_id}", summary="AI 解读回测结果")
 async def analyze_backtest(backtest_id: str):
     """AI 解读回测结果"""
     # MVP: 返回模板解读

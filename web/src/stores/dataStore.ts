@@ -17,7 +17,7 @@ export const useDataStore = create<DataState>((set) => ({
   fetchSources: async () => {
     try {
       const sources = await dataApi.sources()
-      set({ sources })
+      set({ sources: sources ?? [] })
     } catch {
       set({ sources: [] })
     }
