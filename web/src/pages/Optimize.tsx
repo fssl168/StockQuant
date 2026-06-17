@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Card, Button, InputNumber, Select, Typography, Table, Space, Row, Col,
   Radio, Tag, Progress, Statistic, Empty, Divider, message,
@@ -17,6 +18,7 @@ import type { OptimizeConfig, OptimizerParam, OptimizeResult } from '../types'
 const { Title, Text } = Typography
 
 export default function Optimize() {
+  const navigate = useNavigate()
   const [params, setParams] = useState<OptimizerParam[]>([
     { name: 'fast_period', min: 5, max: 30, step: 5, value: 10 },
     { name: 'slow_period', min: 30, max: 120, step: 10, value: 60 },
@@ -507,10 +509,30 @@ export default function Optimize() {
               </Row>
               <div style={{ marginTop: 12, textAlign: 'right' }}>
                 <Space>
-                  <Button size="small" icon={<DownloadSimple size={14} />}>
+                  <Button size="small" icon={<DownloadSimple size={14} />} onClick={() => {
+                    const csv = ['rank,sharpe,return,maxDrawdown,winRate,trades,' + params.map(p => p.name).join(',')]
+                    results.forEach((r, i) => {
+                      csv.push([i + 1, r.metrics.sharpeRatio, r.metrics.totalReturn, r.metrics.maxDrawdown, r.metrics.winRate, r.metrics.totalTrades, ...(r.params ? params.map(p => r.params[p.name] ?? '') : [])].join(','))
+                    })
+                    const blob = new Blob([csv.join('\n')], { type: 'text/csv' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = 'optimize_results.csv'
+                    a.click()
+                    URL.revokeObjectURL(url)
+                    message.success('结果已导出为 CSV')
+                  }}>
                     导出结果
                   </Button>
-                  <Button type="primary" size="small" icon={<ArrowRight size={14} />}>
+                  <Button type="primary" size="small" icon={<ArrowRight size={14} />} onClick={() => {
+                    if (!bestResult?.params) {
+                      message.warning('无最佳参数可应用')
+                      return
+                    }
+                    const paramStr = Object.entries(bestResult.params).map(([k, v]) => `${k}=${v}`).join('&')
+                    navigate(`/backtest?${paramStr}`)
+                  }}>
                     应用到回测
                   </Button>
                 </Space>

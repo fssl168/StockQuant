@@ -74,9 +74,11 @@ class SentimentAnalyzer:
         "持续": 1.3, "连续": 1.3, "反复": 1.2, "不断": 1.3,
     }
 
-    # ── HuggingFace 模型配置 ──
-    _HF_MODEL_NAME = "lxyuan/distilbert-base-multilingual-cased-sentiments-student"
+    # ── HuggingFace 模型配置（备选链：中文专用 → 多语言）──
+    _HF_MODEL_NAME = "uer/roberta-base-finetuned-jd-binary-chinese"  # 中文情感专用
+    _HF_FALLBACK_MODEL = "lxyuan/distilbert-base-multilingual-cased-sentiments-student"  # 多语言备选
     _hf_pipeline = None
+    _hf_model_loaded: Optional[str] = None
 
     def __init__(self, method: str = "auto") -> None:
         """初始化情感分析器
@@ -89,20 +91,33 @@ class SentimentAnalyzer:
             self._try_load_hf_model()
 
     def _try_load_hf_model(self) -> None:
-        """尝试加载 HuggingFace 模型"""
-        try:
-            from transformers import pipeline
-            self._hf_pipeline = pipeline(
-                "sentiment-analysis",
-                model=self._HF_MODEL_NAME,
-                top_k=None,
-                device=-1,  # CPU
-            )
-            logger.info("HuggingFace 情感模型加载成功: %s", self._HF_MODEL_NAME)
-        except ImportError:
-            logger.info("transformers 未安装，使用增强版关键词规则")
-        except Exception as exc:
-            logger.info("HuggingFace 模型加载失败: %s，使用增强版关键词规则", exc)
+        """尝试加载 HuggingFace 模型（带备选链）
+
+        依次尝试:
+        1. 中文专用模型 (uer/roberta-base-finetuned-jd-binary-chinese)
+        2. 多语言备选模型 (lxyuan/distilbert-base-multilingual-cased-sentiments-student)
+        3. 全部失败则降级为关键词规则
+        """
+        candidates = [self._HF_MODEL_NAME, self._HF_FALLBACK_MODEL]
+        for model_name in candidates:
+            try:
+                from transformers import pipeline
+                self._hf_pipeline = pipeline(
+                    "sentiment-analysis",
+                    model=model_name,
+                    top_k=None,
+                    device=-1,  # CPU
+                )
+                self._hf_model_loaded = model_name
+                logger.info("HuggingFace 情感模型加载成功: %s", model_name)
+                return
+            except ImportError:
+                logger.info("transformers 未安装，使用增强版关键词规则")
+                return
+            except Exception as exc:
+                logger.warning("HuggingFace 模型 %s 加载失败: %s，尝试备选", model_name, exc)
+                continue
+        logger.warning("所有 HuggingFace 模型加载失败，降级为关键词规则")
 
     def analyze(self, texts: List[str]) -> SentimentResult:
         """分析文本列表的情感
@@ -127,19 +142,26 @@ class SentimentAnalyzer:
         return self._analyze_enhanced_keyword(texts)
 
     def _analyze_hf(self, texts: List[str]) -> SentimentResult:
-        """HuggingFace 模型分析"""
+        """HuggingFace 模型分析
+
+        兼容两种模型输出:
+        1. 三分类模型 (positive/negative/neutral) — 多语言备选模型
+        2. 二分类模型 (positive/negative) — 中文专用模型
+        """
         combined = "。".join(texts[:10])  # 限制长度
         results = self._hf_pipeline(combined[:512])
 
-        # 解析结果
+        # 解析结果（兼容三分类和二分类）
         scores = {}
-        for item in results[0] if isinstance(results[0], list) else results:
+        raw_results = results[0] if isinstance(results[0], list) else results
+        for item in raw_results:
             label = item["label"].lower()
             scores[label] = item["score"]
 
         pos_score = scores.get("positive", scores.get("pos", 0))
         neg_score = scores.get("negative", scores.get("neg", 0))
-        neu_score = scores.get("neutral", scores.get("neu", 0))
+        # 二分类模型无 neutral，剩余概率为 neutral
+        neu_score = scores.get("neutral", scores.get("neu", max(0, 1 - pos_score - neg_score)))
 
         sentiment_score = pos_score - neg_score  # -1 ~ 1
         confidence = max(pos_score, neg_score, neu_score)
@@ -153,7 +175,7 @@ class SentimentAnalyzer:
                 "negative": int(neg_score * 100),
                 "neutral": int(neu_score * 100),
             },
-            method="huggingface",
+            method=f"huggingface:{self._hf_model_loaded}",
         )
 
     def _analyze_enhanced_keyword(self, texts: List[str]) -> SentimentResult:

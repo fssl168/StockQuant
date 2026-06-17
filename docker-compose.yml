@@ -23,6 +23,7 @@ services:
       - "8000:8000"
     environment:
       # === AI/LLM 配置 ===
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_API_BASE=${OPENAI_API_BASE}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
@@ -32,6 +33,16 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
       - ANTHROPIC_API_BASE=${ANTHROPIC_API_BASE}
+      
+      # === 进化 LLM 配置 ===
+      - EVO_LLM_PROVIDER=${EVO_LLM_PROVIDER:-openai}
+      - EVO_LLM_MODEL=${EVO_LLM_MODEL:-gpt-4o}
+      - EVO_LLM_API_KEY=${EVO_LLM_API_KEY}
+      - EVO_LLM_API_BASE=${EVO_LLM_API_BASE}
+      - EVO_LLM_TEMPERATURE=${EVO_LLM_TEMPERATURE:-0.5}
+      - EVO_LLM_MAX_TOKENS=${EVO_LLM_MAX_TOKENS:-4096}
+      - EVO_LLM_RETRY=${EVO_LLM_RETRY:-3}
+      - EVO_ANTHROPIC_MODEL=${EVO_ANTHROPIC_MODEL:-claude-3-opus}
       
       # === 数据库配置 ===
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stockquant_secret}

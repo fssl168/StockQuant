@@ -68,7 +68,7 @@ export default function Monitor() {
     max_drawdown_pct: number
   }>({ environment: 'calm', max_position_pct: 0.8, max_daily_loss_pct: 0.03, max_drawdown_pct: 0.1 })
 
-  // F026: 加载动态风控数据 (mock, 后续接入 API)
+  // F026: 加载动态风控数据
   useEffect(() => {
     client.get('/monitor/risk-control')
       .then((res: any) => {
@@ -82,7 +82,7 @@ export default function Monitor() {
           })
         }
       })
-      .catch(() => { /* use default mock values */ })
+      .catch(() => { /* use default values when API unavailable */ })
   }, [])
 
   const { messages: wsMessages, connected: wsConnected } = useWebSocket(
@@ -149,7 +149,7 @@ export default function Monitor() {
       .finally(() => setBriefLoading(false))
   }, [])
 
-  // Mock real-time prices — Task 2.4: 仅在 WS 未连接时作为 fallback
+  // Fallback real-time prices when WS is not connected
   useEffect(() => {
     if (running && !wsConnected) {
       const basePrices: Record<string, number> = {}

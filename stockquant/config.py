@@ -21,15 +21,34 @@ _CONFIG_FILE = Path.home() / ".stockquant" / "stockquant_config.yaml"
 # 默认配置（Task 4.7 补全）
 DEFAULT_CONFIG = {
     "ai": {
+        "provider": "custom",
         "model": "gpt-4o",
         "api_key": "",
         "api_base": "",
         "lightweight_model": "gpt-4o-mini",
         "temperature": 0.7,
-        "max_tokens": 12000,
+        "max_tokens": 4096,
         "anthropic_model": "claude-sonnet-4-20250514",
         "anthropic_api_key": "",
         "anthropic_api_base": "",
+        # 本地 LLM 配置（NFR008 Tick 级 <200ms）
+        "local_llm": {
+            "enabled": False,
+            "backend": "ollama",  # "transformers" / "ollama"
+            "model": "qwen2.5-7b-instruct",
+            "base_url": "http://localhost:11434",
+        },
+    },
+    "evolution": {
+        "enabled": False,
+        "llm_provider": "custom",
+        "llm_model": "gpt-4o",
+        "anthropic_model": "claude-3-opus",
+        "api_key": "",
+        "api_base": "",
+        "temperature": 0.5,
+        "max_tokens": 4096,
+        "retry": 3,
     },
     "data": {
         "provider": "alphafeed",
@@ -203,6 +222,20 @@ def _apply_env_overrides(config: dict):
         "ANTHROPIC_MODEL": ("ai", "anthropic_model"),
         "ANTHROPIC_API_KEY": ("ai", "anthropic_api_key"),
         "ANTHROPIC_API_BASE": ("ai", "anthropic_api_base"),
+        # 本地 LLM 配置（NFR008）
+        "LOCAL_LLM_ENABLED": ("ai", "local_llm", "enabled"),
+        "LOCAL_LLM_BACKEND": ("ai", "local_llm", "backend"),
+        "LOCAL_LLM_MODEL": ("ai", "local_llm", "model"),
+        "LOCAL_LLM_BASE_URL": ("ai", "local_llm", "base_url"),
+        "OLLAMA_BASE_URL": ("ai", "local_llm", "base_url"),
+        # 进化 LLM 配置
+        "EVO_LLM_PROVIDER": ("evolution", "llm_provider"),
+        "EVO_LLM_MODEL": ("evolution", "llm_model"),
+        "EVO_ANTHROPIC_MODEL": ("evolution", "anthropic_model"),
+        "EVO_LLM_API_KEY": ("evolution", "api_key"),
+        "EVO_LLM_API_BASE": ("evolution", "api_base"),
+        "EVO_LLM_TEMPERATURE": ("evolution", "temperature"),
+        "EVO_LLM_MAX_TOKENS": ("evolution", "max_tokens"),
         # 数据配置
         "DATA_PROVIDER_SOURCE": ("data", "provider"),
         "CACHE_DIR": ("data", "cache_dir"),
@@ -280,25 +313,41 @@ def _apply_env_overrides(config: dict):
         "ALPHAFEED_KEY": ("data", "alphafeed_key"),
         "DATA_PROVIDER": ("data", "provider"),
     }
-    for env_key, (section, key) in env_mappings.items():
+    for env_key, path in env_mappings.items():
         value = os.environ.get(env_key)
-        if value is not None and section in config and key in config[section]:
-            # 尝试类型转换
+        if value is None:
+            continue
+        # 支持 2 层 (section, key) 和 3 层 (section, key, subkey) 路径
+        if len(path) == 2:
+            section, key = path
+            if section not in config or key not in config[section]:
+                continue
             original = config[section][key]
-            if isinstance(original, bool):
-                config[section][key] = value.lower() in ("true", "1", "yes")
-            elif isinstance(original, int):
-                try:
-                    config[section][key] = int(value)
-                except ValueError:
-                    pass
-            elif isinstance(original, float):
-                try:
-                    config[section][key] = float(value)
-                except ValueError:
-                    pass
-            else:
-                config[section][key] = value
+            target = config[section]
+        else:
+            section, key, subkey = path
+            if section not in config or key not in config[section]:
+                continue
+            target = config[section][key]
+            if not isinstance(target, dict) or subkey not in target:
+                continue
+            original = target[subkey]
+            key = subkey
+        # 尝试类型转换
+        if isinstance(original, bool):
+            target[key] = value.lower() in ("true", "1", "yes")
+        elif isinstance(original, int):
+            try:
+                target[key] = int(value)
+            except ValueError:
+                pass
+        elif isinstance(original, float):
+            try:
+                target[key] = float(value)
+            except ValueError:
+                pass
+        else:
+            target[key] = value
 
 
 # 启动时自动加载

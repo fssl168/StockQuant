@@ -31,9 +31,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       const res = await client.post('/auth/login', formData, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       })
-      const { access_token, user } = res.data as any
-      localStorage.setItem('auth_token', access_token)
-      set({ token: access_token, user, isAuthenticated: true, loading: false })
+      const data = res.data as any
+      const token = data.access_token || data.accessToken
+      const user = data.user
+      localStorage.setItem('auth_token', token)
+      set({ token, user, isAuthenticated: true, loading: false })
     } catch (e: any) {
       set({ loading: false })
       throw e

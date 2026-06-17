@@ -10,7 +10,6 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordRequestForm
-from passlib.context import CryptContext
 
 from stockquant.api.deps import get_current_user
 
@@ -23,22 +22,40 @@ SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "stockquant-dev-secret-change-in-p
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Password hashing — 直接使用 bcrypt 库，绕过 passlib 版本兼容问题
+try:
+    import bcrypt as _bcrypt
+
+    def _hash_password(password: str) -> str:
+        return _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
+
+    def _verify_password(password: str, hashed: str) -> bool:
+        return _bcrypt.checkpw(password.encode(), hashed.encode())
+
+except ImportError:
+    # fallback: 明文比较（仅开发环境）
+    def _hash_password(password: str) -> str:  # type: ignore[misc]
+        return f"plain:{password}"
+
+    def _verify_password(password: str, hashed: str) -> bool:  # type: ignore[misc]
+        if hashed.startswith("plain:"):
+            return hashed[6:] == password
+        return False
+
 
 # MVP user storage (in-memory, replace with DB later)
-# Password hash deferred to avoid passlib/bcrypt version incompatibility at import time
 _users_db: dict[str, dict] | None = None
 
 
 def _init_users_db() -> dict[str, dict]:
-    """Lazy-init user database to avoid bcrypt compatibility issues at import time."""
+    """Lazy-init user database."""
     global _users_db
     if _users_db is None:
         _users_db = {
             "admin": {
                 "username": "admin",
-                "hashed_password": pwd_context.hash("admin123"),
+                "hashed_password": _hash_password("admin123"),
                 "roles": ["admin"],
                 "disabled": False,
             },
@@ -56,11 +73,11 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return _verify_password(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return _hash_password(password)
 
 
 @router.post("/auth/login", summary="用户登录")

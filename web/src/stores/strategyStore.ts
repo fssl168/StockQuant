@@ -21,7 +21,8 @@ export const useStrategyStore = create<StrategyState>((set) => ({
   fetchStrategies: async () => {
     set({ loading: true })
     try {
-      const strategies = await strategyApi.list()
+      const res: any = await strategyApi.list()
+      const strategies = Array.isArray(res) ? res : (res?.strategies ?? res?.data ?? [])
       set({ strategies, loading: false })
     } catch {
       set({ strategies: [], loading: false })

@@ -1,14 +1,14 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import path from 'path'
 
 /// <reference types="vitest" />
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      // @ts-ignore — __dirname is available in vite.config.ts (Node.js ESM)
+      '@': new URL('./src', import.meta.url).pathname,
     },
   },
   test: {

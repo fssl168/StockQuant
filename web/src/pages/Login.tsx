@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Form, Input, Button, Card, Typography, message, Space } from 'antd'
 import { User, Lock } from '@phosphor-icons/react'
 import { useAuthStore } from '@/stores/authStore'
@@ -7,6 +8,7 @@ const { Title, Text } = Typography
 
 export default function Login() {
   const { login, loading } = useAuthStore()
+  const navigate = useNavigate()
   const [form] = Form.useForm()
   const [isRegister, setIsRegister] = useState(false)
 
@@ -19,6 +21,7 @@ export default function Login() {
       } else {
         await login(values.username, values.password)
         message.success('登录成功')
+        navigate('/')
       }
     } catch (e: any) {
       message.error(e.message || (isRegister ? '注册失败' : '用户名或密码错误'))

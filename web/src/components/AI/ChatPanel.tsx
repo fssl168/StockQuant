@@ -323,7 +323,7 @@ export default function ChatPanel({ messages, streamingContent = '', isStreaming
         value={mode}
         onChange={(v) => onModeChange?.(v as string)}
         options={[
-          { label: '通用', value: 'general' },
+          { label: '默认', value: 'general' },
           { label: '策略开发', value: 'strategy' },
           { label: '数据分析', value: 'analysis' },
           { label: '盯盘', value: 'monitor' },
@@ -461,15 +461,17 @@ export default function ChatPanel({ messages, streamingContent = '', isStreaming
                 <ChatCircleText size={16} weight="fill" />
               </Avatar>}
               title={<Text strong style={{ fontSize: 12, color: 'var(--color-text-primary)' }}>AI 助手</Text>}
-              description={<div
-                style={{ marginTop: 6, fontSize: 13, lineHeight: 1.7, color: 'var(--color-text-secondary)' }}
-                dangerouslySetInnerHTML={{
-                  __html: renderMarkdown(streamingContent),
-                }}
-              >
-                {!streamingContent && <span style={{ color: 'var(--color-text-tertiary)' }}>思考中...</span>}
-                <span className="typing-cursor" style={{ animation: 'blink 1s step-end infinite' }}>|</span>
-              </div>}
+              description={
+                <div
+                  style={{ marginTop: 6, fontSize: 13, lineHeight: 1.7, color: 'var(--color-text-secondary)' }}
+                  dangerouslySetInnerHTML={{
+                    __html: streamingContent ? renderMarkdown(streamingContent) : '',
+                  }}
+                >
+                  {!streamingContent && <span style={{ color: 'var(--color-text-tertiary)' }}>思考中...</span>}
+                  <span className="typing-cursor" style={{ animation: 'blink 1s step-end infinite' }}>|</span>
+                </div>
+              }
             />
           </List.Item>
         )}

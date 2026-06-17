@@ -27,10 +27,10 @@ export default function Dashboard() {
         .then((r: any) => { if (r) setMetrics(r.metrics ?? {}) })
         .catch(() => {}),
       dashboardApi.signals()
-        .then((r: unknown[]) => { if (r) setSignals(r) })
+        .then((r: any) => { if (r) setSignals(Array.isArray(r) ? r : (r?.signals ?? r?.data ?? [])) })
         .catch(() => setSignals([])),
       dashboardApi.recentBacktests()
-        .then((r: unknown[]) => { if (r) setTasks(r) })
+        .then((r: any) => { if (r) setTasks(Array.isArray(r) ? r : (r?.tasks ?? r?.data ?? [])) })
         .catch(() => setTasks([])),
       client.get('/portfolio/equity-curve')
         .then((r: any) => { if (r) setEquityCurve(r) })

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""LLM Adapter — 统一的 LLM 调用适配层，支持 tool calling"""
+"""LLM Adapter — 统一的 LLM 调用适配层，支持 tool calling + 本地推理"""
 
 from __future__ import annotations
 
@@ -51,6 +51,126 @@ class LLMResponse:
     def has_tool_calls(self) -> bool:
         """是否有工具调用。"""
         return len(self.tool_calls) > 0
+
+
+class LocalLLMAdapter:
+    """本地 LLM 推理适配器 — 满足 NFR008 Tick 级 <200ms 延迟要求
+
+    支持两种后端:
+    1. HuggingFace transformers 本地推理（模型名以 ``local/`` 前缀标识）
+    2. Ollama 本地服务（通过 HTTP API，模型名以 ``ollama/`` 前缀标识）
+
+    使用方式::
+
+        # HuggingFace transformers
+        adapter = LocalLLMAdapter(model="qwen2.5-7b-instruct", backend="transformers")
+
+        # Ollama
+        adapter = LocalLLMAdapter(model="qwen2.5-7b-instruct", backend="ollama")
+
+        response = adapter.call(messages)
+    """
+
+    def __init__(
+        self,
+        model: str,
+        backend: str = "transformers",
+        base_url: Optional[str] = None,
+    ) -> None:
+        self._model = model
+        self._backend = backend  # "transformers" / "ollama"
+        self._base_url = base_url or "http://localhost:11434"
+        self._pipeline: Any = None
+
+    def _ensure_loaded(self) -> None:
+        """懒加载模型（仅 transformers 后端需要预加载）。"""
+        if self._backend == "ollama":
+            return  # ollama 通过 HTTP 调用，无需预加载
+        if self._pipeline is not None:
+            return
+        try:
+            from transformers import pipeline
+            self._pipeline = pipeline(
+                "text-generation",
+                model=self._model,
+                device=-1,  # CPU
+            )
+            logger.info("本地 HuggingFace 模型加载成功: %s", self._model)
+        except ImportError as exc:
+            raise ImportError(
+                "transformers 未安装，无法使用本地推理。"
+                "Install with: pip install transformers torch"
+            ) from exc
+
+    def call(self, messages: list[dict], **kwargs: Any) -> LLMResponse:
+        """本地模型调用。
+
+        Parameters
+        ----------
+        messages : list[dict]
+            消息列表（OpenAI format）
+        **kwargs
+            max_tokens, temperature, timeout 等
+
+        Returns
+        -------
+        LLMResponse
+        """
+        self._ensure_loaded()
+
+        if self._backend == "transformers":
+            return self._call_transformers(messages, **kwargs)
+        elif self._backend == "ollama":
+            return self._call_ollama(messages, **kwargs)
+        else:
+            raise ValueError(f"不支持的 backend: {self._backend}")
+
+    def _call_transformers(self, messages: list[dict], **kwargs: Any) -> LLMResponse:
+        """HuggingFace transformers 本地推理。"""
+        prompt = "\n".join(f"{m.get('role', 'user')}: {m.get('content', '')}" for m in messages)
+        max_new_tokens = kwargs.get("max_tokens", 512)
+        result = self._pipeline(prompt, max_new_tokens=max_new_tokens, return_full_text=False)
+        content = ""
+        if result:
+            first = result[0]
+            content = first.get("generated_text", "") if isinstance(first, dict) else str(first)
+        return LLMResponse(
+            content=content,
+            usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            model=f"local/{self._model}",
+            finish_reason="stop",
+        )
+
+    def _call_ollama(self, messages: list[dict], **kwargs: Any) -> LLMResponse:
+        """Ollama 本地服务调用。"""
+        import httpx
+        timeout = kwargs.get("timeout", 30)
+        response = httpx.post(
+            f"{self._base_url}/api/chat",
+            json={
+                "model": self._model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": kwargs.get("temperature", 0.0),
+                    "num_predict": kwargs.get("max_tokens", 512),
+                },
+            },
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        msg = data.get("message", {})
+        return LLMResponse(
+            content=msg.get("content", ""),
+            usage={
+                "prompt_tokens": data.get("prompt_eval_count", 0),
+                "completion_tokens": data.get("eval_count", 0),
+                "total_tokens": data.get("prompt_eval_count", 0) + data.get("eval_count", 0),
+            },
+            model=f"ollama/{self._model}",
+            finish_reason="stop",
+        )
 
 
 class LLMAdapter:
@@ -231,14 +351,20 @@ class LLMAdapter:
     ) -> LLMResponse:
         """简单 LLM 调用（无工具）。
 
-        当 model 为 "local_rule_engine" 时，走本地规则引擎路径，
-        无需远程 LLM 调用，延迟 < 50ms。
+        路由规则:
+        1. ``local_rule_engine`` → 本地规则引擎（<50ms）
+        2. ``local/*`` 或 ``ollama/*`` 前缀 → 本地 LLM 推理（<200ms，NFR008）
+        3. 其他 → 远程 LLM（litellm）
         """
         used_model = model or self._model
 
         # 本地规则引擎路径
         if used_model == "local_rule_engine":
             return self._call_local_rule_engine(messages)
+
+        # 本地 LLM 路径（HuggingFace transformers / Ollama）
+        if used_model.startswith("local/") or used_model.startswith("ollama/"):
+            return self._call_local_llm(messages, used_model, **kwargs)
 
         self._ensure_litellm()
         response = self._litellm.completion(
@@ -262,6 +388,25 @@ class LLMAdapter:
         )
         self._update_cost_tracker(usage_info, used_model)
         return result
+
+    def _call_local_llm(self, messages: list[dict], model: str, **kwargs: Any) -> LLMResponse:
+        """调用本地 LLM 适配器（HuggingFace / Ollama）。
+
+        Parameters
+        ----------
+        messages : list[dict]
+            消息列表
+        model : str
+            模型名，格式为 ``local/<model_name>`` 或 ``ollama/<model_name>``
+        """
+        backend = "ollama" if model.startswith("ollama/") else "transformers"
+        model_name = model.split("/", 1)[1]
+        adapter = LocalLLMAdapter(
+            model=model_name,
+            backend=backend,
+            base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
+        )
+        return adapter.call(messages, **kwargs)
 
     def _call_local_rule_engine(self, messages: list[dict]) -> LLMResponse:
         """本地规则引擎调用 — 基于 MA/MACD/RSI/BOLL 的快速信号判断

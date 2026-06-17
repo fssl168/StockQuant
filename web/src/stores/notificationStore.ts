@@ -53,6 +53,8 @@ export const useNotificationStore = create<NotificationState>((set) => ({
 // 初始化时从后端加载通知（fire-and-forget，不阻塞渲染）
 if (typeof window !== 'undefined') {
   setTimeout(() => {
-    useNotificationStore.getState().fetchFromBackend().catch(() => {})
-  }, 0)
+    if (localStorage.getItem('auth_token')) {
+      useNotificationStore.getState().fetchFromBackend().catch(() => {})
+    }
+  }, 1000)
 }

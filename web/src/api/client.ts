@@ -50,16 +50,12 @@ client.interceptors.response.use(
   },
   (error) => {
     const status = error.response?.status
-    // 401 未认证：清除本地 token，跳转登录页
+    // 401 未认证：清除本地 token，由 React Router 守卫处理跳转
     if (status === 401) {
       try {
         localStorage.removeItem('auth_token')
       } catch {
         // ignore
-      }
-      // 避免在登录页重复跳转
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-        window.location.href = '/login'
       }
     }
     if (status && status >= 500) {

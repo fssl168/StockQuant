@@ -24,3 +24,6 @@ sqlalchemy>=2.0
 psycopg2-binary>=2.9
 asyncpg>=0.29
 pgvector>=0.3
+# ── 可选 AI 增强依赖（NFR008 本地推理 + R3 情感分析升级）──
+transformers>=4.36  # HuggingFace NLP 模型（情感分析/本地推理）
+torch>=2.0  # PyTorch（transformers 后端，CPU 版本即可）

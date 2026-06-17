@@ -39,8 +39,15 @@ interface NotifierFormProps {
 }
 
 export default function NotifierForm({ values, onChange }: NotifierFormProps) {
+  const getVal = (key: string, fallback?: unknown) => {
+    const v = values[key]
+    if (v === null || v === undefined) return fallback
+    if (typeof v === 'object') return fallback ?? ''
+    return v
+  }
+
   const renderControl = (item: SettingEntry) => {
-    const val = values[item.key]
+    const val = getVal(item.key, item.defaultValue)
 
     switch (item.value_type) {
       case 'boolean':

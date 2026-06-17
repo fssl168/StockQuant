@@ -56,6 +56,7 @@ def _save_settings_to_file():
 
 _SENSITIVE_KEYS = {
     "ai.api_key", "ai.api_base",
+    "evolution.api_key", "evolution.api_base",
     "data_provider.api_key",
     "trading.qmt_password", "trading.xtp_password", "trading.ctp_password",
     "trading.admin_token",
@@ -167,6 +168,7 @@ _ENV_VAR_MAP: Dict[str, str] = {
     "risk.max_drawdown_pct": "RISK_MAX_DRAWDOWN_PCT",
     
     # === AI/LLM 配置 ===
+    "ai.provider": "AI_PROVIDER",
     "ai.model": "OPENAI_MODEL",
     "ai.api_key": "OPENAI_API_KEY",
     "ai.api_base": "OPENAI_API_BASE",
@@ -175,6 +177,22 @@ _ENV_VAR_MAP: Dict[str, str] = {
     "ai.anthropic_api_key": "ANTHROPIC_API_KEY",
     "ai.anthropic_model": "ANTHROPIC_MODEL",
     "ai.anthropic_api_base": "ANTHROPIC_API_BASE",
+    # 本地 LLM 配置（NFR008 Tick 级 <200ms）
+    "ai.local_llm.enabled": "LOCAL_LLM_ENABLED",
+    "ai.local_llm.backend": "LOCAL_LLM_BACKEND",
+    "ai.local_llm.model": "LOCAL_LLM_MODEL",
+    "ai.local_llm.base_url": "LOCAL_LLM_BASE_URL",
+    
+    # === 进化 LLM 配置 ===
+    "evolution.enabled": "",
+    "evolution.llm_provider": "EVO_LLM_PROVIDER",
+    "evolution.llm_model": "EVO_LLM_MODEL",
+    "evolution.anthropic_model": "EVO_ANTHROPIC_MODEL",
+    "evolution.api_key": "EVO_LLM_API_KEY",
+    "evolution.api_base": "EVO_LLM_API_BASE",
+    "evolution.llm_temperature": "EVO_LLM_TEMPERATURE",
+    "evolution.max_tokens": "EVO_LLM_MAX_TOKENS",
+    "evolution.llm_retry": "",
     
     # === 通知配置 ===
     "notification.dingtalk_webhook": "DINGTALK_WEBHOOK_URL",
@@ -296,6 +314,7 @@ _SCHEMA: Dict[str, type] = {
     "risk.max_drawdown_pct": float,
     
     # === AI/LLM 配置 ===
+    "ai.provider": str,
     "ai.model": str,
     "ai.api_key": str,
     "ai.api_base": str,
@@ -304,6 +323,22 @@ _SCHEMA: Dict[str, type] = {
     "ai.anthropic_api_key": str,
     "ai.anthropic_model": str,
     "ai.anthropic_api_base": str,
+    # 本地 LLM 配置（NFR008）
+    "ai.local_llm.enabled": bool,
+    "ai.local_llm.backend": str,
+    "ai.local_llm.model": str,
+    "ai.local_llm.base_url": str,
+    
+    # === 进化 LLM 配置 ===
+    "evolution.enabled": bool,
+    "evolution.llm_provider": str,
+    "evolution.llm_model": str,
+    "evolution.anthropic_model": str,
+    "evolution.api_key": str,
+    "evolution.api_base": str,
+    "evolution.llm_temperature": float,
+    "evolution.max_tokens": int,
+    "evolution.llm_retry": int,
     
     # === 通知配置 ===
     "notification.dingtalk_webhook": str,
@@ -433,6 +468,7 @@ def _build_default_settings() -> Dict[str, Any]:
     defaults["risk.max_drawdown_pct"] = float(os.environ.get("RISK_MAX_DRAWDOWN_PCT", "0.15"))
     
     # === AI/LLM 配置 ===
+    defaults["ai.provider"] = os.environ.get("OPENAI_PROVIDER", "openai")
     defaults["ai.model"] = os.environ.get("OPENAI_MODEL", "gpt-4o")
     defaults["ai.api_key"] = os.environ.get("OPENAI_API_KEY", "")
     defaults["ai.api_base"] = os.environ.get("OPENAI_API_BASE", "")
@@ -441,6 +477,22 @@ def _build_default_settings() -> Dict[str, Any]:
     defaults["ai.anthropic_api_key"] = os.environ.get("ANTHROPIC_API_KEY", "")
     defaults["ai.anthropic_model"] = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
     defaults["ai.anthropic_api_base"] = os.environ.get("ANTHROPIC_API_BASE", "")
+    # 本地 LLM 配置（NFR008）
+    defaults["ai.local_llm.enabled"] = os.environ.get("LOCAL_LLM_ENABLED", "false").lower() in ("true", "1", "yes")
+    defaults["ai.local_llm.backend"] = os.environ.get("LOCAL_LLM_BACKEND", "ollama")
+    defaults["ai.local_llm.model"] = os.environ.get("LOCAL_LLM_MODEL", "qwen2.5-7b-instruct")
+    defaults["ai.local_llm.base_url"] = os.environ.get("LOCAL_LLM_BASE_URL", "http://localhost:11434")
+    
+    # === 进化 LLM 配置 ===
+    defaults["evolution.enabled"] = False
+    defaults["evolution.llm_provider"] = os.environ.get("EVO_LLM_PROVIDER", "openai")
+    defaults["evolution.llm_model"] = os.environ.get("EVO_LLM_MODEL", "gpt-4o")
+    defaults["evolution.anthropic_model"] = os.environ.get("EVO_ANTHROPIC_MODEL", "claude-3-opus")
+    defaults["evolution.api_key"] = os.environ.get("EVO_LLM_API_KEY", "")
+    defaults["evolution.api_base"] = os.environ.get("EVO_LLM_API_BASE", "")
+    defaults["evolution.llm_temperature"] = float(os.environ.get("EVO_LLM_TEMPERATURE", "0.5"))
+    defaults["evolution.max_tokens"] = int(os.environ.get("EVO_LLM_MAX_TOKENS", "4096"))
+    defaults["evolution.llm_retry"] = int(os.environ.get("EVO_LLM_RETRY", "3"))
     
     # === 通知配置 ===
     defaults["notification.dingtalk_webhook"] = os.environ.get("DINGTALK_WEBHOOK_URL", "")

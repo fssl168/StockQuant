@@ -50,7 +50,7 @@ def decode_token(token: str) -> dict:
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = security,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> dict:
     """获取当前用户（实现 JWT 验证）。
 
@@ -76,7 +76,7 @@ async def get_current_user(
 
 
 async def get_required_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = security,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> dict:
     """获取当前用户（强制认证）。
 

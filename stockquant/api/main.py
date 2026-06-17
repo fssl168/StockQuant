@@ -56,7 +56,7 @@ def create_app() -> FastAPI:
         _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
         _cors_credentials = True
     else:
-        _cors_origins = ["http://localhost:5173", "http://localhost:80"]
+        _cors_origins = ["http://localhost:5173", "http://localhost:3000", "http://localhost:80"]
         _cors_credentials = True
 
     app.add_middleware(
@@ -289,6 +289,10 @@ def create_app() -> FastAPI:
         logger.warning("Orchestrator 初始化失败（非致命）: %s", e)
 
     return app
+
+
+# 模块级 ASGI 实例（供 uvicorn stockquant.api.main:app 使用）
+app = create_app()
 
 
 # 模块级存储访问器（供路由模块写入）

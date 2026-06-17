@@ -3,7 +3,6 @@ import { Card, Row, Col, Table, Typography, Tag, Button, Skeleton, Tabs, Modal }
 import { ArrowUpRight, ArrowDownRight, CurrencyCircleDollar } from '@phosphor-icons/react'
 import { useNavigate } from 'react-router-dom'
 import ReactECharts from 'echarts-for-react'
-import dayjs from 'dayjs'
 import client from '@/api/client'
 import PortfolioSummary from '@/components/Portfolio/PortfolioSummary'
 import SectorPieChart from '@/components/Portfolio/SectorPieChart'
@@ -26,11 +25,13 @@ export default function Portfolio() {
   const [equitySymbol, setEquitySymbol] = useState<string | null>(null)
   const [equityCurveData, setEquityCurveData] = useState<{ dates: string[]; values: number[] } | null>(null)
   const [equityLoading, setEquityLoading] = useState(false)
+  const [tradeHistory, setTradeHistory] = useState<any[]>([])
+  const [riskMetrics, setRiskMetrics] = useState<{ label: string; value: string; color?: string }[]>([])
 
   useEffect(() => {
     const p1 = client.get('/portfolio/positions')
       .then((data) => { if (Array.isArray(data) && data.length > 0) setPositions(data) })
-      .catch(() => { /* use default mock data */ })
+      .catch(() => {})
     const p2 = client.get('/portfolio/account')
       .then((data: any) => {
         if (data) {
@@ -42,11 +43,32 @@ export default function Portfolio() {
           })
         }
       })
-      .catch(() => { /* use default mock data */ })
+      .catch(() => {})
     const p3 = client.get('/portfolio/equity-curve')
       .then((data: any) => { if (data?.dates?.length) setPortfolioCurve(data) })
-      .catch(() => { /* fallback to mock */ })
-    Promise.all([p1, p2, p3]).finally(() => setLoading(false))
+      .catch(() => {})
+    const p4 = client.get('/trading/trades')
+      .then((data: any) => {
+        const trades = Array.isArray(data) ? data : (data?.data ?? [])
+        if (trades.length > 0) setTradeHistory(trades)
+      })
+      .catch(() => {})
+    const p5 = client.get('/portfolio/risk-metrics')
+      .then((data: any) => {
+        const rm = data?.data ?? data
+        if (rm && typeof rm === 'object') {
+          setRiskMetrics([
+            { label: 'VaR (95%)', value: rm.var95 ? `¥${rm.var95.toLocaleString()}` : '—', color: 'var(--color-danger)' },
+            { label: '波动率', value: rm.volatility ? `${(rm.volatility * 100).toFixed(1)}%` : '—' },
+            { label: '夏普比率', value: rm.sharpe ? rm.sharpe.toFixed(2) : '—', color: 'var(--color-success)' },
+            { label: '最大回撤', value: rm.max_drawdown ? `${(rm.max_drawdown * 100).toFixed(1)}%` : '—', color: 'var(--color-danger)' },
+            { label: 'Beta', value: rm.beta ? rm.beta.toFixed(2) : '—' },
+            { label: 'Alpha', value: rm.alpha ? `${(rm.alpha * 100).toFixed(1)}%` : '—', color: 'var(--color-success)' },
+          ])
+        }
+      })
+      .catch(() => {})
+    Promise.all([p1, p2, p3, p4, p5]).finally(() => setLoading(false))
   }, [])
 
   const totalValue = summary?.totalValue ?? positions.reduce((s, p) => s + p.shares * p.price, 0)
@@ -67,12 +89,22 @@ export default function Portfolio() {
     }
   }
 
-  const industryData = [
-    { sector: '白酒', value: 40, weight: 40 },
-    { sector: '金融', value: 25, weight: 25 },
-    { sector: '消费', value: 20, weight: 20 },
-    { sector: '其他', value: 15, weight: 15 },
-  ]
+  // 从持仓数据按市值计算行业分布（简化版：按代码前缀分类）
+  const industryData = positions.length > 0
+    ? (() => {
+        const sectorMap: Record<string, { value: number; weight: number }> = {}
+        const total = positions.reduce((s, p) => s + p.shares * p.price, 0)
+        for (const p of positions) {
+          const pp = p as Record<string, any>
+          const sector = pp.sector || pp.industry || '其他'
+          const mv = p.shares * p.price
+          if (!sectorMap[sector]) sectorMap[sector] = { value: 0, weight: 0 }
+          sectorMap[sector].value += mv
+          sectorMap[sector].weight += total > 0 ? (mv / total) * 100 : 0
+        }
+        return Object.entries(sectorMap).map(([sector, v]) => ({ sector, value: Math.round(v.value), weight: Math.round(v.weight) }))
+      })()
+    : []
 
   const columns = [
     { title: '代码', dataIndex: 'symbol', key: 'symbol', width: 110, render: (s: string) => (
@@ -99,38 +131,28 @@ export default function Portfolio() {
     )},
   ]
 
-  const tradeHistory = [
-    { tradeId: 'T001', symbol: 'sh600519', name: '贵州茅台', side: 'BUY', quantity: 100, price: 1680.0, amount: 168000, time: '2026-05-20 10:30' },
-    { tradeId: 'T002', symbol: 'sz000858', name: '五粮液', side: 'BUY', quantity: 500, price: 152.0, amount: 76000, time: '2026-05-18 14:15' },
-    { tradeId: 'T003', symbol: 'sh601318', name: '中国平安', side: 'BUY', quantity: 300, price: 45.5, amount: 13650, time: '2026-05-15 09:45' },
-    { tradeId: 'T004', symbol: 'sh600036', name: '招商银行', side: 'SELL', quantity: 200, price: 38.2, amount: 7640, time: '2026-05-12 11:00' },
-    { tradeId: 'T005', symbol: 'sz000333', name: '美的集团', side: 'SELL', quantity: 150, price: 62.8, amount: 9420, time: '2026-05-10 13:30' },
-  ]
-
   const tradeColumns = [
-    { title: '时间', dataIndex: 'time', key: 'time', width: 140 },
+    { title: '时间', dataIndex: 'time', key: 'time', width: 140, render: (v: string) => v || '—' },
     { title: '代码', dataIndex: 'symbol', key: 'symbol', width: 110, render: (s: string) => <Text style={{ fontFamily: 'var(--font-mono)' }}>{s}</Text> },
-    { title: '名称', dataIndex: 'name', key: 'name', width: 100 },
-    { title: '方向', dataIndex: 'side', key: 'side', width: 70, render: (s: string) => <Tag color={s === 'BUY' ? 'green' : 'red'}>{s === 'BUY' ? '买入' : '卖出'}</Tag> },
-    { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80, render: (v: number) => v.toLocaleString() },
-    { title: '价格', dataIndex: 'price', key: 'price', width: 90, render: (v: number) => v.toFixed(2) },
-    { title: '金额', dataIndex: 'amount', key: 'amount', width: 100, render: (v: number) => `¥${v.toLocaleString()}` },
+    { title: '名称', dataIndex: 'name', key: 'name', width: 100, render: (v: string) => v || '—' },
+    { title: '方向', dataIndex: 'side', key: 'side', width: 70, render: (s: string) => <Tag color={s === 'BUY' || s === 'buy' ? 'green' : 'red'}>{s === 'BUY' || s === 'buy' ? '买入' : '卖出'}</Tag> },
+    { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80, render: (v: number) => v?.toLocaleString() ?? '—' },
+    { title: '价格', dataIndex: 'price', key: 'price', width: 90, render: (v: number) => v?.toFixed(2) ?? '—' },
+    { title: '金额', dataIndex: 'amount', key: 'amount', width: 100, render: (v: number) => v ? `¥${v.toLocaleString()}` : '—' },
   ]
 
-  const riskMetrics = [
-    { label: 'VaR (95%)', value: '¥-12,345', color: 'var(--color-danger)' },
-    { label: '波动率', value: '18.5%' },
-    { label: '夏普比率', value: '1.42', color: 'var(--color-success)' },
-    { label: '最大回撤', value: '-8.3%', color: 'var(--color-danger)' },
-    { label: 'Beta', value: '0.87' },
-    { label: 'Alpha', value: '3.2%', color: 'var(--color-success)' },
+  const defaultRiskMetrics = [
+    { label: 'VaR (95%)', value: '—', color: 'var(--color-danger)' },
+    { label: '波动率', value: '—' },
+    { label: '夏普比率', value: '—', color: 'var(--color-success)' },
+    { label: '最大回撤', value: '—', color: 'var(--color-danger)' },
+    { label: 'Beta', value: '—' },
+    { label: 'Alpha', value: '—', color: 'var(--color-success)' },
   ]
+  const displayRiskMetrics = riskMetrics.length > 0 ? riskMetrics : defaultRiskMetrics
 
-  const equityDates = portfolioCurve?.dates ?? Array.from({ length: 30 }, (_, i) => dayjs().subtract(29 - i, 'day').format('MM-DD'))
-  const equityValues = portfolioCurve?.values ?? Array.from({ length: 30 }, (_, i) => {
-    const base = 1200000
-    return Math.round(base + i * 1500 + Math.sin(i / 3) * 8000 + Math.random() * 5000)
-  })
+  const equityDates = portfolioCurve?.dates ?? []
+  const equityValues = portfolioCurve?.values ?? []
 
   if (loading) {
     return (
@@ -191,7 +213,7 @@ export default function Portfolio() {
               {
                 key: 'history',
                 label: '历史交易',
-                children: <Table dataSource={tradeHistory} columns={tradeColumns} rowKey="tradeId" pagination={{ pageSize: 5, size: 'small' }} size="small" />,
+                children: <Table dataSource={tradeHistory} columns={tradeColumns} rowKey={(r: any) => r.tradeId ?? r.id ?? r.time ?? Math.random()} pagination={{ pageSize: 5, size: 'small' }} size="small" locale={{ emptyText: '暂无成交记录' }} />,
               },
             ]} />
           </Card>
@@ -201,7 +223,7 @@ export default function Portfolio() {
           <PnLTable positions={positions.map((p) => ({ symbol: p.symbol, name: p.name, pnl: p.pnl, pnlPct: p.pnlPct }))} />
           <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>风险指标</span>} style={{ marginTop: 12 }}>
             <Row gutter={[8, 8]}>
-              {riskMetrics.map((m) => (
+              {displayRiskMetrics.map((m) => (
                 <Col xs={12} key={m.label}>
                   <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', textTransform: 'uppercase' }}>{m.label}</div>
                   <div style={{ fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-mono)', color: m.color || 'var(--color-text-primary)' }}>

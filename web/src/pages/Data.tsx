@@ -5,6 +5,7 @@ import ReactECharts from 'echarts-for-react'
 import dayjs from 'dayjs'
 import { useDataStore } from '@/stores/dataStore'
 import { dataApi } from '@/api/data'
+import client from '@/api/client'
 import CacheStats from '@/components/Data/CacheStats'
 
 const { Title, Text } = Typography
@@ -32,10 +33,12 @@ export default function Data() {
   const [healthData, setHealthData] = useState<Record<string, { healthy: boolean }>>({})
 
   // Collect state (Task 2.10)
+  const [klineError, setKlineError] = useState<string | null>(null)
   const [collectingProvider, setCollectingProvider] = useState<string | null>(null)
   const [collectSymbol, setCollectSymbol] = useState('sh600519')
   const [collectModalOpen, setCollectModalOpen] = useState(false)
   const [collectTargetProvider, setCollectTargetProvider] = useState<string>('')
+  const [logData, setLogData] = useState<any[]>([])
 
   const handleClearCache = async () => {
     setClearingCache(true)
@@ -74,24 +77,7 @@ export default function Data() {
     }
   }
 
-  function generateMockKline(symbol: string, days: number) {
-    const data: [number, number, number, number, number][] = []
-    let basePrice = symbol.includes('600519') ? 1700 : symbol.includes('000858') ? 150 : 50
-    const dates: string[] = []
-    for (let i = days; i >= 0; i--) {
-      const d = dayjs().subtract(i, 'day').format('YYYY-MM-DD')
-      dates.push(d)
-      const open = basePrice + (Math.random() - 0.48) * basePrice * 0.02
-      const close = open + (Math.random() - 0.48) * basePrice * 0.03
-      const high = Math.max(open, close) + Math.random() * basePrice * 0.01
-      const low = Math.min(open, close) - Math.random() * basePrice * 0.01
-      data.push([open, close, low, high, 0] as [number, number, number, number, number]) // ECharts candlestick: [open, close, lowest, high, volume]
-      basePrice = close
-    }
-    return { dates, data }
-  }
-
-  const klineData = klineResult ?? generateMockKline(klineSymbol, 60)
+  const klineData = klineResult ?? { dates: [], data: [] }
 
   const previewData = klineResult && (klineResult as any).data
     ? (klineResult as any).dates.slice(-10).map((d: string, i: number) => {
@@ -107,6 +93,7 @@ export default function Data() {
 
   const handleFetchKline = () => {
     setKlineLoading(true)
+    setKlineError(null)
     const start = klineDates[0].format('YYYY-MM-DD')
     const end = klineDates[1].format('YYYY-MM-DD')
     dataApi.fetchKline(klineSymbol, 'auto', start, end)
@@ -114,14 +101,13 @@ export default function Data() {
         if (data && (data as any).data) {
           setKlineResult((data as any).data)
         } else if (Array.isArray(data) && data.length > 0) {
-          // API returned raw kline array
           setKlineResult({ dates: data.map((_: any, i: number) => dayjs().subtract(i, 'day').format('YYYY-MM-DD')), data: data })
+        } else {
+          setKlineError('未查询到数据')
         }
       })
-      .catch(() => {
-        // Fallback to mock
-        const result = generateMockKline(klineSymbol, 60)
-        setKlineResult(result)
+      .catch((err) => {
+        setKlineError(err?.message || '查询失败，请检查数据源配置')
       })
       .finally(() => setKlineLoading(false))
   }
@@ -144,7 +130,7 @@ export default function Data() {
     { title: '记录数', key: 'records', width: 100, render: () => '1,234,567' },
     { title: '操作', key: 'action', width: 160, render: (_: any, r: any) => (
       <Space>
-        <Button size="small" icon={<Download size={14} />}>下载</Button>
+        <Button size="small" icon={<Download size={14} />} onClick={() => handleDownload(r.provider)}>下载</Button>
         <Button
           size="small"
           icon={<CloudArrowDown size={14} />}
@@ -160,12 +146,27 @@ export default function Data() {
     )},
   ]
 
-  const logData = [
-    { key: '1', time: '2026-06-15 15:00', source: 'BaoStock', symbol: 'sh600519', status: 'success', records: 1200 },
-    { key: '2', time: '2026-06-15 14:00', source: 'AkShare', symbol: 'sz000858', status: 'success', records: 800 },
-    { key: '3', time: '2026-06-15 13:00', source: 'BaoStock', symbol: 'sh601318', status: 'warning', records: 0, note: '停牌' },
-    { key: '4', time: '2026-06-15 12:00', source: 'CSV', symbol: 'sh600036', status: 'error', records: 0, note: '文件不存在' },
-  ]
+  // Load collection logs from backend
+  useEffect(() => {
+    client.get('/data/collect-logs')
+      .then((data: any) => {
+        const logs = Array.isArray(data) ? data : (data?.data ?? [])
+        if (logs.length > 0) setLogData(logs)
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleDownload = async (provider: string) => {
+    try {
+      message.loading({ content: `${provider} 数据下载中...`, key: 'download', duration: 0 })
+      await client.get(`/data/download?provider=${provider}`)
+      message.success({ content: `${provider} 数据下载完成`, key: 'download' })
+      fetchSources()
+      fetchCacheStats()
+    } catch {
+      message.error({ content: `${provider} 数据下载失败`, key: 'download' })
+    }
+  }
 
   return (
     <div style={{ maxWidth: 1200 }}>
@@ -209,6 +210,11 @@ export default function Data() {
             查询
           </Button>
         </Space>
+        {klineError ? (
+          <div style={{ textAlign: 'center', padding: 60, color: 'var(--color-danger)', fontSize: 13 }}>
+            {klineError}
+          </div>
+        ) : klineData.data.length > 0 ? (
         <ReactECharts
           option={{
             tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
@@ -230,6 +236,11 @@ export default function Data() {
           style={{ height: 320 }}
           notMerge={true}
         />
+        ) : (
+          <div style={{ textAlign: 'center', padding: 60, color: 'var(--color-text-tertiary)', fontSize: 13 }}>
+            输入股票代码并点击「查询」查看 K 线数据
+          </div>
+        )}
       </Card>
 
       {/* Data preview */}

@@ -38,11 +38,11 @@ export const useTradingStore = create<TradingState>((set, get) => ({
         tradingApi.getPositions(),
         tradingApi.getTrades(),
       ])
-      set({ account, orders, positions, trades, loading: false })
+      set({ account, orders: orders ?? [], positions: positions ?? [], trades: trades ?? [], loading: false })
     } catch (err) {
       console.error('[tradingStore] refreshAll failed:', err)
       message.error('数据加载失败')
-      set({ loading: false })
+      set({ orders: [], positions: [], trades: [], loading: false })
     }
   },
 

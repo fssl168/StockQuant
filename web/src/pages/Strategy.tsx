@@ -219,10 +219,11 @@ export default function Strategy() {
         setAiDescription('')
         message.success('策略生成成功')
       } else {
-        message.info('AI 策略生成功能开发中')
+        message.error(body.message || body.error || 'AI 未返回有效策略代码，请尝试更详细的描述')
       }
-    } catch {
-      message.info('AI 策略生成功能开发中')
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.detail || err?.message || 'AI 策略生成失败，请检查 LLM 配置后重试'
+      message.error(errMsg)
     } finally {
       setAiGenerating(false)
     }

@@ -33,6 +33,23 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     checkAuth()
+    // 监听 storage 事件，当 client.ts 清除 token 时同步状态
+    const onStorage = () => {
+      if (!localStorage.getItem('auth_token')) {
+        useAuthStore.setState({ token: null, user: null, isAuthenticated: false })
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    // 轮询检查 token 是否被 401 拦截器清除
+    const timer = setInterval(() => {
+      if (!localStorage.getItem('auth_token') && useAuthStore.getState().isAuthenticated) {
+        useAuthStore.setState({ token: null, user: null, isAuthenticated: false })
+      }
+    }, 1000)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      clearInterval(timer)
+    }
   }, [checkAuth])
 
   if (!isAuthenticated) {

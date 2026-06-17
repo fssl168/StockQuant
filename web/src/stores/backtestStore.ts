@@ -14,10 +14,11 @@ export const useBacktestStore = create<BacktestState>((set, get) => ({
   fetchTasks: async () => {
     set({ loading: true })
     try {
-      const tasks = await backtestApi.list()
+      const res: any = await backtestApi.list()
+      const tasks = Array.isArray(res) ? res : (res?.tasks ?? res?.data ?? [])
       set({ tasks, loading: false })
     } catch {
-      set({ loading: false })
+      set({ tasks: [], loading: false })
     }
   },
   submitTask: async (data) => {

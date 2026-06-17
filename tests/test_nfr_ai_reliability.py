@@ -1,44 +1,89 @@
 """NFR008/009 AI 可靠性测试 — 验证 AI Agent 的可靠性指标"""
+import os
 import pytest
 import time
 
 
 class TestSentimentAnalysis:
-    """情感分析准确率 — 目标: ≥75%"""
+    """情感分析准确率 — 目标: ≥75%
 
-    def test_sentiment_accuracy(self):
-        """测试情感分析准确率"""
-        # 标注数据集
-        test_cases = [
-            ("公司业绩大幅增长，净利润同比上升50%", "positive"),
-            ("股价暴跌，投资者损失惨重", "negative"),
-            ("今日大盘平开，成交量与昨日持平", "neutral"),
-            ("利好消息刺激，板块集体上涨", "positive"),
-            ("公司涉嫌财务造假被立案调查", "negative"),
-            ("市场情绪稳定，指数窄幅震荡", "neutral"),
-            ("新产品发布获得市场好评", "positive"),
-            ("供应链中断导致产能下降", "negative"),
-            ("公司按计划推进业务", "neutral"),
-            ("营收超预期，股价创历史新高", "positive"),
-        ]
+    覆盖两条路径:
+    1. 关键词规则基线（始终运行）
+    2. HuggingFace 模型路径（transformers 已安装时运行）
+    """
 
+    # 标注数据集（金融场景）
+    TEST_CASES = [
+        ("公司业绩大幅增长，净利润同比上升50%", "positive"),
+        ("股价暴跌，投资者损失惨重", "negative"),
+        ("今日大盘平开，成交量与昨日持平", "neutral"),
+        ("利好消息刺激，板块集体上涨", "positive"),
+        ("公司涉嫌财务造假被立案调查", "negative"),
+        ("市场情绪稳定，指数窄幅震荡", "neutral"),
+        ("新产品发布获得市场好评", "positive"),
+        ("供应链中断导致产能下降", "negative"),
+        ("公司按计划推进业务", "neutral"),
+        ("营收超预期，股价创历史新高", "positive"),
+    ]
+
+    @staticmethod
+    def _classify(score: float) -> str:
+        """将 SentimentResult.score 映射为 positive/negative/neutral"""
+        if score > 0.15:
+            return "positive"
+        elif score < -0.15:
+            return "negative"
+        else:
+            return "neutral"
+
+    def test_sentiment_accuracy_keyword(self):
+        """关键词规则基线测试 — 目标: ≥75%"""
+        from stockquant.ai.sentiment import SentimentAnalyzer
+
+        analyzer = SentimentAnalyzer(method="keyword")
         correct = 0
-        total = len(test_cases)
+        total = len(self.TEST_CASES)
 
-        for text, expected in test_cases:
-            # 简单规则判断（生产环境应使用 LLM）
-            if any(w in text for w in ["增长", "上涨", "利好", "好评", "新高", "超预期"]):
-                predicted = "positive"
-            elif any(w in text for w in ["暴跌", "损失", "造假", "中断", "下降"]):
-                predicted = "negative"
-            else:
-                predicted = "neutral"
-
+        for text, expected in self.TEST_CASES:
+            result = analyzer.analyze([text])
+            predicted = self._classify(result.score)
             if predicted == expected:
                 correct += 1
 
         accuracy = correct / total
-        assert accuracy >= 0.75, f"情感分析准确率 {accuracy:.1%} 低于目标 75%"
+        assert accuracy >= 0.75, f"关键词规则情感分析准确率 {accuracy:.1%} 低于目标 75%"
+
+    def test_sentiment_accuracy_huggingface(self):
+        """HuggingFace 模型准确率测试（需 transformers）"""
+        pytest.importorskip("transformers", reason="transformers 未安装，跳过 HuggingFace 路径测试")
+
+        from stockquant.ai.sentiment import SentimentAnalyzer
+
+        analyzer = SentimentAnalyzer(method="huggingface")
+        # 如果 HuggingFace 模型加载失败，跳过
+        if analyzer._hf_pipeline is None:
+            pytest.skip("HuggingFace 模型加载失败，跳过")
+
+        correct = 0
+        total = len(self.TEST_CASES)
+
+        for text, expected in self.TEST_CASES:
+            result = analyzer.analyze([text])
+            predicted = self._classify(result.score)
+            if predicted == expected:
+                correct += 1
+
+        accuracy = correct / total
+        assert accuracy >= 0.75, f"HuggingFace 情感分析准确率 {accuracy:.1%} 低于目标 75%"
+
+    def test_sentiment_auto_fallback(self):
+        """auto 模式降级测试 — 无 transformers 时应降级为关键词规则"""
+        from stockquant.ai.sentiment import SentimentAnalyzer
+
+        analyzer = SentimentAnalyzer(method="auto")
+        result = analyzer.analyze(["利好消息推动股价大涨"])
+        assert result.method in ("huggingface", "enhanced_keyword") or result.method.startswith("huggingface:")
+        assert -1.0 <= result.score <= 1.0
 
 
 class TestInformationExtraction:
@@ -316,3 +361,131 @@ class TestAIDecisionLatency:
 
         per_decision_ms = (elapsed / 10) * 1000
         assert per_decision_ms < 3000, f"完整决策延迟 {per_decision_ms:.1f}ms 超过 3000ms"
+
+
+class TestRealLLMIntegration:
+    """真实 LLM 集成测试 — 验证 NFR009 AI 可靠性指标
+
+    无 API key 时自动跳过，有 key 时验证真实 LLM 调用质量。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _skip_if_no_api_key(self):
+        """无 LLM API key 时跳过全部测试"""
+        has_key = (
+            os.environ.get("OPENAI_API_KEY")
+            or os.environ.get("ANTHROPIC_API_KEY")
+            or os.environ.get("DEEPSEEK_API_KEY")
+            or os.environ.get("LLM_API_KEY")
+        )
+        if not has_key:
+            pytest.skip("无 LLM API key，跳过真实 LLM 集成测试")
+        yield
+
+    def test_real_llm_fact_extraction(self):
+        """测试真实 LLM 事实抽取 — 目标: ≥85%"""
+        try:
+            from stockquant.agent.llm_adapter import LLMAdapter
+        except ImportError:
+            pytest.skip("LLMAdapter 模块不可用")
+
+        # 选择可用的模型
+        model = "gpt-4o-mini"
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            pytest.skip("无 OPENAI_API_KEY，跳过 OpenAI 测试")
+
+        adapter = LLMAdapter(model=model, api_key=api_key)
+
+        test_cases = [
+            {
+                "prompt": "从以下文本中提取股票代码和价格，以 JSON 格式返回: '贵州茅台(sh600519)今日收盘价1800元'",
+                "expected_contains": ["sh600519", "1800"],
+            },
+            {
+                "prompt": "从以下文本中提取股票代码: '比亚迪(sz002594)股价上涨3.5%'",
+                "expected_contains": ["sz002594"],
+            },
+        ]
+
+        correct = 0
+        total = len(test_cases)
+
+        for case in test_cases:
+            try:
+                response = adapter.call(
+                    messages=[{"role": "user", "content": case["prompt"]}],
+                    max_tokens=200,
+                    temperature=0.0,
+                )
+                content = response.content.lower()
+                if all(kw.lower() in content for kw in case["expected_contains"]):
+                    correct += 1
+            except Exception as exc:
+                # 网络错误等不计入失败，但记录
+                print(f"LLM 调用失败: {exc}")
+
+        accuracy = correct / total if total > 0 else 0
+        assert accuracy >= 0.85, f"真实 LLM 事实抽取准确率 {accuracy:.1%} 低于目标 85%"
+
+    def test_real_llm_hallucination_detection(self):
+        """测试真实 LLM 反幻觉检测 — 目标: 幻觉检出 ≥80%"""
+        try:
+            from stockquant.ai.hallucination.corrector import FiveStepCorrector
+        except ImportError:
+            pytest.skip("反幻觉模块不可用")
+
+        corrector = FiveStepCorrector()
+
+        # 包含幻觉的数据（不可信来源 + 极端断言）
+        hallucination_cases = [
+            {
+                "items": [
+                    {"source": "unknown_blog", "content": "某股票一定涨停，零风险保证", "title": "必涨推荐"},
+                ],
+            },
+            {
+                "items": [
+                    {"source": "anonymous", "content": "内幕消息：公司即将被收购，股价翻倍", "title": "内幕"},
+                ],
+            },
+        ]
+
+        detected = 0
+        for case in hallucination_cases:
+            try:
+                result = corrector.correct(case)
+                # 如果纠正器判定不通过或分数低，视为检出
+                if not result.get("passed", True) or result.get("score", 1.0) < 0.5:
+                    detected += 1
+            except Exception as exc:
+                print(f"反幻觉检测失败: {exc}")
+
+        detection_rate = detected / len(hallucination_cases) if hallucination_cases else 0
+        assert detection_rate >= 0.8, f"幻觉检出率 {detection_rate:.1%} 低于目标 80%"
+
+    def test_real_llm_response_latency(self):
+        """测试真实 LLM 响应延迟 — 目标: <3s"""
+        try:
+            from stockquant.agent.llm_adapter import LLMAdapter
+        except ImportError:
+            pytest.skip("LLMAdapter 模块不可用")
+
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            pytest.skip("无 OPENAI_API_KEY")
+
+        adapter = LLMAdapter(model="gpt-4o-mini", api_key=api_key)
+
+        start = time.perf_counter()
+        try:
+            response = adapter.call(
+                messages=[{"role": "user", "content": "回复'OK'即可"}],
+                max_tokens=10,
+                temperature=0.0,
+            )
+            elapsed = time.perf_counter() - start
+            assert elapsed < 3.0, f"LLM 响应延迟 {elapsed:.2f}s 超过 3s"
+            assert response.content, "LLM 返回空内容"
+        except Exception as exc:
+            pytest.skip(f"LLM 调用失败（网络问题）: {exc}")

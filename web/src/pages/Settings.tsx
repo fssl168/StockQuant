@@ -118,12 +118,13 @@ const GROUPS: GroupEntry[] = [
     iconComponent: <Brain size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'decision.mode', value: 'semi_auto', defaultValue: 'semi_auto', value_type: 'select', label: '决策模式', description: 'AI 辅助决策模式', secret: false, options: [{ value: 'auto', label: '全自动' }, { value: 'semi_auto', label: '半自动' }, { value: 'read_only', label: '只读' }] },
-      { key: 'ai.model', value: 'gpt-4o', defaultValue: 'gpt-4o', value_type: 'string', label: '主模型', description: 'OpenAI / 兼容 API 模型名称', secret: false },
+      { key: 'ai.provider', value: 'openai', defaultValue: 'openai', value_type: 'select', label: 'AI 模型', description: '主模型', secret: false, options: [{ value: 'openai', label: 'OpenAI' }, { value: 'anthropic', label: 'Anthropic' }, { value: 'custom', label: '自定义' }] },
+      { key: 'ai.model', value: 'gpt-4o', defaultValue: 'gpt-4o', value_type: 'string', label: '主模型', description: 'OpenAI / 兼容 API 模型名称', secret: false, when: { field: 'ai.provider', values: ['openai', 'custom'] } },
       { key: 'ai.api_key', value: '', defaultValue: '', value_type: 'password', label: 'API Key', description: 'OpenAI / 兼容 API 密钥', secret: true },
       { key: 'ai.api_base', value: '', defaultValue: '', value_type: 'string', label: 'API Base URL', description: '自定义 API 地址（留空用官方默认）', secret: false },
       { key: 'ai.temperature', value: 0.7, defaultValue: 0.7, value_type: 'float', label: 'Temperature', description: '生成温度 (0-2)', secret: false, min: 0, max: 2, step: 0.1, scale: 10, slider: true },
       { key: 'ai.max_tokens', value: 4096, defaultValue: 4096, value_type: 'number', label: 'Max Tokens', description: '单次最大生成 token 数', secret: false, min: 256, max: 128000, step: 256 },
-      { key: 'ai.anthropic_model', value: 'claude-sonnet-4-20250514', defaultValue: 'claude-sonnet-4-20250514', value_type: 'string', label: 'Anthropic 模型', description: 'Claude 模型名称', secret: false },
+      { key: 'ai.anthropic_model', value: 'claude-sonnet-4-20250514', defaultValue: 'claude-sonnet-4-20250514', value_type: 'string', label: 'Anthropic 模型', description: 'Claude 模型名称', secret: false, when: { field: 'ai.provider', values: ['anthropic'] } },
       { key: 'ai.anthropic_api_key', value: '', defaultValue: '', value_type: 'password', label: 'Anthropic API Key', description: 'Anthropic API 密钥', secret: true },
       { key: 'ai.anthropic_api_base', value: '', defaultValue: '', value_type: 'string', label: 'Anthropic API Base', description: '自定义 Anthropic API 地址', secret: false },
     ],
@@ -205,6 +206,7 @@ export default function Settings() {
   const [adminToken, setAdminToken] = useState('')
   const [saving, setSaving] = useState(false)
   const [allExpanded, setAllExpanded] = useState(true)
+  const [activeKeys, setActiveKeys] = useState<string[]>([])
   const passwordRef = useRef<any>(null)
 
   useEffect(() => {
@@ -212,6 +214,7 @@ export default function Settings() {
     GROUPS.forEach((g) => g.items.forEach((item) => { initial[item.key] = item.value }))
     // Also include default values for extracted component keys
     initial['decision.mode'] = 'semi_auto'
+    initial['ai.provider'] = 'openai'
     initial['ai.model'] = 'gpt-4o'
     initial['ai.api_key'] = ''
     initial['ai.api_base'] = ''
@@ -223,7 +226,11 @@ export default function Settings() {
     initial['evolution.enabled'] = false
     initial['evolution.llm_provider'] = 'openai'
     initial['evolution.llm_model'] = 'gpt-4o'
+    initial['evolution.anthropic_model'] = 'claude-3-opus'
     initial['evolution.llm_temperature'] = 0.5
+    initial['evolution.max_tokens'] = 4096
+    initial['evolution.api_key'] = ''
+    initial['evolution.api_base'] = ''
     initial['evolution.llm_retry'] = 3
     initial['notification.dingtalk_webhook'] = ''
     initial['notification.wechat_webhook'] = ''
@@ -252,6 +259,7 @@ export default function Settings() {
       // Check against defaults from all sources
       const allDefaults: Record<string, unknown> = {}
       GROUPS.forEach((g) => g.items.forEach((item) => { allDefaults[item.key] = item.defaultValue }))
+      allDefaults['ai.provider'] = 'openai'
       allDefaults['ai.model'] = 'gpt-4o'
       allDefaults['ai.api_key'] = ''
       allDefaults['ai.api_base'] = ''
@@ -263,7 +271,11 @@ export default function Settings() {
       allDefaults['evolution.enabled'] = false
       allDefaults['evolution.llm_provider'] = 'openai'
       allDefaults['evolution.llm_model'] = 'gpt-4o'
+      allDefaults['evolution.anthropic_model'] = 'claude-3-opus'
       allDefaults['evolution.llm_temperature'] = 0.5
+      allDefaults['evolution.max_tokens'] = 4096
+      allDefaults['evolution.api_key'] = ''
+      allDefaults['evolution.api_base'] = ''
       allDefaults['evolution.llm_retry'] = 3
       allDefaults['notification.dingtalk_webhook'] = ''
       allDefaults['notification.wechat_webhook'] = ''
@@ -273,7 +285,7 @@ export default function Settings() {
       else next.delete(key)
       return next
     })
-  }, [])
+  }, [values])
 
   const SENSITIVE_PATTERNS = ['key', 'secret', 'password', 'token', 'webhook']
 
@@ -333,6 +345,7 @@ export default function Settings() {
     const initial: Record<string, unknown> = {}
     GROUPS.forEach((g) => g.items.forEach((item) => { initial[item.key] = item.value }))
     initial['decision.mode'] = 'semi_auto'
+    initial['ai.provider'] = 'openai'
     initial['ai.model'] = 'gpt-4o'
     initial['ai.api_key'] = ''
     initial['ai.api_base'] = ''
@@ -344,7 +357,11 @@ export default function Settings() {
     initial['evolution.enabled'] = false
     initial['evolution.llm_provider'] = 'openai'
     initial['evolution.llm_model'] = 'gpt-4o'
+    initial['evolution.anthropic_model'] = 'claude-3-opus'
     initial['evolution.llm_temperature'] = 0.5
+    initial['evolution.max_tokens'] = 4096
+    initial['evolution.api_key'] = ''
+    initial['evolution.api_base'] = ''
     initial['evolution.llm_retry'] = 3
     initial['notification.dingtalk_webhook'] = ''
     initial['notification.wechat_webhook'] = ''
@@ -354,8 +371,15 @@ export default function Settings() {
     setDirtyKeys(new Set())
   }
 
+  const getVal = (key: string, fallback?: unknown) => {
+    const v = values[key]
+    if (v === null || v === undefined) return fallback
+    if (typeof v === 'object') return fallback ?? ''
+    return v
+  }
+
   const renderControl = (item: SettingEntry) => {
-    const val = values[item.key]
+    const val = getVal(item.key, item.value)
 
     switch (item.value_type) {
       case 'boolean':
@@ -476,13 +500,21 @@ export default function Settings() {
             <Switch
               size="small"
               checked={viewMode === 'expert'}
-              onChange={(checked) => setViewMode(checked ? 'expert' : 'wizard')}
+              onChange={(checked) => {
+                setViewMode(checked ? 'expert' : 'wizard')
+                setActiveKeys([])
+              }}
             />
             <Text style={{ fontSize: 13, fontWeight: viewMode === 'expert' ? 600 : 400 }}>专家模式</Text>
           </Space>
-          <Button size="small" type="link" onClick={() => setAllExpanded(!allExpanded)}>
-            {allExpanded ? '全部折叠' : '全部展开'}
-          </Button>
+          {viewMode === 'expert' && (
+            <Button size="small" type="link" onClick={() => {
+              setAllExpanded(!allExpanded)
+              setActiveKeys(allExpanded ? [] : GROUPS.map((g) => g.key))
+            }}>
+              {allExpanded ? '全部折叠' : '全部展开'}
+            </Button>
+          )}
         </Space>
         <Space>
           {dirtyCount > 0 && (
@@ -498,7 +530,8 @@ export default function Settings() {
         <Collapse
           bordered={false}
           expandIconPosition="right"
-          defaultActiveKey={['ai_model', 'broker_channel', 'notification']}
+          activeKey={activeKeys.length > 0 ? activeKeys : ['ai_model', 'broker_channel', 'notification']}
+          onChange={(keys) => setActiveKeys(keys as string[])}
           style={{ background: 'transparent' }}
           items={GROUPS.filter((g) => ['ai_model', 'broker_channel', 'notification'].includes(g.key)).map((g) => {
             if (g.key === 'ai_model') {
@@ -580,7 +613,8 @@ export default function Settings() {
         <Collapse
           bordered={false}
           expandIconPosition="right"
-          defaultActiveKey={allExpanded ? GROUPS.map((g) => g.key) : []}
+          activeKey={activeKeys.length > 0 ? activeKeys : (allExpanded ? GROUPS.map((g) => g.key) : [])}
+          onChange={(keys) => setActiveKeys(keys as string[])}
           style={{ background: 'transparent' }}
           items={GROUPS.map((g) => {
             // Handle extracted component groups
@@ -590,7 +624,7 @@ export default function Settings() {
                 label: (
                   <Space style={{ fontSize: 13, fontWeight: 600 }}>
                     <Brain size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> {g.label}
-                    <Tag color="default" style={{ fontSize: 11, margin: 0 }}>8</Tag>
+                    <Tag color="default" style={{ fontSize: 11, margin: 0 }}>9</Tag>
                   </Space>
                 ),
                 children: <LLMConfigForm values={values} onChange={handleValueChange} />,
@@ -602,7 +636,7 @@ export default function Settings() {
                 label: (
                   <Space style={{ fontSize: 13, fontWeight: 600 }}>
                     <Rocket size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> {g.label}
-                    <Tag color="default" style={{ fontSize: 11, margin: 0 }}>5</Tag>
+                    <Tag color="default" style={{ fontSize: 11, margin: 0 }}>9</Tag>
                   </Space>
                 ),
                 children: <AgentToggles values={values} onChange={handleValueChange} />,
