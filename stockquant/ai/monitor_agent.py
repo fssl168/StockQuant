@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Callable
 import numpy as np
 
 from stockquant.ai.news_searcher import NewsSearcher
+from stockquant.ai.json_utils import robust_json_parse
 
 logger = logging.getLogger("stockquant.ai")
 
@@ -259,7 +260,10 @@ class MonitorAgent:
         return signals
 
     def _on_high_confidence_signal(self, signal: MonitorSignal) -> None:
-        """高置信度信号回调：通知推送"""
+        """高置信度信号回调：通知推送 + WS 广播"""
+        # 0. 通过 WebSocket 广播到 monitor 频道（前端实时推送）
+        self._try_push_ws_signal(signal)
+
         # 1. 通知回调
         for callback in self._on_alert_callbacks:
             try:
@@ -279,6 +283,31 @@ class MonitorAgent:
             "confidence": signal.confidence,
             "reason": signal.reason,
         })
+
+    def _try_push_ws_signal(self, signal: MonitorSignal) -> None:
+        """通过 WebSocket 广播监控信号到前端 monitor 频道"""
+        try:
+            ws_mgr = getattr(self, "_ws_manager", None)
+            if ws_mgr is not None:
+                from stockquant.api.websocket import ws_manager as global_ws
+                mgr = ws_mgr if ws_mgr is not global_ws else ws_mgr
+                signal_dict = {
+                    "symbol": signal.symbol,
+                    "direction": signal.direction,
+                    "reason": signal.reason,
+                    "confidence": signal.confidence,
+                    "signal_type": signal.signal_type,
+                    "is_portfolio_hold": signal.is_portfolio_hold,
+                    "timestamp": signal.timestamp.isoformat() if hasattr(signal.timestamp, "isoformat") else str(signal.timestamp),
+                }
+                # 调用 push 方法广播到 monitor 频道
+                if hasattr(mgr, 'push'):
+                    mgr.push("alert", signal_dict, "monitor")
+                    logger.info("WS alert pushed for %s (%s)", signal.symbol, signal.direction)
+                elif hasattr(mgr, 'broadcast'):
+                    mgr.broadcast("alert", signal_dict, "monitor")
+        except Exception:
+            pass  # 非致命：WS 管理器未配置或推送失败
 
     def _try_push_notification(self, signal: MonitorSignal) -> None:
         """尝试通过消息路由器推送通知。"""
@@ -313,6 +342,522 @@ class MonitorAgent:
                 signal.notification_sent = True
         except Exception:
             pass  # 非致命：通知器未配置
+
+    def generate_premarket_briefing(self, watchlist: list[str]) -> dict:
+        """生成盘前简报（结构化 dict）。
+
+        包含：隔夜全球市场概览、自选股关键新闻、技术关键位、建议关注标的。
+
+        Parameters
+        ----------
+        watchlist : list[str]
+            自选股代码列表
+
+        Returns
+        -------
+        dict
+            {
+                "global_markets": {...},
+                "key_news": [...],
+                "technical_levels": [...],
+                "focus_stocks": [...],
+                "timestamp": "..."
+            }
+        """
+        now_str = datetime.now().isoformat()
+        result: dict = {
+            "global_markets": {},
+            "key_news": [],
+            "technical_levels": [],
+            "focus_stocks": [],
+            "timestamp": now_str,
+        }
+
+        # 1. 隔夜全球市场概览
+        result["global_markets"] = self._build_global_market_summary()
+
+        # 2. 自选股关键新闻
+        for symbol in watchlist:
+            news_items = self._fetch_news_items(symbol, days=1)
+            for item in news_items:
+                result["key_news"].append({
+                    "symbol": symbol,
+                    "title": item.get("title", ""),
+                    "sentiment": item.get("sentiment", 0.0),
+                    "source": item.get("source", ""),
+                })
+
+        # 3. 技术关键位（支撑/阻力）
+        for symbol in watchlist:
+            levels = self._compute_technical_levels(symbol)
+            if levels:
+                result["technical_levels"].append({
+                    "symbol": symbol,
+                    "support": levels.get("support"),
+                    "resistance": levels.get("resistance"),
+                    "current": levels.get("current"),
+                    "trend": levels.get("trend"),
+                })
+
+        # 4. 建议关注标的
+        result["focus_stocks"] = self._suggest_focus_stocks(watchlist)
+
+        # 尝试 LLM 增强
+        llm_result = self._try_llm_premarket_briefing(watchlist, result)
+        if llm_result is not None:
+            return llm_result
+
+        return result
+
+    def _build_global_market_summary(self) -> dict:
+        """构建隔夜全球市场概览（基于新闻搜索降级）。"""
+        summary: dict = {
+            "us_markets": "数据暂不可用",
+            "europe_markets": "数据暂不可用",
+            "asia_markets": "数据暂不可用",
+            "commentary": "",
+        }
+        if not self._news_searcher:
+            return summary
+
+        try:
+            # 通过新闻搜索获取全球市场信息
+            for keyword, key in [("美股", "us_markets"), ("欧洲股市", "europe_markets"), ("亚太股市", "asia_markets")]:
+                items = self._news_searcher.search(keyword, days=1)
+                if items:
+                    top = items[0]
+                    summary[key] = top.title if hasattr(top, "title") else str(top)
+                    if hasattr(top, "sentiment"):
+                        summary[key] += f" (情绪: {top.sentiment:.2f})"
+        except Exception:
+            logger.debug("Global market summary via news search failed")
+        return summary
+
+    def _fetch_news_items(self, symbol: str, days: int = 1) -> list[dict]:
+        """获取标的新闻条目（返回 list[dict]）。"""
+        if not self._news_searcher:
+            return []
+        try:
+            raw = self._news_searcher.search(symbol, days=days)
+            items = []
+            for n in raw:
+                if hasattr(n, "to_dict"):
+                    items.append(n.to_dict())
+                elif hasattr(n, "__dict__"):
+                    items.append(vars(n))
+                else:
+                    items.append({"title": str(n), "sentiment": 0.0})
+            return items
+        except Exception:
+            return []
+
+    def _compute_technical_levels(self, symbol: str) -> Optional[dict]:
+        """计算技术关键位（支撑/阻力/趋势）。"""
+        if not self._fetcher_manager:
+            return None
+        try:
+            df = self._fetcher_manager.fetch(symbol, days=60)
+            if df is None or len(df) < 20:
+                return None
+
+            close_arr = df["close"]
+            closes = close_arr.values if hasattr(close_arr, "values") else np.asarray(close_arr)
+            current = float(closes[-1])
+
+            # 布林带作为支撑/阻力
+            boll = self._bollinger(closes, 20)
+            if boll is not None:
+                support = float(boll[0])
+                resistance = float(boll[2])
+            else:
+                support = float(np.min(closes[-20:]))
+                resistance = float(np.max(closes[-20:]))
+
+            # 趋势判断
+            if len(closes) >= 60:
+                ma5 = float(np.mean(closes[-5:]))
+                ma20 = float(np.mean(closes[-20:]))
+                ma60 = float(np.mean(closes[-60:]))
+                if ma5 > ma20 > ma60:
+                    trend = "uptrend"
+                elif ma5 < ma20 < ma60:
+                    trend = "downtrend"
+                else:
+                    trend = "sideways"
+            else:
+                trend = "unknown"
+
+            return {
+                "support": round(support, 2),
+                "resistance": round(resistance, 2),
+                "current": round(current, 2),
+                "trend": trend,
+            }
+        except Exception:
+            return None
+
+    def _suggest_focus_stocks(self, watchlist: list[str]) -> list[dict]:
+        """建议关注标的（基于信号强度排序）。"""
+        scored: list[dict] = []
+        for symbol in watchlist:
+            try:
+                signals = self._detect_technical_signals(symbol)
+                news_signals = self._check_news_sentiment(symbol)
+                all_signals = signals + news_signals
+                if all_signals:
+                    best = max(all_signals, key=lambda s: s.confidence)
+                    scored.append({
+                        "symbol": symbol,
+                        "direction": best.direction,
+                        "confidence": round(best.confidence, 2),
+                        "reason": best.reason,
+                    })
+            except Exception:
+                continue
+        scored.sort(key=lambda x: x["confidence"], reverse=True)
+        return scored[:5]
+
+    def _try_llm_premarket_briefing(self, watchlist: list[str], data: dict) -> Optional[dict]:
+        """尝试通过 LLM 增强盘前简报，失败则返回 None。"""
+        try:
+            from stockquant.agent.llm_adapter import LLMAdapter
+            from stockquant.config import get_config
+            ai_cfg = get_config().get("ai", {})
+            adapter = LLMAdapter(
+                model=ai_cfg.get("model", "gpt-4o"),
+                api_key=ai_cfg.get("api_key") or None,
+                base_url=ai_cfg.get("api_base") or None,
+            )
+            prompt = (
+                "你是一位专业的A股市场分析师。请基于以下数据，生成一份结构化的盘前简报分析。\n"
+                "要求：对每个板块给出简明分析，重点标注风险和机会。返回 JSON 格式，"
+                "包含 global_markets_analysis, key_news_analysis, technical_analysis, focus_recommendation 字段。\n\n"
+                f"数据：{data}"
+            )
+            resp = adapter.call(
+                messages=[
+                    {"role": "system", "content": "你是专业A股分析师，只返回JSON。"},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                max_tokens=2048,
+            )
+            if resp.content:
+                parsed = robust_json_parse(resp.content)
+                if isinstance(parsed, dict):
+                    # 合并 LLM 增强结果
+                    data["llm_analysis"] = parsed
+                    return data
+        except Exception:
+            logger.debug("LLM premarket briefing enhancement failed, using structured fallback")
+        return None
+
+    def generate_postmarket_summary(self, watchlist: list[str]) -> dict:
+        """生成收盘总结（结构化 dict）。
+
+        包含：大盘指数表现、自选股表现、异动与成交量、当日关键信号、次日催化剂预览。
+
+        Parameters
+        ----------
+        watchlist : list[str]
+            自选股代码列表
+
+        Returns
+        -------
+        dict
+            {
+                "market_indices": {...},
+                "watchlist_performance": [...],
+                "notable_events": [...],
+                "key_signals": [...],
+                "next_day_catalysts": [...],
+                "timestamp": "..."
+            }
+        """
+        now_str = datetime.now().isoformat()
+        result: dict = {
+            "market_indices": {},
+            "watchlist_performance": [],
+            "notable_events": [],
+            "key_signals": [],
+            "next_day_catalysts": [],
+            "timestamp": now_str,
+        }
+
+        # 1. 大盘指数表现
+        result["market_indices"] = self._build_market_indices_summary()
+
+        # 2. 自选股表现
+        for symbol in watchlist:
+            perf = self._compute_stock_performance(symbol)
+            if perf:
+                result["watchlist_performance"].append(perf)
+
+        # 3. 异动与成交量
+        for symbol in watchlist:
+            events = self._detect_anomalies(symbol)
+            for e in events:
+                result["notable_events"].append({
+                    "symbol": symbol,
+                    "reason": e.reason,
+                    "confidence": round(e.confidence, 2),
+                    "signal_type": e.signal_type,
+                })
+
+        # 4. 当日关键信号
+        today_alerts = [s for s in self._alerts if s.timestamp.date() == datetime.now().date()]
+        for sig in today_alerts[-20:]:
+            result["key_signals"].append({
+                "symbol": sig.symbol,
+                "direction": sig.direction,
+                "reason": sig.reason,
+                "confidence": round(sig.confidence, 2),
+                "signal_type": sig.signal_type,
+                "timestamp": sig.timestamp.isoformat(),
+            })
+
+        # 5. 次日催化剂预览
+        result["next_day_catalysts"] = self._preview_next_day_catalysts(watchlist)
+
+        # 尝试 LLM 增强
+        llm_result = self._try_llm_postmarket_summary(watchlist, result)
+        if llm_result is not None:
+            return llm_result
+
+        return result
+
+    def _build_market_indices_summary(self) -> dict:
+        """构建大盘指数表现（上证/深证/创业板）。"""
+        indices: dict = {
+            "SSE": {"name": "上证指数", "change_pct": None, "commentary": "数据暂不可用"},
+            "SZSE": {"name": "深证成指", "change_pct": None, "commentary": "数据暂不可用"},
+            "ChiNext": {"name": "创业板指", "change_pct": None, "commentary": "数据暂不可用"},
+        }
+        if not self._fetcher_manager:
+            return indices
+
+        index_map = {
+            "SSE": "sh000001",
+            "SZSE": "sz399001",
+            "ChiNext": "sz399006",
+        }
+        for key, code in index_map.items():
+            try:
+                df = self._fetcher_manager.fetch(code, days=5)
+                if df is not None and len(df) >= 2:
+                    close_arr = df["close"]
+                    closes = close_arr.values if hasattr(close_arr, "values") else np.asarray(close_arr)
+                    pct = (closes[-1] - closes[-2]) / closes[-2] * 100
+                    indices[key]["change_pct"] = round(float(pct), 2)
+                    if pct > 1.0:
+                        indices[key]["commentary"] = "强势上涨"
+                    elif pct > 0:
+                        indices[key]["commentary"] = "小幅上涨"
+                    elif pct > -1.0:
+                        indices[key]["commentary"] = "小幅下跌"
+                    else:
+                        indices[key]["commentary"] = "明显下跌"
+            except Exception:
+                continue
+        return indices
+
+    def _compute_stock_performance(self, symbol: str) -> Optional[dict]:
+        """计算个股表现。"""
+        if not self._fetcher_manager:
+            return None
+        try:
+            df = self._fetcher_manager.fetch(symbol, days=5)
+            if df is None or len(df) < 2:
+                return None
+
+            close_arr = df["close"]
+            closes = close_arr.values if hasattr(close_arr, "values") else np.asarray(close_arr)
+            vol_arr = df["volume"]
+            volumes = vol_arr.values if hasattr(vol_arr, "values") else np.asarray(vol_arr)
+
+            pct_change = (closes[-1] - closes[-2]) / closes[-2] * 100
+            vol_change = 0.0
+            if len(volumes) >= 2 and volumes[-2] > 0:
+                vol_change = (volumes[-1] - volumes[-2]) / volumes[-2] * 100
+
+            return {
+                "symbol": symbol,
+                "close": round(float(closes[-1]), 2),
+                "change_pct": round(float(pct_change), 2),
+                "volume_change_pct": round(float(vol_change), 2),
+            }
+        except Exception:
+            return None
+
+    def _preview_next_day_catalysts(self, watchlist: list[str]) -> list[dict]:
+        """预览次日催化剂（基于新闻和公告）。"""
+        catalysts: list[dict] = []
+        for symbol in watchlist:
+            news_items = self._fetch_news_items(symbol, days=2)
+            for item in news_items[:3]:
+                sentiment = item.get("sentiment", 0.0)
+                if abs(sentiment) > 0.3:
+                    catalysts.append({
+                        "symbol": symbol,
+                        "title": item.get("title", ""),
+                        "sentiment": round(sentiment, 2),
+                        "potential_impact": "high" if abs(sentiment) > 0.6 else "medium",
+                    })
+        return catalysts
+
+    def _try_llm_postmarket_summary(self, watchlist: list[str], data: dict) -> Optional[dict]:
+        """尝试通过 LLM 增强收盘总结，失败则返回 None。"""
+        try:
+            from stockquant.agent.llm_adapter import LLMAdapter
+            from stockquant.config import get_config
+            ai_cfg = get_config().get("ai", {})
+            adapter = LLMAdapter(
+                model=ai_cfg.get("model", "gpt-4o"),
+                api_key=ai_cfg.get("api_key") or None,
+                base_url=ai_cfg.get("api_base") or None,
+            )
+            prompt = (
+                "你是一位专业的A股市场分析师。请基于以下收盘数据，生成一份结构化的收盘总结分析。\n"
+                "要求：总结市场走势、标注异动标的、预判次日方向。返回 JSON 格式，"
+                "包含 market_analysis, notable_analysis, signal_summary, next_day_outlook 字段。\n\n"
+                f"数据：{data}"
+            )
+            resp = adapter.call(
+                messages=[
+                    {"role": "system", "content": "你是专业A股分析师，只返回JSON。"},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                max_tokens=2048,
+            )
+            if resp.content:
+                parsed = robust_json_parse(resp.content)
+                if isinstance(parsed, dict):
+                    data["llm_analysis"] = parsed
+                    return data
+        except Exception:
+            logger.debug("LLM postmarket summary enhancement failed, using structured fallback")
+        return None
+
+    def _analyze_social_sentiment(self, texts: list[str]) -> dict:
+        """社交媒体情绪分析 — 优先使用增强版 SentimentAnalyzer，降级为关键词匹配。
+
+        Parameters
+        ----------
+        texts : list[str]
+            待分析的文本列表
+
+        Returns
+        -------
+        dict
+            {
+                "score": float,        # -1.0 ~ 1.0
+                "confidence": float,   # 0.0 ~ 1.0
+                "key_phrases": list[str],
+                "distribution": {"positive": int, "negative": int, "neutral": int}
+            }
+        """
+        # 优先使用增强版 SentimentAnalyzer
+        try:
+            from stockquant.ai.sentiment import SentimentAnalyzer
+            analyzer = SentimentAnalyzer(method="auto")
+            result = analyzer.analyze(texts)
+            return {
+                "score": result.score,
+                "confidence": result.confidence,
+                "key_phrases": result.key_phrases,
+                "distribution": result.distribution,
+            }
+        except Exception as exc:
+            logger.debug("SentimentAnalyzer 不可用: %s，降级为关键词匹配", exc)
+
+        # 降级：基础关键词匹配
+        positive_keywords = {
+            "利好", "上涨", "突破", "新高", "强势", "反弹", "涨停", "大涨",
+            "买入", "加仓", "看好", "机会", "增长", "盈利", "超预期", "龙头",
+            "主力", "资金流入", "底部", "反转", "放量上涨", "金叉",
+        }
+        negative_keywords = {
+            "利空", "下跌", "跌破", "新低", "弱势", "回调", "跌停", "大跌",
+            "卖出", "减仓", "看空", "风险", "亏损", "不及预期", "暴雷",
+            "资金流出", "破位", "死叉", "恐慌", "缩量下跌", "腰斩",
+        }
+
+        distribution = {"positive": 0, "negative": 0, "neutral": 0}
+        all_key_phrases: list[str] = []
+        scores: list[float] = []
+
+        for text in texts:
+            text_lower = text.lower()
+            pos_hits = [kw for kw in positive_keywords if kw in text_lower]
+            neg_hits = [kw for kw in negative_keywords if kw in text_lower]
+
+            pos_count = len(pos_hits)
+            neg_count = len(neg_hits)
+            total = pos_count + neg_count
+
+            if total == 0:
+                distribution["neutral"] += 1
+                scores.append(0.0)
+            else:
+                score = (pos_count - neg_count) / total  # -1.0 ~ 1.0
+                scores.append(score)
+                if score > 0:
+                    distribution["positive"] += 1
+                    all_key_phrases.extend(pos_hits)
+                elif score < 0:
+                    distribution["negative"] += 1
+                    all_key_phrases.extend(neg_hits)
+                else:
+                    distribution["neutral"] += 1
+
+        # 综合情绪分
+        if scores:
+            avg_score = float(np.mean(scores))
+            # 置信度：基于非中性文本比例
+            non_neutral = distribution["positive"] + distribution["negative"]
+            confidence = min(1.0, non_neutral / max(len(texts), 1))
+        else:
+            avg_score = 0.0
+            confidence = 0.0
+
+        # 去重关键短语
+        unique_phrases = list(dict.fromkeys(all_key_phrases))
+
+        return {
+            "score": round(avg_score, 3),
+            "confidence": round(confidence, 3),
+            "key_phrases": unique_phrases[:20],
+            "distribution": distribution,
+        }
+
+    def _detect_sentiment_anomaly(self, history: list[float]) -> bool:
+        """检测情绪突变（z-score > 2.0）。
+
+        Parameters
+        ----------
+        history : list[float]
+            历史情绪分数序列（最近值在末尾）
+
+        Returns
+        -------
+        bool
+            True 表示检测到情绪突变
+        """
+        if len(history) < 3:
+            return False
+
+        arr = np.array(history, dtype=float)
+        mean = float(np.mean(arr))
+        std = float(np.std(arr))
+
+        if std < 1e-9:
+            return False
+
+        latest = arr[-1]
+        z_score = abs(latest - mean) / std
+
+        return z_score > 2.0
 
     def generate_pre_market_brief(self, symbols: Optional[List[str]] = None) -> str:
         """生成盘前简报。
@@ -607,6 +1152,144 @@ class MonitorAgent:
             is_portfolio_hold=is_hold,
         )
 
+    def analyze_news_correlation(self, symbols: list[str] = None) -> dict:
+        """F024 消息面联动 — 新闻-持仓联动分析。
+
+        对指定标的（或持仓标的）搜索相关新闻，分析新闻对持仓的影响。
+
+        Parameters
+        ----------
+        symbols : list[str] | None
+            要分析的股票代码列表，默认从持仓获取
+
+        Returns
+        -------
+        dict
+            {
+                "correlations": [
+                    {
+                        "symbol": "sh600519",
+                        "position_value": 1000000,
+                        "news_count": 3,
+                        "sentiment": "positive",
+                        "impact_score": 0.7,
+                        "summary": "Recent news suggests...",
+                        "news_items": [...]
+                    }
+                ],
+                "timestamp": "2024-01-01T12:00:00"
+            }
+        """
+        # 如果没有提供 symbols，尝试从交易路由获取持仓
+        if not symbols:
+            symbols = self._get_portfolio_symbols()
+
+        if not symbols:
+            return {
+                "correlations": [],
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        correlations = []
+        for symbol in symbols:
+            try:
+                correlation = self._analyze_symbol_news(symbol)
+                correlations.append(correlation)
+            except Exception as exc:
+                logger.warning("News correlation analysis failed for %s: %s", symbol, exc)
+
+        return {
+            "correlations": correlations,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    def _get_portfolio_symbols(self) -> list[str]:
+        """从交易路由获取持仓标的列表"""
+        try:
+            from stockquant.api.routers.trading import _portfolio
+            return [s for s, p in _portfolio.positions.items() if p.quantity > 0]
+        except Exception:
+            return []
+
+    def _get_position_value(self, symbol: str) -> float:
+        """获取标的持仓市值"""
+        try:
+            from stockquant.api.routers.trading import _portfolio
+            pos = _portfolio.positions.get(symbol)
+            if pos and pos.quantity > 0:
+                return float(pos.market_value)
+        except Exception:
+            pass
+        return 0.0
+
+    def _analyze_symbol_news(self, symbol: str) -> dict:
+        """分析单个标的的新闻关联"""
+        news_items = []
+        avg_sentiment = 0.0
+
+        if self._news_searcher:
+            try:
+                news_results = self._news_searcher.search(symbol, days=3)
+                news_items = [n.to_dict() for n in news_results]
+
+                if news_results:
+                    sentiments = [n.sentiment for n in news_results]
+                    avg_sentiment = float(np.mean(sentiments))
+            except Exception as exc:
+                logger.warning("News search failed for %s: %s", symbol, exc)
+
+        # 确定情绪方向
+        if avg_sentiment > 0.2:
+            sentiment = "positive"
+        elif avg_sentiment < -0.2:
+            sentiment = "negative"
+        else:
+            sentiment = "neutral"
+
+        # 计算影响分数 (0-1)
+        impact_score = min(1.0, abs(avg_sentiment) * (1 + len(news_items) * 0.1))
+        impact_score = round(impact_score, 3)
+
+        # 生成摘要
+        summary = self._generate_news_summary(symbol, sentiment, avg_sentiment, news_items)
+
+        # 写入工作记忆
+        self._memory.append({
+            "symbol": symbol,
+            "timestamp": datetime.now(),
+            "type": "news_correlation",
+            "sentiment": avg_sentiment,
+            "news_count": len(news_items),
+            "impact_score": impact_score,
+        })
+
+        return {
+            "symbol": symbol,
+            "position_value": self._get_position_value(symbol),
+            "news_count": len(news_items),
+            "sentiment": sentiment,
+            "impact_score": impact_score,
+            "summary": summary,
+            "news_items": news_items,
+        }
+
+    def _generate_news_summary(self, symbol: str, sentiment: str,
+                               avg_sentiment: float, news_items: list) -> str:
+        """生成新闻影响摘要"""
+        if not news_items:
+            return f"{symbol}: 暂无近期相关新闻。"
+
+        count = len(news_items)
+        if sentiment == "positive":
+            return (f"{symbol}: 近期有 {count} 条相关新闻，整体情绪偏积极"
+                    f"（均值={avg_sentiment:.2f}），可能对股价形成支撑。")
+        elif sentiment == "negative":
+            return (f"{symbol}: 近期有 {count} 条相关新闻，整体情绪偏消极"
+                    f"（均值={avg_sentiment:.2f}），需关注潜在风险。")
+        else:
+            return (f"{symbol}: 近期有 {count} 条相关新闻，情绪整体中性"
+                    f"（均值={avg_sentiment:.2f}），暂无明显方向性影响。")
+
     def get_alerts(self, limit: int = 50) -> List[MonitorSignal]:
         """获取告警记录"""
         return self._alerts[-limit:]
@@ -626,6 +1309,10 @@ class MonitorAgent:
     def set_notifier(self, notifier: Any) -> None:
         """设置通知器（降级推送通道）。"""
         self._notifier = notifier
+
+    def set_websocket_manager(self, ws_manager: Any) -> None:
+        """设置 WebSocket 管理器（用于 WS 实时监控推送）。"""
+        self._ws_manager = ws_manager
 
     # ── 辅助方法 ──
 

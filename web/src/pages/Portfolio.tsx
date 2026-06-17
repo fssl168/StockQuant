@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Card, Row, Col, Table, Typography, Tag, Button, Skeleton, Tabs } from 'antd'
+import { Card, Row, Col, Table, Typography, Tag, Button, Skeleton, Tabs, Modal } from 'antd'
 import { ArrowUpRight, ArrowDownRight, CurrencyCircleDollar } from '@phosphor-icons/react'
 import { useNavigate } from 'react-router-dom'
 import ReactECharts from 'echarts-for-react'
@@ -8,6 +8,7 @@ import client from '@/api/client'
 import PortfolioSummary from '@/components/Portfolio/PortfolioSummary'
 import SectorPieChart from '@/components/Portfolio/SectorPieChart'
 import PnLTable from '@/components/Portfolio/PnLTable'
+import EquityChart from '@/components/Chart/EquityChart'
 
 const { Title, Text } = Typography
 
@@ -21,6 +22,10 @@ export default function Portfolio() {
   ])
 
   const [summary, setSummary] = useState<{ totalValue: number; totalCost: number; totalPnl: number; totalPnlPct: number } | null>(null)
+  const [portfolioCurve, setPortfolioCurve] = useState<{ dates: string[]; values: number[] } | null>(null)
+  const [equitySymbol, setEquitySymbol] = useState<string | null>(null)
+  const [equityCurveData, setEquityCurveData] = useState<{ dates: string[]; values: number[] } | null>(null)
+  const [equityLoading, setEquityLoading] = useState(false)
 
   useEffect(() => {
     const p1 = client.get('/portfolio/positions')
@@ -38,13 +43,29 @@ export default function Portfolio() {
         }
       })
       .catch(() => { /* use default mock data */ })
-    Promise.all([p1, p2]).finally(() => setLoading(false))
+    const p3 = client.get('/portfolio/equity-curve')
+      .then((data: any) => { if (data?.dates?.length) setPortfolioCurve(data) })
+      .catch(() => { /* fallback to mock */ })
+    Promise.all([p1, p2, p3]).finally(() => setLoading(false))
   }, [])
 
   const totalValue = summary?.totalValue ?? positions.reduce((s, p) => s + p.shares * p.price, 0)
   const totalCost = summary?.totalCost ?? positions.reduce((s, p) => s + p.shares * p.cost, 0)
   const totalPnl = summary?.totalPnl ?? (totalValue - totalCost)
   const totalPnlPct = summary?.totalPnlPct ?? Number(((totalPnl / totalCost) * 100).toFixed(2))
+
+  const handleShowEquityCurve = async (symbol: string) => {
+    setEquitySymbol(symbol)
+    setEquityLoading(true)
+    try {
+      const data = await client.get(`/portfolio/equity-curve/${symbol}`) as any
+      setEquityCurveData(data)
+    } catch {
+      setEquityCurveData(null)
+    } finally {
+      setEquityLoading(false)
+    }
+  }
 
   const industryData = [
     { sector: '白酒', value: 40, weight: 40 },
@@ -72,6 +93,9 @@ export default function Portfolio() {
       <Tag color={r.pnlPct >= 0 ? 'green' : 'red'} style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
         {r.pnlPct >= 0 ? '+' : ''}{r.pnlPct.toFixed(2)}%
       </Tag>
+    )},
+    { title: '操作', key: 'action', width: 100, render: (_: any, r: any) => (
+      <Button size="small" type="link" onClick={() => handleShowEquityCurve(r.symbol)}>权益曲线</Button>
     )},
   ]
 
@@ -102,8 +126,8 @@ export default function Portfolio() {
     { label: 'Alpha', value: '3.2%', color: 'var(--color-success)' },
   ]
 
-  const equityDates = Array.from({ length: 30 }, (_, i) => dayjs().subtract(29 - i, 'day').format('MM-DD'))
-  const equityValues = Array.from({ length: 30 }, (_, i) => {
+  const equityDates = portfolioCurve?.dates ?? Array.from({ length: 30 }, (_, i) => dayjs().subtract(29 - i, 'day').format('MM-DD'))
+  const equityValues = portfolioCurve?.values ?? Array.from({ length: 30 }, (_, i) => {
     const base = 1200000
     return Math.round(base + i * 1500 + Math.sin(i / 3) * 8000 + Math.random() * 5000)
   })
@@ -189,6 +213,19 @@ export default function Portfolio() {
           </Card>
         </Col>
       </Row>
+
+      <Modal
+        title={`${equitySymbol} 权益曲线`}
+        open={!!equitySymbol}
+        onCancel={() => { setEquitySymbol(null); setEquityCurveData(null) }}
+        footer={null}
+        width={700}
+        destroyOnClose
+      >
+        {equityLoading ? <div style={{ textAlign: 'center', padding: 40 }}>加载中...</div> :
+         equityCurveData ? <EquityChart data={equityCurveData.values} dates={equityCurveData.dates} height={300} /> :
+         <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-tertiary)' }}>暂无数据</div>}
+      </Modal>
     </div>
   )
 }

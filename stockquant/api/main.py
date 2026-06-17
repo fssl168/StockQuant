@@ -4,13 +4,27 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
+# Rate limiting (optional, graceful degradation)
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    USE_RATE_LIMIT = True
+except ImportError:
+    USE_RATE_LIMIT = False
+
 from stockquant.api.routers import backtest, strategy, dashboard, monitor, ai_chat, comparison, notification, data, settings, trading, portfolio, optimize
+from stockquant.api.routers import auth as auth_router
+from stockquant.api.routers import signal as signal_router
+from stockquant.api.routers import scheduler as scheduler_router
 from stockquant.api.websocket import ws_manager
+from stockquant.config import get_config, reload_config
 
 _APP_VERSION = "2.0.0-dev"
 
@@ -33,14 +47,34 @@ def create_app() -> FastAPI:
         version=_APP_VERSION,
     )
 
-    # CORS 中间件 — MVP 允许全部
+    # CORS 中间件 — 从环境变量 CORS_ORIGINS 读取允许的源（逗号分隔）
+    _cors_env = os.environ.get("CORS_ORIGINS", "").strip()
+    if _cors_env == "*":
+        _cors_origins = ["*"]
+        _cors_credentials = False
+    elif _cors_env:
+        _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+        _cors_credentials = True
+    else:
+        _cors_origins = ["http://localhost:5173", "http://localhost:80"]
+        _cors_credentials = True
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=_cors_origins,
+        allow_credentials=_cors_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # 速率限制
+    if USE_RATE_LIMIT:
+        limiter = Limiter(key_func=get_remote_address, default_limits=["100 per minute"])
+        app.state.limiter = limiter
+        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+        logger.info("速率限制已启用: 默认 100 req/min")
+    else:
+        logger.info("速率限制未启用（slowapi 未安装）")
 
     # 注册路由
     app.include_router(backtest.router, prefix="/api", tags=["回测"])
@@ -55,6 +89,9 @@ def create_app() -> FastAPI:
     app.include_router(trading.router, prefix="/api", tags=["交易"])
     app.include_router(portfolio.router, prefix="/api", tags=["投资组合"])
     app.include_router(optimize.router, prefix="/api", tags=["参数优化"])
+    app.include_router(auth_router.router, prefix="/api", tags=["认证"])
+    app.include_router(signal_router.router, prefix="/api", tags=["信号管线"])
+    app.include_router(scheduler_router.router, prefix="/api", tags=["调度器"])
 
     # WebSocket 端点 — 统一路径 /ws/*
     @app.websocket("/ws")
@@ -73,6 +110,15 @@ def create_app() -> FastAPI:
     @app.websocket("/ws/notification")
     async def notification_ws(websocket: WebSocket):
         """系统通知实时推送"""
+        token = websocket.query_params.get("token")
+        if token:
+            try:
+                from jose import jwt
+                from stockquant.api.deps import SECRET_KEY, ALGORITHM
+                jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            except Exception:
+                await websocket.close(code=4001, reason="invalid token")
+                return
         await ws_manager.connect(websocket, "notification")
         try:
             await websocket.send_json({"type": "connected", "data": {"channel": "notification"}})
@@ -85,20 +131,77 @@ def create_app() -> FastAPI:
 
     @app.websocket("/ws/monitor")
     async def monitor_ws(websocket: WebSocket):
-        """实时告警推送"""
+        """实时行情推送 — 连接后定时推送自选股行情"""
+        token = websocket.query_params.get("token")
+        if token:
+            try:
+                from jose import jwt
+                from stockquant.api.deps import SECRET_KEY, ALGORITHM
+                jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            except Exception:
+                await websocket.close(code=4001, reason="invalid token")
+                return
         await ws_manager.connect(websocket, "monitor")
+        push_task = None
         try:
             await websocket.send_json({"type": "connected", "data": {"channel": "monitor"}})
+
+            import asyncio
+            from datetime import time as dt_time
+
+            async def _push_quotes():
+                """后台任务：每 5 秒推送自选股行情"""
+                while True:
+                    try:
+                        await asyncio.sleep(5)
+                        # 获取自选股列表
+                        from stockquant.api.routers.monitor import _watchlist
+                        symbols = list(_watchlist) if _watchlist else ["sh600519", "sz000858"]
+                        quotes = []
+                        for sym in symbols[:10]:  # 最多 10 只
+                            try:
+                                from stockquant.api.routers.trading import _get_latest_bar
+                                bar = _get_latest_bar(sym)
+                                if bar:
+                                    quotes.append({
+                                        "symbol": sym,
+                                        "price": bar.close,
+                                        "open": bar.open,
+                                        "high": bar.high,
+                                        "low": bar.low,
+                                        "volume": bar.volume,
+                                        "change_pct": round((bar.close - bar.open) / bar.open * 100, 2) if bar.open > 0 else 0,
+                                    })
+                            except Exception:
+                                pass
+                        if quotes:
+                            await websocket.send_json({"type": "quote", "data": quotes})
+                    except Exception:
+                        break
+
+            push_task = asyncio.create_task(_push_quotes())
+
             while True:
                 await websocket.receive_text()
         except Exception:
             pass
         finally:
+            if push_task:
+                push_task.cancel()
             await ws_manager.disconnect(websocket, "monitor")
 
     @app.websocket("/ws/backtest/{task_id}")
     async def backtest_ws(websocket: WebSocket, task_id: str):
         """回测进度实时推送"""
+        token = websocket.query_params.get("token")
+        if token:
+            try:
+                from jose import jwt
+                from stockquant.api.deps import SECRET_KEY, ALGORITHM
+                jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            except Exception:
+                await websocket.close(code=4001, reason="invalid token")
+                return
         await ws_manager.connect(websocket, task_id)
         try:
             await websocket.send_json({"type": "connected", "data": {"task_id": task_id}})
@@ -112,6 +215,15 @@ def create_app() -> FastAPI:
     @app.websocket("/ws/chat/{conversation_id}")
     async def chat_ws(websocket: WebSocket, conversation_id: str):
         """AI 对话实时推送"""
+        token = websocket.query_params.get("token")
+        if token:
+            try:
+                from jose import jwt
+                from stockquant.api.deps import SECRET_KEY, ALGORITHM
+                jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            except Exception:
+                await websocket.close(code=4001, reason="invalid token")
+                return
         await ws_manager.connect(websocket, f"chat_{conversation_id}")
         try:
             await websocket.send_json({"type": "connected", "data": {"conversation_id": conversation_id}})
@@ -122,11 +234,34 @@ def create_app() -> FastAPI:
         finally:
             await ws_manager.disconnect(websocket, f"chat_{conversation_id}")
 
+    @app.websocket("/ws/optimize/{task_id}")
+    async def optimize_ws(websocket: WebSocket, task_id: str):
+        """参数优化进度实时推送"""
+        token = websocket.query_params.get("token")
+        if token:
+            try:
+                from jose import jwt
+                from stockquant.api.deps import SECRET_KEY, ALGORITHM
+                jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            except Exception:
+                await websocket.close(code=4001, reason="invalid token")
+                return
+        await ws_manager.connect(websocket, task_id)
+        try:
+            await websocket.send_json({"type": "connected", "data": {"task_id": task_id}})
+            while True:
+                await websocket.receive_text()
+        except Exception:
+            pass
+        finally:
+            await ws_manager.disconnect(websocket, task_id)
+
     # MVP 共享存储注入到路由模块
     backtest.set_storage(_backtest_tasks)
     strategy.set_storage(_strategies)
     dashboard.set_backtest_storage(_backtest_tasks)
     comparison.set_storage(_backtest_tasks)
+    optimize.set_storage(_backtest_tasks)
 
     # 健康检查
     @app.get("/api/health")
@@ -139,6 +274,20 @@ def create_app() -> FastAPI:
         }
 
     logger.info("StockQuant API 网关启动")
+
+    # 加载 YAML 配置
+    config = get_config()
+    logger.info("应用配置已加载")
+
+    # 初始化 AI Agent Orchestrator
+    try:
+        from stockquant.ai.orchestrator import init_orchestrator
+        orch = init_orchestrator()
+        app.state.orchestrator = orch
+        logger.info("AI Agent Orchestrator 已初始化: %s", orch.registered_agents)
+    except Exception as e:
+        logger.warning("Orchestrator 初始化失败（非致命）: %s", e)
+
     return app
 
 

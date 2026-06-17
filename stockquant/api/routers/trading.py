@@ -1,44 +1,472 @@
 # -*- coding: utf-8 -*-
-"""F029 交易执行路由 — 下单/撤单/持仓/成交"""
+"""F029 交易执行路由 — 下单/撤单/持仓/成交
+
+已接入 PaperBroker 真实撮合引擎 + Portfolio 聚合模型。
+- MARKET 订单：按最新行情价格即时撮合
+- LIMIT 订单：进入 orderbook，后续获取行情时检查撮合
+- 账户/持仓通过 Portfolio 模型管理
+- 费用模型使用 engine 的 CommissionInfo
+"""
 
 from __future__ import annotations
 
+import json
 import logging
+import os
+import time
 import uuid
 from datetime import datetime
+from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
+
+from stockquant.api.deps import get_current_user, get_trader_user
+from stockquant.api.routers.settings import _settings
+from stockquant.engine.broker import PaperBroker, LiveBroker
+from stockquant.engine.commission import CommissionInfo
+from stockquant.models.account import Account
+from stockquant.models.bar import BarData
+from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+from stockquant.models.portfolio import Portfolio
 
 logger = logging.getLogger("stockquant.api.trading")
 
 router = APIRouter()
 
-# 内存存储 (MVP)
-_orders: dict = {}
-_trades: list[dict] = []
-_positions: list[dict] = [
-    {"symbol": "sh600519", "name": "贵州茅台", "shares": 100, "cost": 1680.0, "price": 1725.5, "pnl": 4550.0, "pnl_pct": 2.71},
-    {"symbol": "sz000858", "name": "五粮液", "shares": 500, "cost": 152.0, "price": 148.3, "pnl": -1850.0, "pnl_pct": -2.43},
-    {"symbol": "sh601318", "name": "中国平安", "shares": 300, "cost": 45.5, "price": 47.8, "pnl": 690.0, "pnl_pct": 5.05},
-]
-_account: dict = {
-    "total_equity": 1234567.89,
-    "available_cash": 456789.01,
-    "position_value": 777778.88,
-    "today_pnl": 12345.67,
-    "broker_mode": "paper",
-}
+# ====================================================================
+# 共享交易状态 — 使用 engine 模型
+# ====================================================================
 
+# 初始资金 100 万（与 Account 默认值一致）
+_initial_cash = 1_000_000.0
+
+# Portfolio 实例（管理账户 + 持仓）
+_portfolio = Portfolio(initial_cash=_initial_cash)
+
+# PaperBroker 实例（撮合引擎）
+_paper_broker = PaperBroker(
+    slippage=None,  # 模拟盘不启用滑点
+    limit_up_ratio=0.10,
+    limit_down_ratio=0.10,
+)
+
+# 绑定 PaperBroker 与 Portfolio，使 get_positions/get_balance 返回真实数据
+# （在 _orders_audit 定义后绑定）
+
+# 佣金模型
+_commission_info = CommissionInfo()
+
+
+# ====================================================================
+# Broker 模式切换
+# ====================================================================
+
+def _get_broker():
+    """根据配置返回 PaperBroker 或 LiveBroker。
+
+    默认使用 PaperBroker（模拟盘）。
+    切换实盘方式：在 settings 中设置 trading.broker = "live"，
+    并配置对应券商参数（QMT_PATH / QMT_ACCOUNT / XTP / CTP 等）。
+
+    支持的券商 API:
+    - qmt: 迅投 QMT（通过 xtquant SDK）
+    - xtp: 中泰证券 XTP 极速交易系统
+    - ctp: 期货交易前置系统（CTP）
+    """
+    broker_mode = _settings.get("trading.broker", "paper")
+    if broker_mode == "live":
+        # 实盘模式：根据 api 类型选择券商
+        api = _settings.get("trading.api", "qmt")
+        if api == "qmt":
+            try:
+                from stockquant.execution.brokers.qmt_broker import QMTBroker
+                return QMTBroker(
+                    qmt_path=_settings.get("qmt.path", ""),
+                    account_id=_settings.get("qmt.account", ""),
+                )
+            except ImportError:
+                logger.warning("QMTBroker 导入失败，降级为 LiveBroker 骨架")
+        elif api == "xtp":
+            try:
+                from stockquant.execution.brokers.xtp_broker import XTPBroker
+                return XTPBroker(
+                    user=_settings.get("xtp.user", ""),
+                    password=_settings.get("xtp.password", ""),
+                    app_id=int(_settings.get("xtp.app_id", "0")),
+                    client_id=int(_settings.get("xtp.client_id", "0")),
+                    server_addr=_settings.get("xtp.server_addr", ""),
+                    software_key=_settings.get("xtp.software_key", ""),
+                )
+            except ImportError:
+                logger.warning("XTPBroker 导入失败，降级为 LiveBroker 骨架")
+        elif api == "ctp":
+            try:
+                from stockquant.execution.brokers.ctp_broker import CTPBroker
+                return CTPBroker(
+                    user=_settings.get("ctp.user", ""),
+                    password=_settings.get("ctp.password", ""),
+                    broker_id=_settings.get("ctp.broker_id", ""),
+                    front_addr=_settings.get("ctp.front_addr", ""),
+                    app_id=_settings.get("ctp.app_id", ""),
+                )
+            except ImportError:
+                logger.warning("CTPBroker 导入失败，降级为 LiveBroker 骨架")
+        return LiveBroker(api=api)
+    # 默认模拟盘
+    return _paper_broker
+
+# 待撮合的 LIMIT 订单簿（由 Portfolio 上的持仓管理）
+# 格式: order_id -> Order
+_pending_limit_orders: dict[str, Order] = {}
+
+# 订单审计日志（API 层额外记录）
+_orders_audit: dict[str, dict] = {}
+
+# 绑定 PaperBroker 与 Portfolio，使 get_positions/get_balance 返回真实数据
+_paper_broker.bind_portfolio(_portfolio, _orders_audit)
+
+# 幂等性键映射 — idempotency_key → order_id
+_idempotency_keys: dict[str, str] = {}
+
+# 幂等性缓存 — idempotency_key → {"result": dict, "timestamp": float}
+# 缓存条目 60 秒后过期
+_idempotency_cache: dict[str, dict] = {}
+
+_IDEMPOTENCY_TTL = 60  # 秒
+
+
+def _check_idempotency(key: str) -> dict | None:
+    """检查幂等性缓存，命中且未过期则返回缓存结果，否则返回 None"""
+    if not key or key not in _idempotency_cache:
+        return None
+    entry = _idempotency_cache[key]
+    if time.time() - entry["timestamp"] > _IDEMPOTENCY_TTL:
+        # 过期，清理
+        _idempotency_cache.pop(key, None)
+        _idempotency_keys.pop(key, None)
+        return None
+    return entry["result"]
+
+
+def _store_idempotency(key: str, result: dict) -> None:
+    """将订单结果存入幂等性缓存"""
+    _idempotency_cache[key] = {"result": result, "timestamp": time.time()}
+    # 清理过期条目
+    now = time.time()
+    expired = [k for k, v in _idempotency_cache.items() if now - v["timestamp"] > _IDEMPOTENCY_TTL]
+    for k in expired:
+        _idempotency_cache.pop(k, None)
+        _idempotency_keys.pop(k, None)
+
+
+# ====================================================================
+# 崩溃恢复 — 持久化与恢复交易状态 (JSON)
+# ====================================================================
+
+_TRADING_STATE_PATH = Path.home() / ".stockquant" / "trading_state.json"
+
+
+def _persist_trading_state() -> None:
+    """将交易状态持久化到 JSON 文件，用于崩溃恢复。
+
+    保存内容：
+    - Portfolio 持仓
+    - 待撮合 LIMIT 订单
+    - 账户余额
+    - 订单审计日志
+    - 幂等性键映射
+    """
+    try:
+        _TRADING_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+        # 持久化持仓
+        positions_data = {}
+        for symbol, pos in _portfolio.positions.items():
+            if pos.quantity > 0:
+                positions_data[symbol] = {
+                    "quantity": pos.quantity,
+                    "cost_price": pos.cost_price,
+                    "current_price": pos.current_price,
+                }
+
+        # 持久化待撮合订单
+        pending_data = {}
+        for order_id, order in _pending_limit_orders.items():
+            pending_data[order_id] = {
+                "symbol": order.symbol,
+                "side": order.side.value,
+                "order_type": order.order_type.value,
+                "price": order.price,
+                "quantity": order.quantity,
+                "order_id": order.order_id,
+            }
+
+        # 持久化账户余额
+        account_data = {
+            "cash": _portfolio.account.cash,
+            "available_cash": _portfolio.account.available_cash,
+            "initial_cash": _initial_cash,
+        }
+
+        state = {
+            "positions": positions_data,
+            "pending_orders": pending_data,
+            "account": account_data,
+            "orders_audit": _orders_audit,
+            "idempotency_keys": _idempotency_keys,
+        }
+
+        tmp_path = _TRADING_STATE_PATH.with_suffix(".json.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+        # 原子替换
+        os.replace(tmp_path, _TRADING_STATE_PATH)
+        logger.debug("交易状态已持久化到 %s", _TRADING_STATE_PATH)
+    except Exception as e:
+        logger.warning(f"交易状态持久化失败: {e}")
+
+
+def _recover_trading_state() -> None:
+    """从 JSON 文件恢复交易状态（启动时调用）
+
+    恢复内容：
+    - 订单审计日志 (_orders_audit)
+    - 幂等性键映射 (_idempotency_keys)
+    - 账户余额
+    - 持仓
+    - 待撮合订单
+    """
+    if not _TRADING_STATE_PATH.exists():
+        logger.info("交易状态文件不存在，跳过恢复")
+        return
+
+    try:
+        with open(_TRADING_STATE_PATH, "r", encoding="utf-8") as f:
+            state = json.load(f)
+
+        # 恢复订单审计日志
+        saved_audit = state.get("orders_audit", {})
+        if saved_audit:
+            _orders_audit.update(saved_audit)
+            logger.info(f"已恢复 {len(saved_audit)} 条订单审计记录")
+
+        # 恢复幂等性键映射
+        saved_idempotency = state.get("idempotency_keys", {})
+        if saved_idempotency:
+            _idempotency_keys.update(saved_idempotency)
+            logger.info(f"已恢复 {len(saved_idempotency)} 个幂等性键")
+
+        # 恢复账户余额
+        account_data = state.get("account", {})
+        if account_data:
+            _portfolio.account.cash = account_data.get("cash", _initial_cash)
+            _portfolio.account.available_cash = account_data.get("available_cash", _initial_cash)
+            logger.info(f"已恢复账户余额: cash={_portfolio.account.cash}")
+
+        # 恢复持仓
+        positions_data = state.get("positions", {})
+        if positions_data:
+            for symbol, pos_info in positions_data.items():
+                _portfolio.add_fill(
+                    symbol,
+                    pos_info["quantity"],
+                    pos_info["cost_price"],
+                    is_today=True,
+                )
+            logger.info(f"已恢复 {len(positions_data)} 个持仓")
+
+        # 恢复待撮合订单
+        pending_data = state.get("pending_orders", {})
+        if pending_data:
+            for order_id, order_info in pending_data.items():
+                order = Order(
+                    symbol=order_info["symbol"],
+                    side=OrderSide.BUY if order_info["side"] == "BUY" else OrderSide.SELL,
+                    order_type=OrderType.LIMIT,
+                    price=order_info["price"],
+                    quantity=order_info["quantity"],
+                    order_id=order_info["order_id"],
+                    status=OrderStatus.SUBMITTED,
+                )
+                _pending_limit_orders[order_id] = order
+            logger.info(f"已恢复 {len(pending_data)} 个待撮合订单")
+
+        logger.info("交易状态恢复完成")
+    except Exception as e:
+        logger.warning(f"交易状态恢复失败: {e}")
+
+
+# 启动时恢复交易状态
+_recover_trading_state()
+
+
+# ====================================================================
+# 工具函数
+# ====================================================================
+
+def _get_latest_bar(symbol: str) -> BarData | None:
+    """获取标的最新日线 BarData"""
+    try:
+        from stockquant.data.providers.baostock_feed import BaoStockFeed
+        feed = BaoStockFeed(symbols=[symbol], timeframe="1d")
+        feed.start()
+        df = feed.get_dataframe()
+        feed.stop()
+        if df is not None and not df.empty:
+            row = df.iloc[-1]
+            return BarData(
+                symbol=symbol,
+                datetime=datetime.strptime(row["date"], "%Y-%m-%d"),
+                open=float(row["open"]),
+                high=float(row["high"]),
+                low=float(row["low"]),
+                close=float(row["close"]),
+                volume=float(row["volume"]),
+                turnover=float(row["amount"] if "amount" in df.columns else 0),
+            )
+    except Exception as e:
+        logger.warning(f"获取最新行情失败: {symbol}, {e}")
+    return None
+
+
+def _get_or_create_bar(symbol: str, price: float) -> BarData:
+    """获取 BarData；失败时用当前价格构造一个简化 Bar"""
+    bar = _get_latest_bar(symbol)
+    if bar is not None:
+        return bar
+    logger.warning(f"行情获取失败 {symbol}，使用传入价格 {price} 构造 Bar")
+    return BarData(
+        symbol=symbol,
+        datetime=datetime.now(),
+        open=price,
+        high=price,
+        low=price,
+        close=price,
+        volume=0,
+    )
+
+
+def _to_order_type(ot: str) -> OrderType:
+    """字符串 → OrderType"""
+    mapping = {
+        "MARKET": OrderType.MARKET,
+        "LIMIT": OrderType.LIMIT,
+        "STOP": OrderType.STOP,
+        "STOP_LIMIT": OrderType.STOP_LIMIT,
+    }
+    return mapping.get(ot.upper(), OrderType.MARKET)
+
+
+def _to_order_side(side: str) -> OrderSide:
+    """字符串 → OrderSide"""
+    if side.upper() in ("SELL", "SHORT"):
+        return OrderSide.SELL
+    return OrderSide.BUY
+
+
+def _match_pending_limits(bar: BarData):
+    """撮合待处理的 LIMIT 订单 — 当有新行情时调用"""
+    remaining: list[str] = []
+    for order_id, order in list(_pending_limit_orders.items()):
+        # 涨跌停检查
+        limit_up = bar.close * (1 + _paper_broker._limit_up_ratio)
+        limit_down = bar.close * (1 - _paper_broker._limit_down_ratio)
+        if order.price > limit_up or order.price < limit_down:
+            order.update_status(OrderStatus.REJECTED)
+            _paper_broker.cancel_order(order)
+            continue
+
+        # 100 股整数倍
+        if order.quantity % 100 != 0:
+            order.update_status(OrderStatus.REJECTED)
+            _paper_broker.cancel_order(order)
+            continue
+
+        # 限价单撮合条件
+        matched = False
+        if order.order_type == OrderType.LIMIT:
+            if order.side == OrderSide.BUY and order.price >= bar.close:
+                # 买单限价 >= 市价，可以成交
+                matched = True
+            elif order.side == OrderSide.SELL and order.price <= bar.close:
+                # 卖单限价 <= 市价，可以成交
+                matched = True
+
+        if matched:
+            # 重新构建 Order（带正确 status）
+            new_order = Order(
+                symbol=order.symbol,
+                side=order.side,
+                order_type=order.order_type,
+                price=order.price,
+                quantity=order.quantity,
+                order_id=order.order_id,
+                status=OrderStatus.SUBMITTED,
+            )
+            trade = _paper_broker.place_order(new_order, bar)
+            if trade:
+                _apply_trade_to_portfolio(trade)
+                _pending_limit_orders.pop(order_id)
+                logger.info(f"LIMIT 订单已撮合: {order_id} {trade.side} {trade.symbol} x{trade.quantity} @ {trade.price}")
+            else:
+                remaining.append(order_id)
+        else:
+            remaining.append(order_id)
+
+    # 清理已撮合的订单
+    for order_id in list(_pending_limit_orders.keys()):
+        if order_id not in remaining:
+            _pending_limit_orders.pop(order_id, None)
+
+
+def _apply_trade_to_portfolio(trade):
+    """将 TradeData 应用到 Portfolio"""
+    if trade.side == "Buy":
+        _portfolio.add_fill(trade.symbol, trade.quantity, trade.price, is_today=True)
+        # 扣减现金（含费用）
+        cost = _commission_info.calc_buy_cost(trade.price * trade.quantity)
+        _portfolio.account.deduct(cost)
+    elif trade.side == "Sell":
+        # 先计算卖出费用
+        sell_cost = _commission_info.calc_sell_cost(trade.price * trade.quantity)
+        # 从持仓扣减
+        _portfolio.remove_position(trade.symbol, trade.quantity, trade.price)
+        # 卖出所得现金减去费用
+        net_proceeds = trade.price * trade.quantity - sell_cost
+        _portfolio.account.cash += net_proceeds
+        _portfolio.account.available_cash += net_proceeds
+
+
+# ====================================================================
+# 端点
+# ====================================================================
 
 @router.get("/trading/account", summary="账户信息")
 async def get_account():
-    """获取账户信息"""
-    return _account
+    """获取账户信息 — 从 Portfolio 模型读取"""
+    acc = _portfolio.account
+    positions = _portfolio.positions
+    market_value = sum(p.market_value for p in positions.values() if p.quantity > 0)
+    return {
+        "total_equity": round(acc.total_equity, 2),
+        "available_cash": round(acc.available_cash, 2),
+        "position_value": round(market_value, 2),
+        "today_pnl": round(acc.unrealized_pnl, 2),
+        "broker_mode": "paper",
+    }
 
 
 @router.post("/trading/order", summary="下单")
-async def place_order(payload: dict):
-    """提交订单"""
+async def place_order(payload: dict, _user=Depends(get_trader_user)):
+    """提交订单 — 通过 PaperBroker 撮合"""
+    # 幂等性检查：如果相同 idempotency_key 已提交，返回之前的订单结果
+    idempotency_key = payload.get("idempotency_key", "")
+    if idempotency_key:
+        cached = _check_idempotency(idempotency_key)
+        if cached is not None:
+            logger.info(f"幂等性命中: key={idempotency_key}")
+            return cached
+
     symbol = payload.get("symbol", "")
     side = payload.get("side", "BUY")
     order_type = payload.get("type", "MARKET")
@@ -48,71 +476,210 @@ async def place_order(payload: dict):
     if not symbol or quantity <= 0:
         raise HTTPException(status_code=400, detail="股票代码和数量不能为空")
 
+    # A 股最小交易单位 100 股
+    if int(quantity) % 100 != 0:
+        raise HTTPException(status_code=400, detail="A 股交易数量必须为 100 股整数倍")
+
+    order_side = _to_order_side(side)
+    ot = _to_order_type(order_type)
+
+    # 使用传入价格或行情价格
+    if price > 0:
+        exec_price = price
+    else:
+        bar = _get_latest_bar(symbol)
+        exec_price = bar.close if bar else 0.0
+
+    if exec_price <= 0:
+        raise HTTPException(status_code=400, detail="无法获取行情价格，请检查股票代码")
+
     order_id = f"ORD-{uuid.uuid4().hex[:8].upper()}"
     now = datetime.now().isoformat()
 
-    order = {
+    # 构建 Order 模型
+    order = Order(
+        symbol=symbol,
+        side=order_side,
+        order_type=ot,
+        price=exec_price,
+        quantity=quantity,
+        order_id=order_id,
+        status=OrderStatus.SUBMITTED,
+    )
+
+    # 记录审计日志
+    _orders_audit[order_id] = {
         "order_id": order_id,
         "symbol": symbol,
         "side": side.upper(),
         "type": order_type.upper(),
-        "price": price,
+        "price": exec_price,
         "quantity": quantity,
-        "status": "FILLED" if order_type.upper() == "MARKET" else "SUBMITTED",
+        "status": "SUBMITTED",
         "created_at": now,
         "updated_at": now,
     }
 
-    _orders[order_id] = order
+    # 记录幂等性键
+    if idempotency_key:
+        _idempotency_keys[idempotency_key] = order_id
 
-    # MARKET 订单自动成交
-    if order_type.upper() == "MARKET":
-        trade = {
-            "trade_id": f"TRD-{uuid.uuid4().hex[:8].upper()}",
-            "order_id": order_id,
-            "symbol": symbol,
-            "side": side.upper(),
-            "price": price or 100.0,  # MVP: 使用当前价
-            "quantity": quantity,
-            "amount": (price or 100.0) * quantity,
-            "commission": round((price or 100.0) * quantity * 0.0003, 2),
-            "filled_at": now,
-        }
-        _trades.append(trade)
+    # 获取最新行情 Bar
+    bar = _get_or_create_bar(symbol, exec_price)
 
-    logger.info(f"订单已提交: {order_id} {side} {symbol} x{quantity}")
-    return order
+    # LIMIT 订单：进入 orderbook 等待撮合
+    if ot == OrderType.LIMIT:
+        # 检查资金是否充足
+        if order_side == OrderSide.BUY:
+            needed_cash = exec_price * quantity + _commission_info.calc_buy_cost(exec_price * quantity)
+            if needed_cash > _portfolio.account.available_cash:
+                order.update_status(OrderStatus.REJECTED)
+                _orders_audit[order_id]["status"] = "REJECTED"
+                _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+                raise HTTPException(status_code=400, detail="可用资金不足")
+
+        _pending_limit_orders[order_id] = order
+        _orders_audit[order_id]["status"] = "SUBMITTED"
+        _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+        logger.info(f"LIMIT 订单已挂单: {order_id} {side} {symbol} x{quantity} @ {exec_price}")
+        result = _orders_audit[order_id]
+        if idempotency_key:
+            _store_idempotency(idempotency_key, result)
+        _persist_trading_state()
+        return result
+
+    # MARKET 订单：直接通过 PaperBroker 撮合
+    if order_side == OrderSide.BUY:
+        # 检查资金
+        needed_cash = exec_price * quantity + _commission_info.calc_buy_cost(exec_price * quantity)
+        if needed_cash > _portfolio.account.available_cash:
+            order.update_status(OrderStatus.REJECTED)
+            _orders_audit[order_id]["status"] = "REJECTED"
+            _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+            raise HTTPException(status_code=400, detail="可用资金不足")
+
+    trade = _paper_broker.place_order(order, bar)
+
+    if trade is None:
+        # 订单被拒绝（涨跌停等）
+        _orders_audit[order_id]["status"] = "REJECTED"
+        _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+        result = _orders_audit[order_id]
+        if idempotency_key:
+            _store_idempotency(idempotency_key, result)
+        return result
+
+    # 将成交应用到 Portfolio
+    _apply_trade_to_portfolio(trade)
+
+    # 更新审计日志
+    _orders_audit[order_id]["status"] = "FILLED"
+    _orders_audit[order_id]["filled_price"] = trade.price
+    _orders_audit[order_id]["filled_at"] = now
+    _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+
+    # 持久化交易状态（崩溃恢复）
+    _persist_trading_state()
+
+    logger.info(f"订单已撮合: {order_id} {trade.side} {trade.symbol} x{trade.quantity} @ {trade.price}")
+    result = _orders_audit[order_id]
+    if idempotency_key:
+        _store_idempotency(idempotency_key, result)
+    return result
 
 
 @router.delete("/trading/order/{order_id}", summary="撤单")
-async def cancel_order(order_id: str):
-    """撤销订单"""
-    if order_id not in _orders:
+async def cancel_order(order_id: str, _user=Depends(get_trader_user)):
+    """撤销订单 — 从 pending limit 订单簿或订单审计中查找"""
+    # 优先从 pending limit 订单簿查找
+    if order_id in _pending_limit_orders:
+        order = _pending_limit_orders.pop(order_id)
+        _paper_broker.cancel_order(order)
+        _orders_audit[order_id]["status"] = "CANCELLED"
+        _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+        _persist_trading_state()
+        logger.info(f"挂单已撤销: {order_id}")
+        return {"success": True, "order_id": order_id, "status": "CANCELLED"}
+
+    # 其次从审计日志查找未成交订单
+    if order_id not in _orders_audit:
         raise HTTPException(status_code=404, detail=f"订单 {order_id} 不存在")
 
-    order = _orders[order_id]
-    if order["status"] in ("FILLED", "CANCELLED"):
-        raise HTTPException(status_code=400, detail=f"订单状态 {order['status']} 不可撤单")
+    audit = _orders_audit[order_id]
+    if audit["status"] in ("FILLED", "CANCELLED", "REJECTED"):
+        raise HTTPException(status_code=400, detail=f"订单状态 {audit['status']} 不可撤单")
 
-    order["status"] = "CANCELLED"
-    order["updated_at"] = datetime.now().isoformat()
+    audit["status"] = "CANCELLED"
+    audit["updated_at"] = datetime.now().isoformat()
+    _persist_trading_state()
     logger.info(f"订单已撤销: {order_id}")
     return {"success": True, "order_id": order_id, "status": "CANCELLED"}
 
 
 @router.get("/trading/positions", summary="持仓列表")
 async def get_positions():
-    """获取当前持仓"""
-    return _positions
+    """获取当前持仓 — 从 Portfolio 模型读取"""
+    result = []
+    for symbol, pos in _portfolio.positions.items():
+        if pos.quantity <= 0:
+            continue
+        # 更新最新价格
+        bar = _get_latest_bar(symbol)
+        if bar:
+            pos.update_price(bar.close)
+
+        result.append({
+            "symbol": pos.symbol,
+            "name": pos.symbol,
+            "shares": pos.quantity,
+            "cost": round(pos.cost_price, 2),
+            "price": round(pos.current_price, 2),
+            "market_value": round(pos.market_value, 2),
+            "pnl": round(pos.pnl, 2),
+            "pnl_pct": round((pos.current_price - pos.cost_price) / pos.cost_price * 100, 2)
+                        if pos.cost_price > 0 else 0,
+        })
+    return result
 
 
 @router.get("/trading/trades", summary="成交记录")
 async def get_trades():
-    """获取成交记录"""
-    return sorted(_trades, key=lambda t: t.get("filled_at", ""), reverse=True)
+    """获取成交记录 — 从 PaperBroker trade_log 读取"""
+    result = []
+    for trade in _paper_broker.trade_log:
+        result.append({
+            "trade_id": trade.trade_id,
+            "order_id": trade.order_id,
+            "symbol": trade.symbol,
+            "side": trade.side,
+            "price": trade.price,
+            "quantity": trade.quantity,
+            "amount": round(trade.price * trade.quantity, 2),
+            "commission": trade.commission,
+            "filled_at": datetime.fromtimestamp(trade.timestamp).isoformat()
+                         if trade.timestamp else None,
+        })
+    return sorted(result, key=lambda t: t.get("filled_at", "") or "", reverse=True)
 
 
 @router.get("/trading/orders", summary="订单列表")
-async def get_orders():
-    """获取订单列表"""
-    return list(_orders.values())
+async def get_orders(_user=Depends(get_current_user)):
+    """获取订单列表 — 合并审计日志 + pending limit 订单"""
+    result = list(_orders_audit.values())
+    # 添加 pending limit 订单
+    for order_id, order in _pending_limit_orders.items():
+        if order_id not in _orders_audit:
+            now = datetime.now().isoformat()
+            _orders_audit[order_id] = {
+                "order_id": order_id,
+                "symbol": order.symbol,
+                "side": order.side.value,
+                "type": order.order_type.value,
+                "price": order.price,
+                "quantity": order.quantity,
+                "status": "SUBMITTED",
+                "created_at": now,
+                "updated_at": now,
+            }
+            result.append(_orders_audit[order_id])
+    return result

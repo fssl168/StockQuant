@@ -29,6 +29,8 @@ export const dashboardApi = {
     client.get('/dashboard/signals') as Promise<SignalItem[]>,
   recentBacktests: () =>
     client.get('/backtest?limit=20') as Promise<any[]>,
+  equityCurve: () =>
+    client.get('/portfolio/equity-curve') as Promise<{ dates: string[]; values: number[] }>,
 }
 
 export const backtestApi = {

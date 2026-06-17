@@ -10,6 +10,19 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# 模型定价参考 (USD per 1K tokens) — 粗略估算
+_MODEL_PRICING: dict[str, dict[str, float]] = {
+    "gpt-4o": {"input": 0.0025, "output": 0.01},
+    "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
+    "gpt-4": {"input": 0.03, "output": 0.06},
+    "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},
+    "deepseek-chat": {"input": 0.00014, "output": 0.00028},
+    "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
+    "claude-haiku-3-20250307": {"input": 0.00025, "output": 0.00125},
+}
+
+_DEFAULT_PRICING = {"input": 0.001, "output": 0.003}
+
 
 def _resolve_api_key(api_key: Optional[str]) -> Optional[str]:
     """解析 API Key：优先使用显式值，否则从环境变量读取。"""
@@ -47,6 +60,13 @@ class LLMAdapter:
     litellm 采用懒加载（lazy import），避免硬依赖。
     """
 
+    # 类级别成本追踪器
+    _cost_tracker: dict = {
+        "total_tokens": 0,
+        "total_calls": 0,
+        "estimated_cost_usd": 0.0,
+    }
+
     def __init__(
         self,
         model: str = "gpt-4o",
@@ -71,6 +91,51 @@ class LLMAdapter:
                     "litellm is required for LLM tool calling. "
                     "Install with: pip install litellm"
                 )
+
+    @classmethod
+    def get_cost_stats(cls) -> dict:
+        """获取 LLM 调用成本统计。
+
+        Returns
+        -------
+        dict
+            包含 total_tokens, total_calls, estimated_cost_usd
+        """
+        return dict(cls._cost_tracker)
+
+    @classmethod
+    def _update_cost_tracker(cls, usage: dict, model: str) -> None:
+        """根据 LLM 响应的 usage 信息更新成本追踪器。
+
+        Parameters
+        ----------
+        usage : dict
+            litellm 返回的 usage 字段，含 prompt_tokens / completion_tokens
+        model : str
+            使用的模型名称
+        """
+        if not usage:
+            return
+
+        prompt_tokens = usage.get("prompt_tokens", 0) or 0
+        completion_tokens = usage.get("completion_tokens", 0) or 0
+        total = prompt_tokens + completion_tokens
+
+        # 查找模型定价（支持 provider/ 前缀格式）
+        model_key = model.split("/")[-1] if "/" in model else model
+        pricing = _MODEL_PRICING.get(model_key, _DEFAULT_PRICING)
+
+        cost = (prompt_tokens / 1000.0) * pricing["input"] + (completion_tokens / 1000.0) * pricing["output"]
+
+        cls._cost_tracker["total_tokens"] += total
+        cls._cost_tracker["total_calls"] += 1
+        cls._cost_tracker["estimated_cost_usd"] += cost
+
+        logger.debug(
+            "LLM 成本更新: model=%s, tokens=%d+%d, cost=$%.6f, 累计=$%.4f",
+            model, prompt_tokens, completion_tokens, cost,
+            cls._cost_tracker["estimated_cost_usd"],
+        )
 
     def call_with_tools(
         self,
@@ -135,14 +200,17 @@ class LLMAdapter:
                             },
                         })
 
-                return LLMResponse(
+                usage_info = response.get("usage", {})
+                result = LLMResponse(
                     content=message.content or "",
                     reasoning_content=getattr(message, "reasoning_content", "") or "",
                     tool_calls=tool_calls,
-                    usage=response.get("usage", {}),
+                    usage=usage_info,
                     model=candidate,
                     finish_reason=choice.finish_reason,
                 )
+                self._update_cost_tracker(usage_info, candidate)
+                return result
 
             except Exception as exc:
                 logger.warning(
@@ -161,10 +229,20 @@ class LLMAdapter:
         model: Optional[str] = None,
         **kwargs: Any,
     ) -> LLMResponse:
-        """简单 LLM 调用（无工具）。"""
+        """简单 LLM 调用（无工具）。
+
+        当 model 为 "local_rule_engine" 时，走本地规则引擎路径，
+        无需远程 LLM 调用，延迟 < 50ms。
+        """
+        used_model = model or self._model
+
+        # 本地规则引擎路径
+        if used_model == "local_rule_engine":
+            return self._call_local_rule_engine(messages)
+
         self._ensure_litellm()
         response = self._litellm.completion(
-            model=model or self._model,
+            model=used_model,
             messages=messages,
             api_key=self._api_key,
             base_url=self._base_url,
@@ -173,11 +251,85 @@ class LLMAdapter:
 
         choice = response.choices[0]
         message = choice.message
+        usage_info = response.get("usage", {})
 
-        return LLMResponse(
+        result = LLMResponse(
             content=message.content or "",
             reasoning_content=getattr(message, "reasoning_content", "") or "",
-            usage=response.get("usage", {}),
-            model=model or self._model,
+            usage=usage_info,
+            model=used_model,
             finish_reason=choice.finish_reason,
         )
+        self._update_cost_tracker(usage_info, used_model)
+        return result
+
+    def _call_local_rule_engine(self, messages: list[dict]) -> LLMResponse:
+        """本地规则引擎调用 — 基于 MA/MACD/RSI/BOLL 的快速信号判断
+
+        从 messages 中提取市场数据，调用 LocalRuleEngine 生成决策。
+        """
+        try:
+            from stockquant.ai.local_rule_engine import LocalRuleEngine, SignalType
+
+            engine = LocalRuleEngine()
+
+            # 从 messages 中提取价格数据
+            market_data = self._extract_market_data(messages)
+            closes = market_data.get("closes", [])
+
+            if closes:
+                signal = engine.analyze_signal(closes)
+                action = signal.signal.value
+                content = (
+                    f"规则引擎分析结果: {action}\n"
+                    f"置信度: {signal.confidence:.2f}\n"
+                    f"原因: {', '.join(signal.reasons)}\n"
+                    f"指标: RSI={signal.indicators.get('rsi', 'N/A')}, "
+                    f"MACD={signal.indicators.get('macd_hist', 'N/A')}, "
+                    f"MA5={signal.indicators.get('ma5', 'N/A')}, "
+                    f"MA20={signal.indicators.get('ma20', 'N/A')}"
+                )
+            else:
+                content = "规则引擎: 数据不足，建议持有观望"
+                action = "hold"
+
+            return LLMResponse(
+                content=content,
+                usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                model="local_rule_engine",
+                finish_reason="stop",
+            )
+        except Exception as exc:
+            logger.warning("本地规则引擎调用失败: %s", exc)
+            return LLMResponse(
+                content=f"规则引擎异常: {exc}",
+                model="local_rule_engine",
+                finish_reason="stop",
+            )
+
+    @staticmethod
+    def _extract_market_data(messages: list[dict]) -> dict:
+        """从消息列表中提取市场数据"""
+        import json as _json
+
+        market_data: dict = {"closes": []}
+
+        for msg in messages:
+            content = msg.get("content", "")
+            if not content:
+                continue
+
+            # 尝试解析 JSON 格式的市场数据
+            try:
+                data = _json.loads(content)
+                if isinstance(data, dict):
+                    if "closes" in data:
+                        market_data["closes"] = data["closes"]
+                    elif "price" in data:
+                        market_data["closes"].append(float(data["price"]))
+                    elif "close" in data:
+                        market_data["closes"].append(float(data["close"]))
+            except (ValueError, TypeError):
+                pass
+
+        return market_data

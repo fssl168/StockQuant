@@ -69,6 +69,7 @@ export default function Backtest() {
   const handleSubmit = async (values: Record<string, unknown>) => {
     setSubmitting(true)
     try {
+      const riskRules = values.risk_rules as Record<string, number> | undefined
       const result = await submitTask({
         strategy_name: values.strategy_name as string,
         symbols: String(values.symbols).split(',').map((s: string) => s.trim()),
@@ -78,7 +79,14 @@ export default function Backtest() {
         strategy_code: values.strategy_code as string,
         commission_type: 'ashare',
         slippage_type: 'none',
-      })
+        benchmark: (values.benchmark as string) || undefined,
+        risk_rules: riskRules ? {
+          max_position_pct: (riskRules.max_position_pct ?? 30) / 100,
+          max_daily_loss_pct: (riskRules.max_daily_loss_pct ?? 5) / 100,
+          max_drawdown_pct: (riskRules.max_drawdown_pct ?? 15) / 100,
+          max_orders_per_minute: riskRules.max_orders_per_minute ?? 10,
+        } : undefined,
+      } as any)
       addNotification({ type: 'info', title: 'Backtest submitted', message: values.strategy_name as string, time: new Date().toLocaleTimeString() })
       // Navigate to result page
       const taskId = (result as unknown as { task_id?: string })?.task_id ?? 'latest'
@@ -138,6 +146,18 @@ export default function Backtest() {
         </Card>
 
         <DataSelector form={form} />
+
+        <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>基准对比</span>} styles={{ body: { padding: 16 } }} style={{ marginBottom: 16 }}>
+          <Form.Item label="基准指数" name="benchmark" initialValue="">
+            <Select style={{ width: '100%' }}>
+              <Option value="">无基准</Option>
+              <Option value="hs300">沪深300</Option>
+              <Option value="zz500">中证500</Option>
+              <Option value="cyb">创业板指</Option>
+            </Select>
+          </Form.Item>
+        </Card>
+
         <ParamForm form={form} />
 
         <Form.Item style={{ marginBottom: 0 }}>

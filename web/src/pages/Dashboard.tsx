@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { Row, Col, Card, Table, Tag, Typography, Empty, Skeleton } from 'antd'
 import { TrendUp, Warning, ArrowUpRight, Sparkle } from '@phosphor-icons/react'
 import { dashboardApi } from '@/api/dashboard'
+import client from '@/api/client'
 import EquityChart from '@/components/Chart/EquityChart'
 import { useNotificationStore } from '@/stores/notificationStore'
 import MetricCard from '@/components/Card/MetricCard'
+import MetricTable from '@/components/Table/MetricTable'
 import NotificationList from '@/components/AI/NotificationList'
 
 const { Text, Title } = Typography
@@ -13,7 +15,10 @@ export default function Dashboard() {
   const [metrics, setMetrics] = useState<Record<string, unknown>>({})
   const [signals, setSignals] = useState<unknown[]>([])
   const [tasks, setTasks] = useState<unknown[]>([])
+  const [equityCurve, setEquityCurve] = useState<{ dates: string[]; values: number[] } | null>(null)
+  const [benchmarkData, setBenchmarkData] = useState<{ dates: string[]; values: number[] } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [aggMetrics, setAggMetrics] = useState<{ total_equity?: number; daily_pnl?: number; position_count?: number }>({})
   const notifications = useNotificationStore((s) => s.notifications)
 
   useEffect(() => {
@@ -27,6 +32,24 @@ export default function Dashboard() {
       dashboardApi.recentBacktests()
         .then((r: unknown[]) => { if (r) setTasks(r) })
         .catch(() => setTasks([])),
+      client.get('/portfolio/equity-curve')
+        .then((r: any) => { if (r) setEquityCurve(r) })
+        .catch(() => {}),
+      client.get('/data/kline?symbol=sh000300&timeframe=d')
+        .then((r: any) => {
+          const rows = Array.isArray(r) ? r : (r?.data ?? r)
+          if (Array.isArray(rows)) {
+            setBenchmarkData({
+              dates: rows.map((k: any) => k.date),
+              values: rows.map((k: any) => k.close),
+            })
+          }
+        })
+        .catch(() => {}),
+      // 聚合指标（总权益、今日盈亏、持仓数）
+      client.get('/dashboard/metrics')
+        .then((r: any) => { if (r) setAggMetrics(r) })
+        .catch(() => {}),
     ]).finally(() => setLoading(false))
   }, [])
 
@@ -42,22 +65,33 @@ export default function Dashboard() {
     ? metrics['Sharpe Ratio'] as number
     : NaN
 
+  // 从聚合指标获取真实数据
+  const totalEquity = aggMetrics.total_equity || 0
+  const dailyPnl = aggMetrics.daily_pnl || 0
+  const positionCount = aggMetrics.position_count || 0
+
+  const formatMoney = (val: number) => {
+    if (Math.abs(val) >= 1_000_000) return `¥${(val / 1_000_000).toFixed(2)}M`
+    if (Math.abs(val) >= 1_000) return `¥${(val / 1_000).toFixed(1)}K`
+    return `¥${val.toFixed(0)}`
+  }
+
   const metricItems = [
     {
       title: '总权益',
-      value: '¥1.23M',
+      value: totalEquity ? formatMoney(totalEquity) : '-',
       prefix: <TrendUp size={20} weight="bold" />,
       valueStyle: { color: 'var(--color-text-primary)' },
     },
     {
       title: '今日盈亏',
-      value: '+¥12,345',
+      value: dailyPnl ? formatMoney(dailyPnl) : '-',
       prefix: <ArrowUpRight size={20} weight="bold" />,
-      valueStyle: { color: '#10b981' },
+      valueStyle: { color: dailyPnl >= 0 ? '#10b981' : '#ef4444' },
     },
     {
       title: '持仓数',
-      value: '3',
+      value: positionCount > 0 ? String(positionCount) : '-',
       prefix: <Sparkle size={20} weight="bold" />,
       valueStyle: { color: 'var(--color-text-primary)' },
     },
@@ -184,7 +218,10 @@ export default function Dashboard() {
               <Skeleton active paragraph={{ rows: 8 }} />
             ) : (
               <EquityChart
-                data={Array.from({ length: 30 }, () => 1_000_000 + Math.random() * 200_000)}
+                data={equityCurve ? equityCurve.values : Array.from({ length: 30 }, () => 1_000_000 + Math.random() * 200_000)}
+                dates={equityCurve ? equityCurve.dates : undefined}
+                benchmarkData={benchmarkData ? benchmarkData.values : undefined}
+                benchmarkLabel="沪深300"
                 height={240}
               />
             )}
@@ -200,6 +237,20 @@ export default function Dashboard() {
           </Card>
         </Col>
       </Row>
+
+      {/* Metrics table */}
+      <Card
+        size="small"
+        title={<span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em' }}>核心指标</span>}
+        styles={{ body: { padding: 0 } }}
+        style={{ marginBottom: 12 }}
+      >
+        {loading ? (
+          <Skeleton active paragraph={{ rows: 4 }} style={{ padding: 16 }} />
+        ) : (
+          <MetricTable metrics={metrics as any} />
+        )}
+      </Card>
 
       {/* Backtest table */}
       <Card

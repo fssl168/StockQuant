@@ -30,6 +30,51 @@ SYSTEM_PROMPT = """你是 StockQuant 量化交易助手，专注于中国 A 股�
 - 简洁专业，避免废话
 """
 
+# 不同模式下的 system prompt 增强
+MODE_SYSTEM_PROMPTS: dict[str, str] = {
+    "general": SYSTEM_PROMPT,
+    "strategy": SYSTEM_PROMPT + """
+
+【策略模式】
+你当前处于策略开发模式。
+- 优先使用 BaseStrategy 模板生成策略代码
+- 策略必须继承 BaseStrategy，实现 on_bar 方法
+- 使用 self.buy / self.sell 下单，self.log 记录日志
+- 使用 self.cerebro 进行策略配置
+- 代码必须包含完整的 import 语句
+- 每次生成策略后，给出简要的交易日志说明
+- 支持的技术指标：MA, RSI, MACD, Bollinger Bands, KDJ, ATR 等
+""",
+    "analysis": SYSTEM_PROMPT + """
+
+【数据分析模式】
+你当前处于数据分析模式。
+- 优先调用工具获取真实数据进行分析
+- 提供数据表格、指标计算结果
+- 给出统计分析结论和投资建议
+- 用 Markdown 表格展示结构化数据
+""",
+    "monitor": SYSTEM_PROMPT + """
+
+【盯盘模式】
+你当前处于盯盘监控模式。
+- 关注实时信号：MACD 金叉/死叉、RSI 超买超卖、放量突破等
+- 给出明确的买入/卖出/观望建议
+- 标注信号置信度（高/中/低）
+- 关注涨停/跌停、放量异常等异动
+""",
+    "decision": SYSTEM_PROMPT + """
+
+【决策模式】
+你当前处于交易决策模式。
+- 对每个交易信号进行多维度验证（技术面+基本面+资金面）
+- 评估风险敞口和仓位比例
+- 分析当前市场环境（牛市/熊市/震荡市）
+- 给出明确的执行/放弃/观望建议
+- 标注决策依据和风险等级
+""",
+}
+
 
 class ChatMemory:
     """对话持久化 — SQLite 存储"""
@@ -135,6 +180,92 @@ class ChatAgent:
         self._conversations: Dict[str, Conversation] = {}
         self._tool_registry = ToolRegistry()
         self._memory = ChatMemory(db_url=db_url) if db_url else None
+        self._current_mode: str = "general"
+
+        # 监控工具仅在 monitor / decision 模式下注册（见 _register_mode_tools）
+
+    def _register_mode_tools(self, mode: str) -> None:
+        """根据对话模式注册不同的工具集。
+
+        Parameters
+        ----------
+        mode : str
+            对话模式：'general' | 'strategy' | 'analysis' | 'monitor' | 'decision'
+        """
+        if mode == self._current_mode:
+            return  # 模式未变，无需重新注册
+
+        self._current_mode = mode
+
+        # strategy 模式：策略生成 + 验证 + 回测工具
+        if mode == "strategy":
+            from stockquant.ai.chat_tools import trigger_backtest, interpret_backtest
+            self._tool_registry.register(trigger_backtest)
+            self._tool_registry.register(interpret_backtest)
+            try:
+                from stockquant.agent.strategy_tools import generate_strategy, validate_strategy
+                self._tool_registry.register(generate_strategy)
+                self._tool_registry.register(validate_strategy)
+            except ImportError:
+                logger.debug("strategy_tools not available")
+
+        # analysis 模式：市场数据查询 + 新闻搜索 + 回测分析工具
+        elif mode == "analysis":
+            from stockquant.ai.chat_tools import (
+                query_market_data,
+                generate_chart_json,
+                search_news,
+                interpret_backtest,
+            )
+            self._tool_registry.register(query_market_data)
+            self._tool_registry.register(generate_chart_json)
+            self._tool_registry.register(search_news)
+            self._tool_registry.register(interpret_backtest)
+
+        # monitor 模式：扫描 + 简报 + 摘要 + 新闻分析 + 监控管理工具
+        elif mode == "monitor":
+            from stockquant.ai.chat_tools import (
+                query_market_data,
+                search_news,
+                start_monitoring,
+                stop_monitoring,
+                check_monitor_status,
+            )
+            self._tool_registry.register(query_market_data)
+            self._tool_registry.register(search_news)
+            self._tool_registry.register(start_monitoring)
+            self._tool_registry.register(stop_monitoring)
+            self._tool_registry.register(check_monitor_status)
+            try:
+                from stockquant.ai.monitor_agent import MonitorAgent
+                # monitor_agent 的 scan / brief / summary 通过已有工具覆盖
+            except ImportError:
+                logger.debug("MonitorAgent not available")
+
+        # decision 模式：信号验证 + 风险评估 + 市场环境 + 监控管理工具
+        elif mode == "decision":
+            from stockquant.ai.chat_tools import (
+                query_market_data,
+                search_news,
+                start_monitoring,
+                stop_monitoring,
+                check_monitor_status,
+            )
+            self._tool_registry.register(query_market_data)
+            self._tool_registry.register(search_news)
+            self._tool_registry.register(start_monitoring)
+            self._tool_registry.register(stop_monitoring)
+            self._tool_registry.register(check_monitor_status)
+            try:
+                from stockquant.agent.decision_tools import verify_signal, assess_risk, check_market_env
+                self._tool_registry.register(verify_signal)
+                self._tool_registry.register(assess_risk)
+                self._tool_registry.register(check_market_env)
+            except ImportError:
+                logger.debug("decision_tools not available")
+
+        # general 模式：仅基础工具（已在 __init__ 中注册）
+        # 无需额外注册
 
     def _ensure_conversation(self, conversation_id: str) -> Conversation:
         if conversation_id not in self._conversations:
@@ -153,13 +284,24 @@ class ChatAgent:
         message: str,
         conversation_id: str = "default",
         model: Optional[str] = None,
+        mode: str = "general",
     ) -> str:
-        """发送消息并获取 AI 回复（通过 ReActAgent + 工具调用）。"""
+        """发送消息并获取 AI 回复（通过 ReActAgent + 工具调用）。
+
+        Parameters
+        ----------
+        mode : str
+            对话模式：'general' | 'strategy' | 'analysis' | 'monitor' | 'decision'
+        """
         conv = self._ensure_conversation(conversation_id)
         conv.add_message("user", message)
 
+        # 根据模式注册对应工具集
+        self._register_mode_tools(mode)
+
         history = conv.get_history(limit=15)
-        history.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
+        system_prompt = MODE_SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPT)
+        history.insert(0, {"role": "system", "content": system_prompt})
 
         # 通过 ReActAgent 执行工具调用
         try:
@@ -199,7 +341,8 @@ class ChatAgent:
             conv.add_message("user", message)
 
         history = conv.get_history(limit=15)
-        history.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
+        system_prompt = MODE_SYSTEM_PROMPTS.get("general", SYSTEM_PROMPT)
+        history.insert(0, {"role": "system", "content": system_prompt})
 
         try:
             response = self._adapter.call(
@@ -221,13 +364,15 @@ class ChatAgent:
         self,
         message: str,
         conversation_id: str = "default",
+        mode: str = "general",
     ) -> Generator[str, None, None]:
         """流式对话（SSE 兼容）。"""
         conv = self._ensure_conversation(conversation_id)
         conv.add_message("user", message)
 
         history = conv.get_history(limit=15)
-        history.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
+        system_prompt = MODE_SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPT)
+        history.insert(0, {"role": "system", "content": system_prompt})
 
         try:
             response = self._adapter.call(

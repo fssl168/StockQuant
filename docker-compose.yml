@@ -8,6 +8,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    volumes:
+      - ./web/nginx/default.conf:/etc/nginx/conf.d/default.conf
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/health"]
@@ -20,32 +22,178 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # === AI/LLM 配置 ===
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_BASE=${OPENAI_API_BASE}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OPENAI_MAX_TOKENS=${OPENAI_MAX_TOKENS:-4096}
+      - OPENAI_TEMPERATURE=${OPENAI_TEMPERATURE:-0.7}
+      - AI_LIGHTWEIGHT_MODEL=${AI_LIGHTWEIGHT_MODEL:-gpt-4o-mini}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - DATABASE_URL=sqlite:////app/stockquant.db
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      - ANTHROPIC_API_BASE=${ANTHROPIC_API_BASE}
+      
+      # === 数据库配置 ===
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stockquant_secret}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://stockquant:stockquant_secret@postgres:5432/stockquant}
+      - DATABASE_POOL_SIZE=${DATABASE_POOL_SIZE:-10}
+      - DATABASE_MAX_OVERFLOW=${DATABASE_MAX_OVERFLOW:-20}
+      - DATABASE_POOL_TIMEOUT=${DATABASE_POOL_TIMEOUT:-30}
+      - DATABASE_ECHO=${DATABASE_ECHO:-false}
+      
+      # === Redis 配置 ===
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_POOL_SIZE=${REDIS_POOL_SIZE:-10}
+      - REDIS_SOCKET_TIMEOUT=${REDIS_SOCKET_TIMEOUT:-5}
+      
+      # === Kafka 配置 ===
+      - KAFKA_ENABLED=${KAFKA_ENABLED:-false}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      - KAFKA_CONSUMER_GROUP=${KAFKA_CONSUMER_GROUP:-stockquant-consumers}
+      - KAFKA_SIGNAL_TOPIC=${KAFKA_SIGNAL_TOPIC:-stock-signal}
+      - KAFKA_ALERT_TOPIC=${KAFKA_ALERT_TOPIC:-stock-alert}
+      - KAFKA_SECURITY_PROTOCOL=${KAFKA_SECURITY_PROTOCOL:-plaintext}
+      
+      # === 交易配置 ===
+      - TRADING_BROKER=${TRADING_BROKER:-paper}
+      - TRADING_ADMIN_TOKEN=${TRADING_ADMIN_TOKEN}
+      - QMT_PATH=${QMT_PATH}
+      - QMT_ACCOUNT=${QMT_ACCOUNT}
+      - QMT_PASSWORD=${QMT_PASSWORD}
+      - XTP_USER=${XTP_USER}
+      - XTP_PASSWORD=${XTP_PASSWORD}
+      - XTP_APP_ID=${XTP_APP_ID}
+      - CTP_USER=${CTP_USER}
+      - CTP_PASSWORD=${CTP_PASSWORD}
+      - CTP_BROKER_ID=${CTP_BROKER_ID}
+      
+      # === 数据源配置 ===
+      - DATA_PROVIDER_SOURCE=${DATA_PROVIDER_SOURCE:-alphafeed}
+      - DATA_PROVIDER_API_KEY=${DATA_PROVIDER_API_KEY}
+      - DATA_PROVIDER_API_URL=${DATA_PROVIDER_API_URL}
+      - ALPHAFEED_KEY=${ALPHAFEED_KEY}
+      - TUSHARE_TOKEN=${TUSHARE_TOKEN}
+      - AKSHARE_PROXY=${AKSHARE_PROXY}
+      - JQDATA_MOBILE=${JQDATA_MOBILE}
+      - JQDATA_PASSWORD=${JQDATA_PASSWORD}
+      
+      # === 回测/风控配置 ===
+      - BACKTEST_DEFAULT_CASH=${BACKTEST_DEFAULT_CASH:-1000000}
+      - RISK_MAX_POSITION_PCT=${RISK_MAX_POSITION_PCT:-0.3}
+      - RISK_MAX_DAILY_LOSS_PCT=${RISK_MAX_DAILY_LOSS_PCT:-0.05}
+      - RISK_MAX_DRAWDOWN_PCT=${RISK_MAX_DRAWDOWN_PCT:-0.15}
+      
+      # === 通知配置 ===
+      - DINGTALK_WEBHOOK_URL=${DINGTALK_WEBHOOK_URL}
+      - WECHAT_WEBHOOK_URL=${WECHAT_WEBHOOK_URL}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - EMAIL_TO=${EMAIL_TO}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - PUSHPLUS_TOKEN=${PUSHPLUS_TOKEN}
+      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL}
+      
+      # === 系统配置 ===
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CACHE_DIR=${CACHE_DIR}
+      - LOG_DIR=${LOG_DIR:-./log}
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8000}
+      - DEBUG=${DEBUG:-false}
+      - WORKERS=${WORKERS:-4}
+      
+      # === 信号/决策配置 ===
+      - SIGNAL_DEDUP_COOLDOWN_SEC=${SIGNAL_DEDUP_COOLDOWN_SEC:-14400}
+      - SIGNAL_DEDUP_DB_CHECK_PENDING=${SIGNAL_DEDUP_DB_CHECK_PENDING:-true}
+      - SIGNAL_DEDUP_AUDIT_REJECTED=${SIGNAL_DEDUP_AUDIT_REJECTED:-true}
+      - DECISION_MODE=${DECISION_MODE:-manual}
+      - MONITOR_SCAN_INTERVAL=${MONITOR_SCAN_INTERVAL:-30}
+      - ALERT_THRESHOLD=${ALERT_THRESHOLD:-3.0}
+      
+      # === 缓存/JWT/限流配置 ===
+      - CACHE_TTL_HOURS=${CACHE_TTL_HOURS:-24}
+      - CACHE_MAX_SIZE_MB=${CACHE_MAX_SIZE_MB:-1024}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-stockquant-dev-secret}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-1440}
+      - SQ_ENCRYPTION_KEY=${SQ_ENCRYPTION_KEY}
+      - RATE_LIMIT=${RATE_LIMIT:-100 per minute}
+      
+      # === Signal Dedup 功能开关 ===
+      - SIGNAL_DEDUP_ENABLED=${SIGNAL_DEDUP_ENABLED:-false}
+      - SIMULATOR_FORCE_RUN=${SIMULATOR_FORCE_RUN:-true}
+
+      # === AI 信息管线配置 ===
+      - AI_PIPELINE_COLLECT_INTERVAL_SEC=${AI_PIPELINE_COLLECT_INTERVAL_SEC:-300}
+      - AI_PIPELINE_DENOISE_SOURCE_CREDIT_THRESHOLD=${AI_PIPELINE_DENOISE_SOURCE_CREDIT_THRESHOLD:-0.5}
+      - AI_PIPELINE_DENOISE_TIMELINESS_HOURS=${AI_PIPELINE_DENOISE_TIMELINESS_HOURS:-24}
+      - AI_PIPELINE_SUMMARIZE_PERIOD=${AI_PIPELINE_SUMMARIZE_PERIOD:-daily}
+      - AI_PIPELINE_ELEVATE_MIN_ARTICLES=${AI_PIPELINE_ELEVATE_MIN_ARTICLES:-3}
+      - AI_PIPELINE_HALLUCINATION_MODE=${AI_PIPELINE_HALLUCINATION_MODE:-standard}
+      - AI_PIPELINE_MEMORY_L2_RETENTION_DAYS=${AI_PIPELINE_MEMORY_L2_RETENTION_DAYS:-30}
+      - AI_PIPELINE_MEMORY_L3_CONFIDENCE_THRESHOLD=${AI_PIPELINE_MEMORY_L3_CONFIDENCE_THRESHOLD:-0.15}
+      - LOCAL_RULE_ENGINE_ENABLED=${LOCAL_RULE_ENGINE_ENABLED:-true}
+      - SENTIMENT_METHOD=${SENTIMENT_METHOD:-auto}
+      
+      # === Admin Token ===
+      - TRADING_ADMIN_TOKEN=${TRADING_ADMIN_TOKEN:-MyTradingAdminSecret2026}
     volumes:
       - ./data:/app/data
-      - ./stockquant.db:/app/stockquant.db
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  chromadb:
-    image: chromadb/chroma:latest
+  postgres:
+    image: pgvector/pgvector:pg16
     ports:
-      - "8888:80"
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: stockquant
+      POSTGRES_USER: stockquant
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stockquant_secret}
     volumes:
-      - chroma_data:/chroma/chroma
+      - pg_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8888/api/v1/heartbeat"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD-SHELL", "pg_isready -U stockquant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    container_name: stockquant-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
       retries: 3
+    restart: unless-stopped
 
 volumes:
   data:
-  chroma_data:
+  pg_data:
+  redis-data:

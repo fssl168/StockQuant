@@ -108,6 +108,76 @@ class ReportGenerator:
         return json_str
 
     @staticmethod
+    def generate_pdf(
+        results: List[dict],
+        output_path: Optional[str] = None,
+        title: str = "StockQuant 回测报表",
+    ) -> bytes:
+        """
+        生成 PDF 报表。
+
+        使用 weasyprint 将 HTML 转换为 PDF。若未安装 weasyprint 则抛出
+        ImportError 并提示安装方式。
+
+        Parameters
+        ----------
+        results : List[dict]
+            Cerebro.run() 返回的结果列表
+        output_path : str or None
+            输出文件路径，None 则仅返回 bytes
+        title : str
+            报表标题
+
+        Returns
+        -------
+        bytes
+            PDF 文件内容
+        """
+        try:
+            from weasyprint import HTML
+        except ImportError:
+            raise ImportError(
+                "weasyprint 未安装，无法生成 PDF 报表。"
+                "请运行: pip install weasyprint"
+            )
+
+        # 复用 generate_html，注入打印专用 CSS
+        html_content = ReportGenerator.generate_html(results, title=title)
+        print_css = """
+        <style>
+          @page {
+            size: A4;
+            margin: 15mm 12mm;
+          }
+          body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .strategy-section {
+            page-break-inside: avoid;
+          }
+          .equity-chart {
+            page-break-inside: avoid;
+          }
+          .trades-table {
+            page-break-inside: avoid;
+          }
+        </style>
+        """
+        # 在 </head> 前插入打印 CSS
+        html_content = html_content.replace("</head>", print_css + "\n</head>")
+
+        pdf_bytes = HTML(string=html_content).write_pdf()
+
+        if output_path:
+            os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+            with open(output_path, "wb") as f:
+                f.write(pdf_bytes)
+            logger.info(f"PDF report saved to: {output_path}")
+
+        return pdf_bytes
+
+    @staticmethod
     def generate_summary(results: List[dict]) -> str:
         """
         生成控制台摘要报告。

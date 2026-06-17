@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import client from '@/api/client'
 
 export interface NotificationItem {
   id: string
@@ -6,19 +7,52 @@ export interface NotificationItem {
   title: string
   message: string
   time: string
+  read: boolean
 }
 
 interface NotificationState {
   notifications: NotificationItem[]
-  add: (n: Omit<NotificationItem, 'id'>) => void
+  add: (n: Omit<NotificationItem, 'id' | 'read'>) => void
   clear: () => void
+  markRead: (id: string) => void
+  deleteNotification: (id: string) => void
+  fetchFromBackend: () => Promise<void>
 }
 
 export const useNotificationStore = create<NotificationState>((set) => ({
-  notifications: [
-    { id: '1', type: 'signal', title: '放量突破', message: 'sh600519 放量突破 1720', time: '09:45' },
-    { id: '2', type: 'alert', title: 'MACD 死叉', message: 'sz000858 MACD 死叉，注意风险', time: '10:20' },
-  ],
-  add: (n) => set((st) => ({ notifications: [{ ...n, id: crypto.randomUUID() }, ...st.notifications] })),
+  notifications: [],
+  add: (n) => {
+    const notification = { ...n, id: crypto.randomUUID(), read: false }
+    set((st) => ({ notifications: [notification, ...st.notifications] }))
+  },
   clear: () => set({ notifications: [] }),
+  markRead: (id: string) => {
+    set((st) => ({
+      notifications: st.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)),
+    }))
+    client.put(`/notifications/${id}/read`).catch(() => {})
+  },
+  deleteNotification: (id: string) => {
+    set((st) => ({
+      notifications: st.notifications.filter((n) => n.id !== id),
+    }))
+    client.delete(`/notifications/${id}`).catch(() => {})
+  },
+  fetchFromBackend: async () => {
+    try {
+      const data = await client.get('/notifications') as any
+      if (Array.isArray(data)) {
+        set({ notifications: data })
+      }
+    } catch {
+      // ignore, use empty array
+    }
+  },
 }))
+
+// 初始化时从后端加载通知（fire-and-forget，不阻塞渲染）
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    useNotificationStore.getState().fetchFromBackend().catch(() => {})
+  }, 0)
+}

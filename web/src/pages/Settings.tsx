@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
-  Card, Collapse, Button, InputNumber, Switch, Select, Slider, Input, Space, Typography,
-  Modal, Tag, Badge, FloatButton, Steps,
+  Collapse, Button, InputNumber, Switch, Select, Slider, Input, Space, Typography,
+  Modal, Tag, Badge,
 } from 'antd'
 import {
   Warning, Sparkle, Rocket, Bell, Brain,
@@ -57,7 +57,8 @@ const GROUPS: GroupEntry[] = [
     key: 'data_source', label: '数据源', icon: 'Coin',
     iconComponent: <Coin size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
-      { key: 'data_provider.source', value: 'akshare', defaultValue: 'akshare', value_type: 'select', label: '默认数据源', description: '主用数据提供商', secret: false, options: [{ value: 'baostock', label: 'BaoStock' }, { value: 'akshare', label: 'AkShare' }, { value: 'csv', label: 'CSV' }, { value: 'parquet', label: 'Parquet' }] },
+      { key: 'data_provider.source', value: 'alphafeed', defaultValue: 'alphafeed', value_type: 'select', label: '默认数据源', description: '主用数据提供商', secret: false, options: [{ value: 'alphafeed', label: 'AlphaFeed (推荐)' }, { value: 'baostock', label: 'BaoStock' }, { value: 'akshare', label: 'AkShare (降级)' }, { value: 'csv', label: 'CSV' }, { value: 'parquet', label: 'Parquet' }] },
+      { key: 'data_provider.alphafeed_key', value: '', defaultValue: '', value_type: 'password', label: 'AlphaFeed Key', description: 'AlphaFeed API 密钥', secret: true, when: { field: 'data_provider.source', values: ['alphafeed'] } },
       { key: 'data_provider.api_key', value: '', defaultValue: '', value_type: 'password', label: 'API Key', description: '数据源认证密钥', secret: true, when: { field: 'data_provider.source', values: ['akshare', 'parquet'] } },
       { key: 'data_provider.api_url', value: '', defaultValue: '', value_type: 'string', label: 'API URL', description: '数据源接口地址', secret: false, when: { field: 'data_provider.source', values: ['akshare', 'parquet'] } },
       { key: 'baostock.enabled', value: true, defaultValue: true, value_type: 'boolean', label: '启用 BaoStock', description: '使用 BaoStock 作为备用数据源', secret: false, when: { field: 'data_provider.source', values: ['baostock'] } },
@@ -97,25 +98,51 @@ const GROUPS: GroupEntry[] = [
     iconComponent: <WifiHigh size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
     items: [
       { key: 'trading.broker', value: 'simulator', defaultValue: 'simulator', value_type: 'select', label: 'Broker 类型', description: '交易通道类型', secret: false, options: [{ value: 'simulator', label: '模拟器' }, { value: 'qmt', label: 'QMT' }, { value: 'xtp', label: 'XTP' }] },
-      { key: 'trading.poll_interval_sec', value: 1, defaultValue: 1, value_type: 'number', label: '轮询间隔', description: '行情刷新间隔（秒）', secret: false, min: 0.1, max: 60, step: 0.1 },
-      { key: 'trading.auto_reconcile_minutes', value: 30, defaultValue: 30, value_type: 'number', label: '自动对账', description: '对账间隔（分钟）', secret: false, min: 5, max: 1440, step: 5 },
+      { key: 'trading.poll_interval_sec', value: 1, defaultValue: 1, value_type: 'number', label: '轮询间隔', description: '行情刷新间隔（秒）', secret: false, min: 0.1, max: 60, step: 0.1, when: { field: 'trading.broker', values: ['qmt'] } },
+      { key: 'trading.auto_reconcile_minutes', value: 30, defaultValue: 30, value_type: 'number', label: '自动对账', description: '对账间隔（分钟）', secret: false, min: 5, max: 1440, step: 5, when: { field: 'trading.broker', values: ['qmt'] } },
     ],
   },
   {
     key: 'risk_control', label: '风控阈值', icon: 'Warning',
     iconComponent: <Warning size={16} weight="fill" style={{ color: 'var(--color-warning)' }} />,
     items: [
-      { key: 'risk_control.max_stop_loss_pct', value: 0.08, defaultValue: 0.08, value_type: 'float', label: '单笔止损', description: '单笔最大亏损比例', secret: false, min: 0.01, max: 0.3, step: 0.01, scale: 100, unit: '%', slider: true },
-      { key: 'risk_control.max_pos_per_stock', value: 0.3, defaultValue: 0.3, value_type: 'float', label: '单票仓位', description: '单只股票最大仓位占比', secret: false, min: 0.05, max: 1, step: 0.05, scale: 100, unit: '%', slider: true },
-      { key: 'risk_control.max_total_pos', value: 0.9, defaultValue: 0.9, value_type: 'float', label: '总仓位上限', description: '最大总仓位占比', secret: false, min: 0.1, max: 1, step: 0.05, scale: 100, unit: '%', slider: true },
-      { key: 'risk_control.max_daily_loss_pct', value: 0.02, defaultValue: 0.02, value_type: 'float', label: '日亏损熔断', description: '单日最大亏损触发熔断', secret: false, min: 0.005, max: 0.1, step: 0.005, scale: 100, unit: '%', slider: true },
-      { key: 'risk_control.max_drawdown_pct', value: 0.15, defaultValue: 0.15, value_type: 'float', label: '回撤熔断', description: '累计最大回撤触发暂停', secret: false, min: 0.05, max: 0.5, step: 0.01, scale: 100, unit: '%', slider: true },
+      { key: 'risk_control.max_stop_loss_pct', value: 0.08, defaultValue: 0.08, value_type: 'float', label: '单笔止损', description: '单笔最大亏损比例', secret: false, min: 0.01, max: 0.3, step: 0.01, scale: 100, unit: '%', slider: true, when: { field: 'trading.mode', values: ['simulator', 'live'] } },
+      { key: 'risk_control.max_pos_per_stock', value: 0.3, defaultValue: 0.3, value_type: 'float', label: '单票仓位', description: '单只股票最大仓位占比', secret: false, min: 0.05, max: 1, step: 0.05, scale: 100, unit: '%', slider: true, when: { field: 'trading.mode', values: ['simulator', 'live'] } },
+      { key: 'risk_control.max_total_pos', value: 0.9, defaultValue: 0.9, value_type: 'float', label: '总仓位上限', description: '最大总仓位占比', secret: false, min: 0.1, max: 1, step: 0.05, scale: 100, unit: '%', slider: true, when: { field: 'trading.mode', values: ['simulator', 'live'] } },
+      { key: 'risk_control.max_daily_loss_pct', value: 0.02, defaultValue: 0.02, value_type: 'float', label: '日亏损熔断', description: '单日最大亏损触发熔断', secret: false, min: 0.005, max: 0.1, step: 0.005, scale: 100, unit: '%', slider: true, when: { field: 'trading.mode', values: ['simulator', 'live'] } },
+      { key: 'risk_control.max_drawdown_pct', value: 0.15, defaultValue: 0.15, value_type: 'float', label: '回撤熔断', description: '累计最大回撤触发暂停', secret: false, min: 0.05, max: 0.5, step: 0.01, scale: 100, unit: '%', slider: true, when: { field: 'trading.mode', values: ['simulator', 'live'] } },
     ],
   },
   {
     key: 'ai_model', label: 'AI 模型', icon: 'MagicStick',
-    iconComponent: null,
-    items: [],
+    iconComponent: <Brain size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
+    items: [
+      { key: 'decision.mode', value: 'semi_auto', defaultValue: 'semi_auto', value_type: 'select', label: '决策模式', description: 'AI 辅助决策模式', secret: false, options: [{ value: 'auto', label: '全自动' }, { value: 'semi_auto', label: '半自动' }, { value: 'read_only', label: '只读' }] },
+      { key: 'ai.model', value: 'gpt-4o', defaultValue: 'gpt-4o', value_type: 'string', label: '主模型', description: 'OpenAI / 兼容 API 模型名称', secret: false },
+      { key: 'ai.api_key', value: '', defaultValue: '', value_type: 'password', label: 'API Key', description: 'OpenAI / 兼容 API 密钥', secret: true },
+      { key: 'ai.api_base', value: '', defaultValue: '', value_type: 'string', label: 'API Base URL', description: '自定义 API 地址（留空用官方默认）', secret: false },
+      { key: 'ai.temperature', value: 0.7, defaultValue: 0.7, value_type: 'float', label: 'Temperature', description: '生成温度 (0-2)', secret: false, min: 0, max: 2, step: 0.1, scale: 10, slider: true },
+      { key: 'ai.max_tokens', value: 4096, defaultValue: 4096, value_type: 'number', label: 'Max Tokens', description: '单次最大生成 token 数', secret: false, min: 256, max: 128000, step: 256 },
+      { key: 'ai.anthropic_model', value: 'claude-sonnet-4-20250514', defaultValue: 'claude-sonnet-4-20250514', value_type: 'string', label: 'Anthropic 模型', description: 'Claude 模型名称', secret: false },
+      { key: 'ai.anthropic_api_key', value: '', defaultValue: '', value_type: 'password', label: 'Anthropic API Key', description: 'Anthropic API 密钥', secret: true },
+      { key: 'ai.anthropic_api_base', value: '', defaultValue: '', value_type: 'string', label: 'Anthropic API Base', description: '自定义 Anthropic API 地址', secret: false },
+    ],
+  },
+  {
+    key: 'ai_pipeline', label: 'AI 信息管线', icon: 'FlowArrow',
+    iconComponent: <Brain size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
+    items: [
+      { key: 'ai_pipeline.collect_interval_sec', value: 300, defaultValue: 300, value_type: 'number', label: '采集频率', description: '信息采集间隔（秒）', secret: false, min: 60, max: 3600, step: 30 },
+      { key: 'ai_pipeline.denoise_source_credit_threshold', value: 0.5, defaultValue: 0.5, value_type: 'float', label: '来源信用阈值', description: '低于此阈值的信源将被降权', secret: false, min: 0, max: 1, step: 0.05, scale: 100, unit: '', slider: true },
+      { key: 'ai_pipeline.denoise_timeliness_hours', value: 24, defaultValue: 24, value_type: 'number', label: '时效降权', description: '超过此时长的信息将被降权（小时）', secret: false, min: 1, max: 168, step: 1 },
+      { key: 'ai_pipeline.summarize_period', value: 'daily', defaultValue: 'daily', value_type: 'select', label: '总结周期', description: '信息总结频率', secret: false, options: [{ value: 'daily', label: '每日' }, { value: 'weekly', label: '每周' }, { value: 'monthly', label: '每月' }] },
+      { key: 'ai_pipeline.elevate_min_articles', value: 3, defaultValue: 3, value_type: 'number', label: '升华触发数', description: '触发升华所需最少文章数', secret: false, min: 2, max: 20, step: 1 },
+      { key: 'ai_pipeline.hallucination_mode', value: 'standard', defaultValue: 'standard', value_type: 'select', label: '反幻觉模式', description: '幻觉检测严格程度', secret: false, options: [{ value: 'strict', label: '严格' }, { value: 'standard', label: '标准' }, { value: 'relaxed', label: '宽松' }, { value: 'emergency', label: '紧急' }] },
+      { key: 'ai_pipeline.memory_l2_retention_days', value: 30, defaultValue: 30, value_type: 'number', label: 'L2 保留天数', description: '短期记忆保留天数', secret: false, min: 1, max: 365, step: 1 },
+      { key: 'ai_pipeline.memory_l3_confidence_threshold', value: 0.15, defaultValue: 0.15, value_type: 'float', label: 'L3 置信度阈值', description: '长期记忆最低置信度', secret: false, min: 0, max: 1, step: 0.05, scale: 100, unit: '', slider: true },
+      { key: 'ai_pipeline.local_rule_engine_enabled', value: true, defaultValue: true, value_type: 'boolean', label: '本地规则引擎', description: 'Tick级决策使用本地规则引擎（无需LLM）', secret: false },
+      { key: 'ai_pipeline.sentiment_method', value: 'auto', defaultValue: 'auto', value_type: 'select', label: '情感分析', description: '情感分析方法', secret: false, options: [{ value: 'auto', label: '自动降级' }, { value: 'keyword', label: '关键词规则' }, { value: 'huggingface', label: 'HuggingFace 模型' }] },
+    ],
   },
   {
     key: 'evolution', label: '策略进化', icon: 'Rocket',
@@ -172,7 +199,6 @@ const isVisible = (item: SettingEntry, allValues: Record<string, unknown>): bool
 
 export default function Settings() {
   const [viewMode, setViewMode] = useState<'wizard' | 'expert'>('expert')
-  const [wizardStep, setWizardStep] = useState(0)
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(new Set())
   const [adminModal, setAdminModal] = useState(false)
@@ -185,12 +211,15 @@ export default function Settings() {
     const initial: Record<string, unknown> = {}
     GROUPS.forEach((g) => g.items.forEach((item) => { initial[item.key] = item.value }))
     // Also include default values for extracted component keys
-    initial['ai_model.provider'] = 'openai'
-    initial['ai_model.api_url'] = ''
-    initial['ai_model.api_key'] = ''
-    initial['ai_model.model'] = 'gpt-4o'
-    initial['ai_model.temperature'] = 0.3
-    initial['ai_model.timeout_sec'] = 30
+    initial['decision.mode'] = 'semi_auto'
+    initial['ai.model'] = 'gpt-4o'
+    initial['ai.api_key'] = ''
+    initial['ai.api_base'] = ''
+    initial['ai.temperature'] = 0.7
+    initial['ai.max_tokens'] = 4096
+    initial['ai.anthropic_model'] = 'claude-sonnet-4-20250514'
+    initial['ai.anthropic_api_key'] = ''
+    initial['ai.anthropic_api_base'] = ''
     initial['evolution.enabled'] = false
     initial['evolution.llm_provider'] = 'openai'
     initial['evolution.llm_model'] = 'gpt-4o'
@@ -200,7 +229,20 @@ export default function Settings() {
     initial['notification.wechat_webhook'] = ''
     initial['notification.telegram_bot_token'] = ''
     initial['notification.email_enabled'] = false
-    setValues(initial)
+
+    // 从后端加载配置覆盖本地默认值
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.settings) {
+          setValues({ ...initial, ...data.settings })
+        } else {
+          setValues(initial)
+        }
+      })
+      .catch(() => {
+        setValues(initial)
+      })
   }, [])
 
   const handleValueChange = useCallback((key: string, newVal: unknown) => {
@@ -210,12 +252,14 @@ export default function Settings() {
       // Check against defaults from all sources
       const allDefaults: Record<string, unknown> = {}
       GROUPS.forEach((g) => g.items.forEach((item) => { allDefaults[item.key] = item.defaultValue }))
-      allDefaults['ai_model.provider'] = 'openai'
-      allDefaults['ai_model.api_url'] = ''
-      allDefaults['ai_model.api_key'] = ''
-      allDefaults['ai_model.model'] = 'gpt-4o'
-      allDefaults['ai_model.temperature'] = 0.3
-      allDefaults['ai_model.timeout_sec'] = 30
+      allDefaults['ai.model'] = 'gpt-4o'
+      allDefaults['ai.api_key'] = ''
+      allDefaults['ai.api_base'] = ''
+      allDefaults['ai.temperature'] = 0.7
+      allDefaults['ai.max_tokens'] = 4096
+      allDefaults['ai.anthropic_model'] = 'claude-sonnet-4-20250514'
+      allDefaults['ai.anthropic_api_key'] = ''
+      allDefaults['ai.anthropic_api_base'] = ''
       allDefaults['evolution.enabled'] = false
       allDefaults['evolution.llm_provider'] = 'openai'
       allDefaults['evolution.llm_model'] = 'gpt-4o'
@@ -231,29 +275,72 @@ export default function Settings() {
     })
   }, [])
 
-  const handleSave = () => {
-    setAdminModal(true)
+  const SENSITIVE_PATTERNS = ['key', 'secret', 'password', 'token', 'webhook']
+
+  const hasSensitiveChanges = () => {
+    for (const k of dirtyKeys) {
+      const lower = k.toLowerCase()
+      if (SENSITIVE_PATTERNS.some((p) => lower.includes(p))) return true
+    }
+    return false
   }
 
-  const handleAdminConfirm = () => {
+  const handleSave = () => {
+    if (hasSensitiveChanges()) {
+      setAdminModal(true)
+    } else {
+      handleAdminConfirm()
+    }
+  }
+
+  const handleAdminConfirm = async () => {
     setSaving(true)
-    setTimeout(() => {
+    try {
+      // 收集修改的配置项
+      const updates: Record<string, unknown> = {}
+      dirtyKeys.forEach(k => { updates[k] = values[k] })
+
+      if (Object.keys(updates).length > 0) {
+        const token = localStorage.getItem('auth_token')
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        }
+        if (adminToken) {
+          headers['X-Admin-Token'] = adminToken
+        }
+        const res = await fetch('/api/settings/save', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ settings: updates }),
+        })
+        if (!res.ok) {
+          console.error('保存配置失败:', res.statusText)
+        }
+      }
+
       setDirtyKeys(new Set())
-      setSaving(false)
       setAdminModal(false)
       setAdminToken('')
-    }, 800)
+    } catch (e) {
+      console.error('保存配置异常:', e)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleDiscard = () => {
     const initial: Record<string, unknown> = {}
     GROUPS.forEach((g) => g.items.forEach((item) => { initial[item.key] = item.value }))
-    initial['ai_model.provider'] = 'openai'
-    initial['ai_model.api_url'] = ''
-    initial['ai_model.api_key'] = ''
-    initial['ai_model.model'] = 'gpt-4o'
-    initial['ai_model.temperature'] = 0.3
-    initial['ai_model.timeout_sec'] = 30
+    initial['decision.mode'] = 'semi_auto'
+    initial['ai.model'] = 'gpt-4o'
+    initial['ai.api_key'] = ''
+    initial['ai.api_base'] = ''
+    initial['ai.temperature'] = 0.7
+    initial['ai.max_tokens'] = 4096
+    initial['ai.anthropic_model'] = 'claude-sonnet-4-20250514'
+    initial['ai.anthropic_api_key'] = ''
+    initial['ai.anthropic_api_base'] = ''
     initial['evolution.enabled'] = false
     initial['evolution.llm_provider'] = 'openai'
     initial['evolution.llm_model'] = 'gpt-4o'
@@ -357,7 +444,7 @@ export default function Settings() {
   const dirtyCount = dirtyKeys.size
 
   return (
-    <div style={{ maxWidth: 1000 }}>
+    <div style={{ maxWidth: 1000, paddingBottom: dirtyCount > 0 ? 64 : 0 }}>
       {/* Banner */}
       <div style={{
         background: 'linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.04) 100%)',
@@ -384,21 +471,14 @@ export default function Settings() {
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16,
       }}>
         <Space size={16}>
-          <Space size={4}>
-            <Tag
-              color={viewMode === 'wizard' ? 'blue' : 'default'}
-              style={{ cursor: 'pointer', fontWeight: viewMode === 'wizard' ? 600 : 400 }}
-              onClick={() => setViewMode('wizard')}
-            >
-              向导模式
-            </Tag>
-            <Tag
-              color={viewMode === 'expert' ? 'blue' : 'default'}
-              style={{ cursor: 'pointer', fontWeight: viewMode === 'expert' ? 600 : 400 }}
-              onClick={() => setViewMode('expert')}
-            >
-              专家模式
-            </Tag>
+          <Space size={8} align="center">
+            <Text style={{ fontSize: 13, fontWeight: viewMode === 'wizard' ? 600 : 400 }}>向导模式</Text>
+            <Switch
+              size="small"
+              checked={viewMode === 'expert'}
+              onChange={(checked) => setViewMode(checked ? 'expert' : 'wizard')}
+            />
+            <Text style={{ fontSize: 13, fontWeight: viewMode === 'expert' ? 600 : 400 }}>专家模式</Text>
           </Space>
           <Button size="small" type="link" onClick={() => setAllExpanded(!allExpanded)}>
             {allExpanded ? '全部折叠' : '全部展开'}
@@ -413,117 +493,86 @@ export default function Settings() {
         </Space>
       </div>
 
-      {/* Wizard Mode */}
+      {/* Wizard Mode - simplified: only AI模型, 交易, 通知 */}
       {viewMode === 'wizard' && (
-        <div>
-          <Steps
-            current={wizardStep}
-            size="small"
-            style={{ marginBottom: 20 }}
-            items={[
-              { title: '交易模式', icon: <Laptop size={16} weight="fill" /> },
-              { title: '数据源', icon: <Coin size={16} weight="fill" /> },
-              { title: '回测设置', icon: <ArrowsClockwise size={16} weight="fill" /> },
-              { title: '风控参数', icon: <Warning size={16} weight="fill" /> },
-              { title: '完成', icon: <Rocket size={16} weight="fill" /> },
-            ]}
-          />
-          <Card size="small" styles={{ body: { padding: 24 } }}>
-            {/* Step 0: Trading Mode */}
-            {wizardStep === 0 && (
-              <Space direction="vertical" style={{ width: '100%' }} size={16}>
-                <Title level={5} style={{ margin: 0 }}>基础配置</Title>
-                <Text type="secondary">设置交易模式和初始资金</Text>
-                {GROUPS[0].items.map((item) => renderControl(item))}
-              </Space>
-            )}
-            {/* Step 1: Data Source */}
-            {wizardStep === 1 && (
-              <Space direction="vertical" style={{ width: '100%' }} size={16}>
-                <Title level={5} style={{ margin: 0 }}>数据源</Title>
-                <Text type="secondary">配置数据提供商和缓存</Text>
-                {GROUPS[1].items.filter((item) => isVisible(item, values)).map((item) => renderControl(item))}
-              </Space>
-            )}
-            {/* Step 2: Backtest Engine */}
-            {wizardStep === 2 && (
-              <Space direction="vertical" style={{ width: '100%' }} size={16}>
-                <Title level={5} style={{ margin: 0 }}>回测引擎</Title>
-                <Text type="secondary">回测执行参数</Text>
-                {GROUPS[2].items.map((item) => renderControl(item))}
-              </Space>
-            )}
-            {/* Step 3: Risk Control */}
-            {wizardStep === 3 && (
-              <Space direction="vertical" style={{ width: '100%' }} size={16}>
-                <Title level={5} style={{ margin: 0 }}>风险控制</Title>
-                <Text type="secondary">仓位和止损策略</Text>
-                {GROUPS[3].items.map((item) => renderControl(item))}
-              </Space>
-            )}
-            {/* Step 4: Summary & Save */}
-            {wizardStep === 4 && (
-              <Space direction="vertical" style={{ width: '100%' }} size={12} align="center">
-                <CheckCircle size={48} weight="fill" style={{ color: 'var(--color-success)' }} />
-                <Title level={4} style={{ margin: 0 }}>配置就绪</Title>
-                <Text type="secondary">已准备保存以下配置项</Text>
-                <div style={{ width: '100%', background: 'var(--color-bg-elevated)', borderRadius: 8, padding: 16 }}>
-                  {[0, 1, 2, 3].flatMap((gi) =>
-                    GROUPS[gi].items.filter((item) => item.value !== item.defaultValue).map((item) => (
-                      <div key={item.key} style={{
-                        display: 'flex', justifyContent: 'space-between',
-                        padding: '6px 0', borderBottom: '1px solid var(--color-bg-surface)',
-                        fontSize: 13,
-                      }}>
-                        <Text>{item.label}</Text>
-                        <Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                          {String(item.value)}
-                        </Text>
-                      </div>
-                    ))
-                  ).length > 0 ? (
-                    [0, 1, 2, 3].flatMap((gi) =>
-                      GROUPS[gi].items.filter((item) => item.value !== item.defaultValue).map((item) => (
-                        <div key={item.key} style={{
-                          display: 'flex', justifyContent: 'space-between',
-                          padding: '6px 0', borderBottom: '1px solid var(--color-bg-surface)',
-                          fontSize: 13,
-                        }}>
-                          <Text>{item.label}</Text>
-                          <Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                            {String(item.value)}
-                          </Text>
+        <Collapse
+          bordered={false}
+          expandIconPosition="right"
+          defaultActiveKey={['ai_model', 'broker_channel', 'notification']}
+          style={{ background: 'transparent' }}
+          items={GROUPS.filter((g) => ['ai_model', 'broker_channel', 'notification'].includes(g.key)).map((g) => {
+            if (g.key === 'ai_model') {
+              return {
+                key: g.key,
+                label: (
+                  <Space style={{ fontSize: 13, fontWeight: 600 }}>
+                    <Brain size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> {g.label}
+                    <Tag color="default" style={{ fontSize: 11, margin: 0 }}>6</Tag>
+                  </Space>
+                ),
+                children: <LLMConfigForm values={values} onChange={handleValueChange} />,
+              }
+            }
+            if (g.key === 'notification') {
+              return {
+                key: g.key,
+                label: (
+                  <Space style={{ fontSize: 13, fontWeight: 600 }}>
+                    <Bell size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> {g.label}
+                    <Tag color="default" style={{ fontSize: 11, margin: 0 }}>4</Tag>
+                  </Space>
+                ),
+                children: <NotifierForm values={values} onChange={handleValueChange} />,
+              }
+            }
+            const visibleItems = g.items.filter((item) => isVisible(item, values))
+            if (visibleItems.length === 0) return null
+            return {
+              key: g.key,
+              label: (
+                <Space style={{ fontSize: 13, fontWeight: 600 }}>
+                  {g.iconComponent} {g.label}
+                  <Tag color="default" style={{ fontSize: 11, margin: 0 }}>{visibleItems.length}</Tag>
+                </Space>
+              ),
+              children: (
+                <Space direction="vertical" style={{ width: '100%' }} size={10}>
+                  {visibleItems.map((item) => {
+                    const isDirty = dirtyKeys.has(item.key)
+                    return (
+                      <div
+                        key={item.key}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '140px 1fr 36px',
+                          gap: 12,
+                          alignItems: 'center',
+                          padding: '6px 12px',
+                          borderRadius: 6,
+                          background: isDirty ? 'rgba(245,158,11,0.04)' : 'transparent',
+                          border: isDirty ? '1px solid rgba(245,158,11,0.15)' : '1px solid transparent',
+                        }}
+                      >
+                        <div>
+                          <Text style={{ fontSize: 12, fontWeight: 500 }}>{item.label}</Text>
+                          {item.description && (
+                            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 1 }}>{item.description}</div>
+                          )}
                         </div>
-                      ))
+                        {renderControl(item)}
+                        {isDirty ? (
+                          <CheckCircle size={14} weight="fill" style={{ color: 'var(--color-warning)', cursor: 'pointer' }} />
+                        ) : (
+                          <XCircle size={14} weight="fill" style={{ color: 'var(--color-bg-elevated)' }} />
+                        )}
+                      </div>
                     )
-                  ) : (
-                    <Text type="secondary">无修改项（使用默认值）</Text>
-                  )}
-                </div>
-              </Space>
-            )}
-          </Card>
-
-          {/* Navigation */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
-            <Button
-              disabled={wizardStep === 0}
-              icon={<ArrowCounterClockwise size={14} />}
-              onClick={() => setWizardStep((s) => s - 1)}
-            >
-              上一步
-            </Button>
-            {wizardStep < 4 ? (
-              <Button type="primary" onClick={() => setWizardStep((s) => s + 1)}>
-                下一步
-              </Button>
-            ) : (
-              <Button type="primary" icon={<Rocket size={16} weight="fill" />} onClick={handleSave} loading={saving}>
-                保存配置
-              </Button>
-            )}
-          </div>
-        </div>
+                  })}
+                </Space>
+              ),
+            }
+          }).filter((item): item is NonNullable<typeof item> => item !== null)}
+        />
       )}
 
       {/* Expert Mode */}
@@ -541,7 +590,7 @@ export default function Settings() {
                 label: (
                   <Space style={{ fontSize: 13, fontWeight: 600 }}>
                     <Brain size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> {g.label}
-                    <Tag color="default" style={{ fontSize: 11, margin: 0 }}>6</Tag>
+                    <Tag color="default" style={{ fontSize: 11, margin: 0 }}>8</Tag>
                   </Space>
                 ),
                 children: <LLMConfigForm values={values} onChange={handleValueChange} />,
@@ -624,24 +673,45 @@ export default function Settings() {
 
       {/* Floating save bar */}
       {dirtyCount > 0 && (
-        <FloatButton
-          type="primary"
-          icon={<CheckCircle size={20} weight="fill" />}
-          style={{ right: 24, bottom: 24 }}
-          onClick={handleSave}
-          tooltip={`${dirtyCount} 项配置未保存`}
-        />
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 100,
+          background: 'var(--color-bg-elevated, #fff)',
+          borderTop: '1px solid var(--color-border, #f0f0f0)',
+          boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.12)',
+          padding: '12px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <Text style={{ fontSize: 13 }}>
+            <Warning size={14} weight="fill" style={{ color: 'var(--color-warning)', marginRight: 6, verticalAlign: 'middle' }} />
+            有未保存的更改
+            <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>({dirtyCount} 项)</Text>
+          </Text>
+          <Space>
+            <Button onClick={handleDiscard} icon={<ArrowCounterClockwise size={14} />}>放弃</Button>
+            <Button type="primary" icon={<CheckCircle size={16} weight="fill" />} onClick={handleSave} loading={saving}>
+              保存
+            </Button>
+          </Space>
+        </div>
       )}
 
-      {/* Admin modal */}
+      {/* Admin token confirmation modal - only for sensitive settings */}
       <Modal
-        title="确认保存"
+        title="确认修改敏感设置"
         open={adminModal}
         onOk={handleAdminConfirm}
         onCancel={() => { setAdminModal(false); setAdminToken('') }}
         okButtonProps={{ loading: saving }}
+        okText="确认保存"
+        cancelText="取消"
       >
-        <p style={{ marginBottom: 12 }}>请输入 <Text code>TRADING_ADMIN_TOKEN</Text> 以确认保存配置修改。</p>
+        <p style={{ marginBottom: 12 }}>检测到修改涉及敏感配置（API 密钥、密码、令牌等），请输入 <Text code>TRADING_ADMIN_TOKEN</Text> 以确认操作。</p>
         <Input.Password
           ref={passwordRef}
           value={adminToken}
@@ -650,16 +720,6 @@ export default function Settings() {
           onPressEnter={handleAdminConfirm}
         />
       </Modal>
-
-      {/* Footer actions */}
-      {dirtyCount > 0 && (
-        <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <Button size="small" onClick={handleDiscard}>放弃修改</Button>
-          <Button type="primary" icon={<CheckCircle size={16} weight="fill" />} onClick={handleSave} loading={saving}>
-            保存并生效
-          </Button>
-        </div>
-      )}
     </div>
   )
 }

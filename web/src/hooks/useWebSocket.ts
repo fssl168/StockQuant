@@ -7,6 +7,11 @@ export interface WSMessage {
   timestamp: string
 }
 
+interface UseWebSocketOptions {
+  /** When true, suppress all console.warn on connection failures */
+  silent?: boolean
+}
+
 interface UseWebSocketReturn {
   connected: boolean
   status: 'connecting' | 'connected' | 'disconnected'
@@ -16,7 +21,8 @@ interface UseWebSocketReturn {
   close: () => void
 }
 
-export function useWebSocket(url: string | null): UseWebSocketReturn {
+export function useWebSocket(url: string | null, options?: UseWebSocketOptions): UseWebSocketReturn {
+  const silent = options?.silent ?? false
   const wsRef = useRef<WebSocket | null>(null)
   const [connected, setConnected] = useState(false)
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected')
@@ -33,8 +39,13 @@ export function useWebSocket(url: string | null): UseWebSocketReturn {
       // 将相对路径转换为完整的 ws:// URL
       let wsUrl = url
       if (url.startsWith('/')) {
-        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-        wsUrl = `${proto}//${window.location.host}${url}`
+        const envUrl = import.meta.env.VITE_WS_URL
+        if (envUrl) {
+          wsUrl = `${envUrl}${url}`
+        } else {
+          const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+          wsUrl = `${proto}//${window.location.host}${url}`
+        }
       }
       const ws = new WebSocket(wsUrl)
       wsRef.current = ws
@@ -61,16 +72,16 @@ export function useWebSocket(url: string | null): UseWebSocketReturn {
         if (url && reconnectAttempts.current <= maxReconnectAttempts) {
           // 指数退避: 1s → 2s → 4s
           const delay = Math.pow(2, reconnectAttempts.current - 1) * 1000
-          console.warn(`WebSocket disconnected, retrying in ${delay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`)
+          if (!silent) console.warn(`WebSocket disconnected, retrying in ${delay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`)
           reconnectTimerRef.current = setTimeout(connect, delay)
-        } else {
+        } else if (!silent) {
           console.warn(`WebSocket max reconnect attempts (${maxReconnectAttempts}) reached, giving up`)
           setStatus('disconnected')
         }
       }
 
       ws.onerror = () => {
-        console.warn('WebSocket connection error')
+        if (!silent) console.warn('WebSocket connection error')
         ws.close()
       }
     } catch { /* ignore */ }

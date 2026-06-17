@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -31,6 +32,7 @@ from stockquant.ai.models import (
     SignalSource,
     SignalVerification,
 )
+from stockquant.config import get_config
 from stockquant.persistence.repository import save_audit_log
 
 logger = logging.getLogger("stockquant.ai")
@@ -111,7 +113,8 @@ class DecisionAgent:
         self._fetcher_manager = fetcher_manager
         self._news_searcher = news_searcher
         self._audit_logs: List[AuditLog] = []
-        self._db_url = db_url or "sqlite:///./stockquant.db"
+        self._db_url = db_url or os.environ.get("DATABASE_URL", "sqlite:///./stockquant.db")
+        self._model_usage_stats: Dict[str, int] = {}
 
         # 构建 ReActAgent
         self._react = ReActAgent(
@@ -151,6 +154,82 @@ class DecisionAgent:
     @mode.setter
     def mode(self, value: DecisionMode) -> None:
         self._mode = value
+
+    def select_model_for_frequency(self, frequency: str) -> str:
+        """根据数据频率自动选择 AI 模型
+
+        - Tick 级（< 1s）: 使用本地规则引擎，延迟 < 200ms
+        - 分钟级（1s-60s）: 使用轻量 LLM（如 gpt-4o-mini），延迟 < 3s
+        - Bar 级（> 60s）: 使用重量 LLM（如 gpt-4o），延迟 < 10s
+
+        Parameters
+        ----------
+        frequency : str
+            数据频率，如 "tick", "1min", "5min", "1h", "daily"
+
+        Returns
+        -------
+        str
+            选择的模型名称
+        """
+        config = get_config()
+        ai_config = config.get("ai", {})
+
+        # 频率 → 模型映射
+        tick_models = ["local_rule_engine"]
+        lightweight_models = [ai_config.get("lightweight_model", "gpt-4o-mini")]
+        heavyweight_models = [ai_config.get("model", "gpt-4o")]
+
+        freq_lower = frequency.lower().strip()
+
+        # Tick 级: tick, 100ms, 500ms 等
+        if freq_lower == "tick" or freq_lower.endswith("ms"):
+            selected = tick_models[0]
+            logger.info("频率 '%s' → 选择本地规则引擎 (延迟 < 200ms)", frequency)
+
+        # 分钟级: 1s, 5s, 10s, 15s, 30s, 1min, 5min, 15min, 30min, 60s 等
+        elif self._is_minute_level(freq_lower):
+            selected = lightweight_models[0]
+            logger.info("频率 '%s' → 选择轻量 LLM %s (延迟 < 3s)", frequency, selected)
+
+        # Bar 级: 1h, 4h, daily, weekly, monthly 等
+        else:
+            selected = heavyweight_models[0]
+            logger.info("频率 '%s' → 选择重量 LLM %s (延迟 < 10s)", frequency, selected)
+
+        # 更新使用统计
+        self._model_usage_stats[selected] = self._model_usage_stats.get(selected, 0) + 1
+
+        return selected
+
+    @staticmethod
+    def _is_minute_level(freq: str) -> bool:
+        """判断频率是否为分钟级（1s ~ 60s）"""
+        # 纯秒数: "1s", "5s", "10s", "15s", "30s", "60s"
+        if freq.endswith("s") and not freq.endswith("ms"):
+            try:
+                seconds = int(freq[:-1])
+                return 1 <= seconds <= 60
+            except ValueError:
+                pass
+        # 分钟: "1min", "5min", "15min", "30min", "60min"
+        if freq.endswith("min"):
+            try:
+                minutes = int(freq.replace("min", ""))
+                return 1 <= minutes <= 60
+            except ValueError:
+                pass
+        return False
+
+    def get_model_usage_stats(self) -> Dict[str, int]:
+        """获取模型使用统计。
+
+        Returns
+        -------
+        dict
+            模型名称 → 使用次数的映射
+        """
+        return dict(self._model_usage_stats)
 
     def evaluate(
         self,

@@ -168,7 +168,7 @@ export interface CacheStats {
 }
 
 // ====== Trading Types ======
-export type BrokerMode = 'paper' | 'live'
+export type BrokerMode = 'paper' | 'live' | 'xtp' | 'ctp'
 export type OrderSide = 'BUY' | 'SELL'
 export type OrderType = 'MARKET' | 'LIMIT' | 'STOP'
 export type OrderStatus = 'PENDING' | 'SUBMITTED' | 'PARTIAL_FILLED' | 'FILLED' | 'CANCELLED' | 'REJECTED'

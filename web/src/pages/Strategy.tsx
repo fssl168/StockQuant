@@ -1,11 +1,38 @@
 import { useEffect, useState } from 'react'
-import { Table, Button, Input, Card, Typography, Space, Modal, Tooltip } from 'antd'
-import { Plus, Code, Trash } from '@phosphor-icons/react'
+import { Table, Button, Input, Card, Typography, Space, Modal, Tooltip, message, Select, InputNumber } from 'antd'
+import { Plus, Code, Trash, Sparkle } from '@phosphor-icons/react'
+import client from '@/api/client'
 import { useStrategyStore } from '@/stores/strategyStore'
 import StrategyEditor from '@/components/Strategy/StrategyEditor'
 import PreviewPanel from '@/components/Strategy/PreviewPanel'
 
-const { Title, Text } = Typography
+const { Title, Text, Paragraph } = Typography
+
+const SIZER_OPTIONS = [
+  { value: 'fixed_fraction', label: '固定比例' },
+  { value: 'kelly', label: 'Kelly公式' },
+  { value: 'atr', label: 'ATR仓位' },
+  { value: 'volatility_target', label: '波动率目标' },
+  { value: 'equal_weight', label: '等权重' },
+] as const
+
+type SizerType = typeof SIZER_OPTIONS[number]['value']
+
+interface SizerConfig {
+  type: SizerType
+  fraction_pct: number
+  atr_period: number
+  atr_risk_coeff: number
+  vol_target: number
+}
+
+const DEFAULT_SIZER_CONFIG: SizerConfig = {
+  type: 'fixed_fraction',
+  fraction_pct: 0.02,
+  atr_period: 14,
+  atr_risk_coeff: 0.02,
+  vol_target: 0.15,
+}
 
 const DEFAULT_TEMPLATES = [
   { name: 'Dual MA Crossover', code: `from stockquant.strategy import BaseStrategy
@@ -54,6 +81,71 @@ class MACDDivergence(BaseStrategy):
             self.order_market(self.data.close[0], 100)
         elif self.macd.historical[-1] < 0:
             self.close_all()` },
+  { name: 'Bollinger Bounce', code: `from stockquant.strategy import BaseStrategy
+from stockquant.indicators import BBANDS
+
+class BollingerBounceStrategy(BaseStrategy):
+    name = "Bollinger Bounce"
+    parameters = {"period": 20, "std_dev": 2.0, "position_size": 0.1}
+
+    def on_start(self):
+        self.bb = BBANDS(self.data, period=self.parameters["period"], std_dev=self.parameters["std_dev"])
+
+    def on_bar(self):
+        if self.data.close[0] <= self.bb.lower[0]:
+            self.order_market(self.data.close[0], 100)
+        elif self.data.close[0] >= self.bb.upper[0]:
+            self.close_all()` },
+  { name: 'Dual Thrust', code: `from stockquant.strategy import BaseStrategy
+
+class DualThrustStrategy(BaseStrategy):
+    name = "Dual Thrust"
+    parameters = {"lookback": 5, "k1": 0.5, "k2": 0.5, "position_size": 0.1}
+
+    def on_start(self):
+        self.range = 0
+
+    def on_bar(self):
+        if self.range == 0:
+            history = self.data.history[-self.parameters["lookback"]:]
+            self.range = max(h.high for h in history) - min(h.low for h in history)
+        if self.data.close[0] > self.parameters["k1"] * self.range:
+            self.order_market(self.data.close[0], 100)
+        elif self.data.close[0] < self.parameters["k2"] * self.range:
+            self.close_all()` },
+  { name: 'Mean Reversion', code: `from stockquant.strategy import BaseStrategy
+from stockquant.indicators import SMA, STDDEV
+
+class MeanReversionStrategy(BaseStrategy):
+    name = "Mean Reversion"
+    parameters = {"period": 20, "deviation": 2.0, "position_size": 0.1}
+
+    def on_start(self):
+        self.sma = SMA(self.data, period=self.parameters["period"])
+        self.stddev = STDDEV(self.data, period=self.parameters["period"])
+
+    def on_bar(self):
+        upper = self.sma[0] + self.parameters["deviation"] * self.stddev[0]
+        lower = self.sma[0] - self.parameters["deviation"] * self.stddev[0]
+        if self.data.close[0] < lower:
+            self.order_market(self.data.close[0], 100)
+        elif self.data.close[0] > upper:
+            self.close_all()` },
+  { name: 'Momentum', code: `from stockquant.strategy import BaseStrategy
+from stockquant.indicators import RSI
+
+class MomentumStrategy(BaseStrategy):
+    name = "Momentum"
+    parameters = {"rsi_period": 14, "oversold": 30, "overbought": 70, "position_size": 0.1}
+
+    def on_start(self):
+        self.rsi = RSI(self.data, period=self.parameters["rsi_period"])
+
+    def on_bar(self):
+        if self.rsi[0] < self.parameters["oversold"]:
+            self.order_market(self.data.close[0], 100)
+        elif self.rsi[0] > self.parameters["overbought"]:
+            self.close_all()` },
 ]
 
 export default function Strategy() {
@@ -63,6 +155,10 @@ export default function Strategy() {
   const [currentStrategyId, setCurrentStrategyId] = useState<string | null>(null)
   const [previewCode, setPreviewCode] = useState<string | null>(null)
   const [templateModal, setTemplateModal] = useState(false)
+  const [aiModal, setAiModal] = useState(false)
+  const [aiDescription, setAiDescription] = useState('')
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [sizerConfig, setSizerConfig] = useState<SizerConfig>({ ...DEFAULT_SIZER_CONFIG })
 
   useEffect(() => { fetchStrategies() }, [fetchStrategies])
 
@@ -71,10 +167,20 @@ export default function Strategy() {
     setEditorCode('')
     setCurrentStrategyId(null)
     setPreviewCode(null)
+    setSizerConfig({ ...DEFAULT_SIZER_CONFIG })
   }
 
   const handleSave = async () => {
     if (!strategyName.trim() || !editorCode.trim()) return
+    const sizerParams: Record<string, unknown> = { type: sizerConfig.type }
+    if (sizerConfig.type === 'fixed_fraction') {
+      sizerParams.fraction_pct = sizerConfig.fraction_pct
+    } else if (sizerConfig.type === 'atr') {
+      sizerParams.atr_period = sizerConfig.atr_period
+      sizerParams.atr_risk_coeff = sizerConfig.atr_risk_coeff
+    } else if (sizerConfig.type === 'volatility_target') {
+      sizerParams.vol_target = sizerConfig.vol_target
+    }
     try {
       if (currentStrategyId) {
         const { updateStrategy } = useStrategyStore.getState()
@@ -84,19 +190,42 @@ export default function Strategy() {
           name: strategyName,
           code: editorCode,
           description: '',
-          parameters: {},
+          parameters: { position_sizer: sizerParams },
         })
       }
       setEditorCode('')
       setStrategyName('')
       setCurrentStrategyId(null)
       setPreviewCode(null)
+      setSizerConfig({ ...DEFAULT_SIZER_CONFIG })
     } catch { /* ignore */ }
   }
 
   const handleTemplate = (code: string) => {
     setEditorCode(code)
     setTemplateModal(false)
+  }
+
+  const handleAiGenerate = async () => {
+    if (!aiDescription.trim()) return
+    setAiGenerating(true)
+    try {
+      const res = await client.post('/ai/strategy/generate', { description: aiDescription })
+      const body = (res as any).data ?? res
+      if (body.code) {
+        setEditorCode(body.code)
+        setStrategyName(body.name ?? 'AI 生成策略')
+        setAiModal(false)
+        setAiDescription('')
+        message.success('策略生成成功')
+      } else {
+        message.info('AI 策略生成功能开发中')
+      }
+    } catch {
+      message.info('AI 策略生成功能开发中')
+    } finally {
+      setAiGenerating(false)
+    }
   }
 
   return (
@@ -110,6 +239,7 @@ export default function Strategy() {
         <Space>
           <Button icon={<Plus size={16} />} onClick={handleCreate}>新建策略</Button>
           <Button icon={<Code size={16} />} onClick={() => setTemplateModal(true)}>模板库</Button>
+          <Button type="primary" icon={<Sparkle size={16} />} onClick={() => setAiModal(true)}>AI 生成策略</Button>
         </Space>
       </div>
 
@@ -131,6 +261,80 @@ export default function Strategy() {
               <Button size="small" onClick={() => setPreviewCode(editorCode || null)}>预览</Button>
             </Tooltip>
           </div>
+
+          {/* 仓位管理 section */}
+          <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>仓位管理</span>} style={{ marginBottom: 8, flexShrink: 0 }} styles={{ body: { padding: '8px 12px' } }}>
+            <Space direction="vertical" style={{ width: '100%' }} size={8}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Text style={{ fontSize: 12, minWidth: 60 }}>仓位模型</Text>
+                <Select
+                  value={sizerConfig.type}
+                  onChange={(v) => setSizerConfig((prev) => ({ ...prev, type: v as SizerType }))}
+                  options={SIZER_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  size="small"
+                  style={{ minWidth: 140 }}
+                />
+              </div>
+              {sizerConfig.type === 'fixed_fraction' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 12, minWidth: 60 }}>百分比</Text>
+                  <InputNumber
+                    size="small"
+                    min={0.01}
+                    max={1.0}
+                    step={0.01}
+                    value={sizerConfig.fraction_pct}
+                    onChange={(v) => setSizerConfig((prev) => ({ ...prev, fraction_pct: v ?? 0.02 }))}
+                    style={{ width: 100 }}
+                  />
+                </div>
+              )}
+              {sizerConfig.type === 'atr' && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ fontSize: 12, minWidth: 60 }}>ATR周期</Text>
+                    <InputNumber
+                      size="small"
+                      min={1}
+                      max={100}
+                      value={sizerConfig.atr_period}
+                      onChange={(v) => setSizerConfig((prev) => ({ ...prev, atr_period: v ?? 14 }))}
+                      style={{ width: 100 }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ fontSize: 12, minWidth: 60 }}>风险系数</Text>
+                    <InputNumber
+                      size="small"
+                      min={0.01}
+                      max={0.1}
+                      step={0.01}
+                      value={sizerConfig.atr_risk_coeff}
+                      onChange={(v) => setSizerConfig((prev) => ({ ...prev, atr_risk_coeff: v ?? 0.02 }))}
+                      style={{ width: 100 }}
+                    />
+                  </div>
+                </>
+              )}
+              {sizerConfig.type === 'volatility_target' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 12, minWidth: 60 }}>目标波动率</Text>
+                  <InputNumber
+                    size="small"
+                    min={0.05}
+                    max={0.5}
+                    step={0.01}
+                    value={sizerConfig.vol_target}
+                    onChange={(v) => setSizerConfig((prev) => ({ ...prev, vol_target: v ?? 0.15 }))}
+                    style={{ width: 100 }}
+                  />
+                </div>
+              )}
+              {(sizerConfig.type === 'kelly' || sizerConfig.type === 'equal_weight') && (
+                <Text type="secondary" style={{ fontSize: 11 }}>此模型无需额外参数</Text>
+              )}
+            </Space>
+          </Card>
 
           <StrategyEditor
             code={editorCode}
@@ -200,6 +404,33 @@ export default function Strategy() {
             </Card>
           ))}
         </Space>
+      </Modal>
+
+      {/* AI Generate Strategy modal */}
+      <Modal
+        title={<span><Sparkle size={16} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--color-brand-primary)' }} />AI 生成策略</span>}
+        open={aiModal}
+        onCancel={() => { setAiModal(false); setAiDescription('') }}
+        footer={null}
+        width={520}
+      >
+        <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
+          用自然语言描述你的策略，AI 将为你生成策略代码
+        </Paragraph>
+        <Input.TextArea
+          value={aiDescription}
+          onChange={(e) => setAiDescription(e.target.value)}
+          placeholder='例如: "写一个基于RSI的超买超卖策略，RSI低于30买入，高于70卖出"'
+          rows={4}
+          style={{ marginBottom: 12 }}
+          disabled={aiGenerating}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <Button onClick={() => { setAiModal(false); setAiDescription('') }}>取消</Button>
+          <Button type="primary" icon={<Sparkle size={16} />} loading={aiGenerating} onClick={handleAiGenerate}>
+            生成
+          </Button>
+        </div>
       </Modal>
     </div>
   )

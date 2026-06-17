@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""SQLite 数据源 — F011 SQLite 数据库读取"""
+"""数据库数据源 — 支持 SQLite 和 PostgreSQL"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from stockquant.models.bar import BarData
 
 class SQLiteFeed(DataFeed):
     """
-    从 SQLite 数据库加载 K 线数据。
+    从数据库加载 K 线数据（支持 SQLite 和 PostgreSQL）。
 
     数据库表结构要求:
         CREATE TABLE kline (
@@ -28,9 +28,15 @@ class SQLiteFeed(DataFeed):
             volume REAL
         );
 
+    支持两种连接方式:
+        1. SQLite: db_path="market.db" (使用 sqlite3)
+        2. PostgreSQL: db_url="postgresql://..." (使用 SQLAlchemy)
+
     Usage:
+        # SQLite
         feed = SQLiteFeed("market.db", table="kline", symbol="sh600519", timeframe="1d")
-        cerebro.add_data(feed)
+        # PostgreSQL
+        feed = SQLiteFeed("postgresql://user:pass@host:5432/db", table="kline", symbol="sh600519", timeframe="1d")
     """
 
     def __init__(
@@ -48,14 +54,24 @@ class SQLiteFeed(DataFeed):
         self._timeframe = timeframe
         self._date_col = date_col
         self._where = where or (f"symbol = '{symbol}'" if symbol else "")
+        self._is_postgresql = db_path.startswith("postgresql://")
         self._df = self._load()
         self._bars: Optional[list[BarData]] = None
 
-    def _load(self) -> pd.DataFrame:
-        """从 SQLite 加载数据"""
-        if not os.path.exists(self._db_path):
-            raise FileNotFoundError(f"SQLite database not found: {self._db_path}")
+    def _connect(self):
+        """创建数据库连接（懒加载）"""
+        if self._is_postgresql:
+            import sqlalchemy
+            engine = sqlalchemy.create_engine(self._db_path)
+            return engine.connect()
+        else:
+            import sqlite3
+            if not os.path.exists(self._db_path):
+                raise FileNotFoundError(f"SQLite database not found: {self._db_path}")
+            return sqlite3.connect(self._db_path)
 
+    def _load(self) -> pd.DataFrame:
+        """从数据库加载数据"""
         query = f"SELECT * FROM {self._table}"
         if self._where:
             query += f" WHERE {self._where}"
@@ -79,11 +95,6 @@ class SQLiteFeed(DataFeed):
 
         df.sort_index(inplace=True)
         return df
-
-    def _connect(self):
-        """创建数据库连接（懒加载 sqlite3）"""
-        import sqlite3
-        return sqlite3.connect(self._db_path)
 
     def start(self):
         pass

@@ -215,34 +215,176 @@ def interpret_backtest(backtest_id: str) -> str:
 
 
 @tool
-def start_monitoring(symbols: List[str], interval: int = 60) -> str:
-    """启动盯盘监控。
+def start_monitoring(symbol: str, alert_conditions: Optional[List[str]] = None) -> str:
+    """启动盯盘监控 — 将股票加入自选监控列表。
 
     Parameters
     ----------
-    symbols : list[str]
-        要监控的股票代码列表
-    interval : int
-        扫描间隔（秒）
+    symbol : str
+        要监控的股票代码，如 "sh600519"
+    alert_conditions : list[str] | None
+        可选的告警条件列表，如 ["RSI>70", "MACD金叉"]
     """
     try:
-        from stockquant.ai import MonitorAgent
-        from stockquant.data import DataFetcherManager
-        from stockquant.ai import NewsSearcher
+        from stockquant.api.routers.monitor import _watchlist, add_to_watchlist
 
-        agent = MonitorAgent(
-            fetcher_manager=DataFetcherManager(),
-            news_searcher=NewsSearcher(),
-            threshold=0.5,
-            interval_seconds=float(interval),
-        )
-        agent.start_monitoring(symbols)
+        # 注册到自选监控列表
+        if symbol not in _watchlist:
+            add_to_watchlist([symbol])
 
-        return json.dumps({
+        # 获取当前股票数据
+        stock_data: Dict[str, Any] = {}
+        try:
+            from stockquant.data import DataFetcherManager
+            fetcher = DataFetcherManager()
+            df = fetcher.fetch(symbol, days=5)
+            if df is not None and len(df) > 0:
+                closes = df["close"]
+                volumes = df["volume"]
+                stock_data = {
+                    "latest_close": float(closes.iloc[-1]),
+                    "high_5d": float(closes.max()),
+                    "low_5d": float(closes.min()),
+                    "avg_volume": int(volumes.mean()),
+                }
+                if len(closes) >= 2:
+                    stock_data["change_pct"] = round(
+                        (float(closes.iloc[-1]) - float(closes.iloc[-2])) / float(closes.iloc[-2]) * 100, 2
+                    )
+        except Exception:
+            logger.debug("Failed to fetch stock data for %s", symbol)
+
+        result: Dict[str, Any] = {
             "status": "monitoring_started",
-            "symbols": symbols,
-            "interval": interval,
-        }, ensure_ascii=False)
+            "symbol": symbol,
+            "watchlist": list(_watchlist),
+            "alert_conditions": alert_conditions or [],
+            "stock_data": stock_data,
+            "message": f"已将 {symbol} 加入监控列表",
+        }
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)}, ensure_ascii=False)
+
+
+@tool
+def check_monitor_status(symbol: Optional[str] = None) -> str:
+    """查询盯盘监控状态。
+
+    Parameters
+    ----------
+    symbol : str | None
+        股票代码。若提供则返回该股票的监控状态；否则返回整体监控摘要。
+    """
+    try:
+        from stockquant.api.routers.monitor import _watchlist, _alerts, _get_agent
+
+        if symbol is not None:
+            # 单只股票监控状态
+            in_watchlist = symbol in _watchlist
+            symbol_alerts = [a for a in _alerts if a.symbol == symbol] if _alerts else []
+
+            # 获取最新价格
+            price_data: Dict[str, Any] = {}
+            try:
+                from stockquant.data import DataFetcherManager
+                fetcher = DataFetcherManager()
+                df = fetcher.fetch(symbol, days=5)
+                if df is not None and len(df) > 0:
+                    closes = df["close"]
+                    price_data = {
+                        "latest_close": float(closes.iloc[-1]),
+                        "change_pct": round(
+                            (float(closes.iloc[-1]) - float(closes.iloc[-2])) / float(closes.iloc[-2]) * 100, 2
+                        ) if len(closes) >= 2 else None,
+                    }
+            except Exception:
+                logger.debug("Failed to fetch price for %s", symbol)
+
+            # 获取情绪数据
+            sentiment_data: Dict[str, Any] = {}
+            try:
+                agent = _get_agent()
+                if agent._news_searcher:
+                    news_items = agent._news_searcher.search(symbol, days=3, max_results=5)
+                    if news_items:
+                        import numpy as np
+                        sentiments = [n.sentiment for n in news_items]
+                        sentiment_data = {
+                            "avg_sentiment": round(float(np.mean(sentiments)), 3),
+                            "news_count": len(news_items),
+                        }
+            except Exception:
+                logger.debug("Failed to fetch sentiment for %s", symbol)
+
+            result: Dict[str, Any] = {
+                "symbol": symbol,
+                "in_watchlist": in_watchlist,
+                "alerts": [
+                    {
+                        "direction": a.direction,
+                        "reason": a.reason,
+                        "confidence": a.confidence,
+                        "signal_type": a.signal_type,
+                        "timestamp": a.timestamp.isoformat() if hasattr(a.timestamp, "isoformat") else str(a.timestamp),
+                    }
+                    for a in symbol_alerts[-10:]
+                ],
+                "price": price_data,
+                "sentiment": sentiment_data,
+            }
+            return json.dumps(result, ensure_ascii=False)
+        else:
+            # 整体监控摘要
+            agent = _get_agent()
+            result = {
+                "watchlist": list(_watchlist),
+                "watchlist_count": len(_watchlist),
+                "total_alerts": len(_alerts) if _alerts else 0,
+                "running": getattr(agent, "_running", False),
+                "recent_alerts": [
+                    {
+                        "symbol": a.symbol,
+                        "direction": a.direction,
+                        "reason": a.reason,
+                        "confidence": a.confidence,
+                        "timestamp": a.timestamp.isoformat() if hasattr(a.timestamp, "isoformat") else str(a.timestamp),
+                    }
+                    for a in (_alerts[-5:] if _alerts else [])
+                ],
+            }
+            return json.dumps(result, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)}, ensure_ascii=False)
+
+
+@tool
+def stop_monitoring(symbol: str) -> str:
+    """停止盯盘监控 — 将股票从自选监控列表移除。
+
+    Parameters
+    ----------
+    symbol : str
+        要移除监控的股票代码
+    """
+    try:
+        from stockquant.api.routers.monitor import _watchlist, remove_from_watchlist
+
+        if symbol in _watchlist:
+            remove_from_watchlist([symbol])
+            return json.dumps({
+                "status": "monitoring_stopped",
+                "symbol": symbol,
+                "watchlist": list(_watchlist),
+                "message": f"已将 {symbol} 从监控列表移除",
+            }, ensure_ascii=False)
+        else:
+            return json.dumps({
+                "status": "not_in_watchlist",
+                "symbol": symbol,
+                "watchlist": list(_watchlist),
+                "message": f"{symbol} 不在监控列表中",
+            }, ensure_ascii=False)
     except Exception as exc:
         return json.dumps({"error": str(exc)}, ensure_ascii=False)
 

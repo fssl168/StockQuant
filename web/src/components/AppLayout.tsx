@@ -29,6 +29,7 @@ const menuItems = [
   { key: '/monitor', icon: <Eye size={20} weight="fill" />, label: '盯盘' },
   { key: '/trading', icon: <CurrencyCircleDollar size={20} weight="fill" />, label: '交易' },
   { key: '/optimize', icon: <SlidersHorizontal size={20} weight="fill" />, label: '优化' },
+  { key: '/comparison', icon: <ChartBar size={20} weight="fill" />, label: '对比' },
   { key: '/portfolio', icon: <TrendUp size={20} weight="fill" />, label: '组合' },
   { key: '/ai-chat', icon: <ChatCenteredText size={20} weight="fill" />, label: 'AI 对话' },
   { key: '/settings', icon: <Gear size={20} weight="fill" />, label: '设置' },
@@ -70,7 +71,7 @@ export default function AppLayout({ children }: Props) {
     const check = async () => {
       const start = performance.now()
       try {
-        const res = await fetch('/api/health', { method: 'HEAD', signal: AbortSignal.timeout(3000) })
+        const res = await fetch('/api/health', { method: 'GET', signal: AbortSignal.timeout(3000) })
         setApiLatency(Math.round(performance.now() - start))
         setBackendAvailable(res.ok)
       } catch {

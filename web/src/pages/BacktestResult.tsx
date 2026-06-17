@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Row, Col, Card, Button, Typography, Tag, Alert, Skeleton } from 'antd'
-import { ArrowCounterClockwise } from '@phosphor-icons/react'
+import { Row, Col, Card, Button, Typography, Tag, Alert, Skeleton, Dropdown } from 'antd'
+import { ArrowCounterClockwise, DownloadSimple, FileHtml, FilePdf, FileText } from '@phosphor-icons/react'
 import { backtestApi } from '@/api/dashboard'
 import { analyzeBacktest } from '@/api/ai'
 import EquityChart from '@/components/Chart/EquityChart'
@@ -22,6 +22,9 @@ export default function BacktestResult() {
     status: string
     metrics: BacktestMetrics
     equity_curve: number[]
+    benchmark_equity_curve?: number[]
+    benchmark?: string
+    dates?: string[]
     trades: Trade[]
     error: string | null
   }
@@ -51,6 +54,41 @@ export default function BacktestResult() {
     }
   }
 
+  const exportReport = async (format: 'html' | 'pdf' | 'json') => {
+    if (!id) return
+    try {
+      const resp = await fetch(`/api/backtest/${id}/report?format=${format}`)
+      if (!resp.ok) throw new Error('导出失败')
+
+      const ext = format === 'pdf' ? 'pdf' : format === 'json' ? 'json' : 'html'
+      const mimeType = format === 'pdf' ? 'application/pdf' : format === 'json' ? 'application/json' : 'text/html'
+
+      let blob: Blob
+      if (format === 'pdf') {
+        const buf = await resp.arrayBuffer()
+        blob = new Blob([buf], { type: mimeType })
+      } else {
+        const text = await resp.text()
+        blob = new Blob([text], { type: mimeType })
+      }
+
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `backtest-report-${id}.${ext}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      // silently fail
+    }
+  }
+
+  const exportMenuItems = [
+    { key: 'html', label: 'HTML 报表', icon: <FileHtml size={14} /> },
+    { key: 'pdf', label: 'PDF 报表', icon: <FilePdf size={14} /> },
+    { key: 'json', label: 'JSON 数据', icon: <FileText size={14} /> },
+  ]
+
   if (loading) return (
     <div style={{ maxWidth: 1400 }}>
       <Skeleton active paragraph={{ rows: 2 }} style={{ marginBottom: 16 }} />
@@ -72,6 +110,14 @@ export default function BacktestResult() {
 
   const equityData = (task.equity_curve as number[] ?? [])
   const metrics = task.metrics as BacktestMetrics ?? {}
+
+  const BENCHMARK_LABELS: Record<string, string> = {
+    hs300: '沪深300',
+    zz500: '中证500',
+    cyb: '创业板指',
+  }
+  const benchmarkData = task.benchmark_equity_curve as number[] | undefined
+  const benchmarkLabel = task.benchmark ? BENCHMARK_LABELS[task.benchmark] : undefined
 
   // Generate drawdown data from equity curve
   const drawdownData = equityData.length > 0 ? (() => {
@@ -113,6 +159,11 @@ export default function BacktestResult() {
 
       <div style={{ display: 'flex', alignItems: 'start', gap: 12, marginBottom: 20 }}>
         <Title level={4} style={{ margin: 0, flex: 1, fontSize: 16, fontWeight: 600 }}>{task.strategy_name}</Title>
+        <Dropdown
+          menu={{ items: exportMenuItems, onClick: ({ key }) => exportReport(key as 'html' | 'pdf' | 'json') }}
+        >
+          <Button size="small" icon={<DownloadSimple size={16} />}>导出报表</Button>
+        </Dropdown>
         <Tag color={task.status === 'completed' ? 'green' : 'blue'}>{task.status}</Tag>
       </div>
 
@@ -134,7 +185,7 @@ export default function BacktestResult() {
 
       {/* Equity curve */}
       <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>权益曲线</span>} styles={{ body: { padding: '12px' } }} style={{ marginBottom: 12 }}>
-        <EquityChart data={equityData} height={220} />
+        <EquityChart data={equityData} height={220} benchmarkData={benchmarkData} dates={task.dates} benchmarkLabel={benchmarkLabel} />
       </Card>
 
       {/* Drawdown + Monthly returns */}

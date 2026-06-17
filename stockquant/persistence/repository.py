@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
@@ -368,7 +368,7 @@ def save_chat_message(
     int
         保存的消息 ID
     """
-    engine = _get_engine(engine_url)
+    engine = get_engine(engine_url)
     session_factory = sessionmaker(bind=engine)
     with session_factory() as session:
         row = ChatMessage(

@@ -17,3 +17,7 @@ data/cache/
 web/node_modules/
 web/tsbuildinfo
 web/dist/
+*.db
+stockquant_config.yaml
+web/.env.production
+web/tsconfig.tsbuildinfo

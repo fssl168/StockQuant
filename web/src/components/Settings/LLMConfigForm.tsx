@@ -22,12 +22,14 @@ interface SettingEntry {
 }
 
 const AI_MODEL_ITEMS: SettingEntry[] = [
-  { key: 'ai_model.provider', value: 'openai', defaultValue: 'openai', value_type: 'select', label: 'LLM Provider', description: 'AI 模型提供商', secret: false, options: [{ value: 'openai', label: 'OpenAI' }, { value: 'anthropic', label: 'Anthropic' }, { value: 'deepseek', label: 'DeepSeek' }] },
-  { key: 'ai_model.api_url', value: '', defaultValue: '', value_type: 'string', label: 'API URL', description: '模型接口地址', secret: false },
-  { key: 'ai_model.api_key', value: '', defaultValue: '', value_type: 'password', label: 'API Key', description: '模型认证密钥', secret: true },
-  { key: 'ai_model.model', value: 'gpt-4o', defaultValue: 'gpt-4o', value_type: 'select', label: '模型', description: '使用的具体模型', secret: false, options: [{ value: 'gpt-4o', label: 'GPT-4o' }, { value: 'gpt-4', label: 'GPT-4' }, { value: 'claude-3-opus', label: 'Claude 3 Opus' }] },
-  { key: 'ai_model.temperature', value: 0.3, defaultValue: 0.3, value_type: 'float', label: 'Temperature', description: '生成随机性控制', secret: false, min: 0, max: 2, step: 0.1, scale: 10, slider: true },
-  { key: 'ai_model.timeout_sec', value: 30, defaultValue: 30, value_type: 'number', label: '超时秒数', description: 'LLM 调用超时（秒）', secret: false, min: 5, max: 120, step: 5 },
+  { key: 'ai.model', value: 'gpt-4o', defaultValue: 'gpt-4o', value_type: 'string', label: '主模型', description: 'OpenAI / 兼容 API 模型名称', secret: false },
+  { key: 'ai.api_key', value: '', defaultValue: '', value_type: 'password', label: 'API Key', description: 'OpenAI / 兼容 API 密钥', secret: true },
+  { key: 'ai.api_base', value: '', defaultValue: '', value_type: 'string', label: 'API Base URL', description: '自定义 API 地址（留空用官方默认）', secret: false },
+  { key: 'ai.temperature', value: 0.7, defaultValue: 0.7, value_type: 'float', label: 'Temperature', description: '生成温度 (0-2)', secret: false, min: 0, max: 2, step: 0.1, scale: 10, slider: true },
+  { key: 'ai.max_tokens', value: 4096, defaultValue: 4096, value_type: 'number', label: 'Max Tokens', description: '单次最大生成 token 数', secret: false, min: 256, max: 128000, step: 256 },
+  { key: 'ai.anthropic_model', value: 'claude-sonnet-4-20250514', defaultValue: 'claude-sonnet-4-20250514', value_type: 'string', label: 'Anthropic 模型', description: 'Claude 模型名称', secret: false },
+  { key: 'ai.anthropic_api_key', value: '', defaultValue: '', value_type: 'password', label: 'Anthropic API Key', description: 'Anthropic API 密钥', secret: true },
+  { key: 'ai.anthropic_api_base', value: '', defaultValue: '', value_type: 'string', label: 'Anthropic API Base', description: '自定义 Anthropic API 地址', secret: false },
 ]
 
 interface LLMConfigFormProps {

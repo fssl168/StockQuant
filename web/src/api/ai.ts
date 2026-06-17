@@ -7,11 +7,19 @@ export const aiApi = {
   clear: (id: string) => client.delete(`/chat/${id}`) as Promise<void>,
 }
 
-export async function* streamChat(conversationId: string, message: string): AsyncGenerator<string> {
+export async function* streamChat(
+  conversationId: string,
+  message: string,
+  options?: { mode?: string },
+): AsyncGenerator<string> {
   const res = await fetch('/api/ai/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversation_id: conversationId, message }),
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      message,
+      mode: options?.mode,
+    }),
   })
   if (!res.ok || !res.body) throw new Error('Stream failed')
 

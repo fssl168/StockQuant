@@ -391,6 +391,45 @@ export default function Trading() {
               ¥{((price || 0) * (quantity || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </Text>
           </div>
+          <Divider style={{ margin: '8px 0' }} />
+          {/* Fee estimates (Task 2.12) */}
+          {(() => {
+            const amount = (price || 0) * (quantity || 0)
+            const commission = Math.max(amount * 0.00025, 5)
+            const stampTax = side === 'SELL' ? amount * 0.0005 : 0
+            const transferFee = amount * 0.00001
+            const totalFee = commission + stampTax + transferFee
+            return (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text type="secondary">佣金（万2.5，最低5元）</Text>
+                  <Text style={{ fontFamily: 'var(--font-mono)' }}>¥{commission.toFixed(2)}</Text>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text type="secondary">印花税（卖出千1）</Text>
+                  <Text style={{ fontFamily: 'var(--font-mono)' }}>¥{stampTax.toFixed(2)}</Text>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text type="secondary">过户费（十万1）</Text>
+                  <Text style={{ fontFamily: 'var(--font-mono)' }}>¥{transferFee.toFixed(2)}</Text>
+                </div>
+                <Divider style={{ margin: '4px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text strong>总费用</Text>
+                  <Text strong style={{ fontFamily: 'var(--font-mono)', color: '#f59e0b' }}>¥{totalFee.toFixed(2)}</Text>
+                </div>
+              </>
+            )
+          })()}
+          {/* A-stock trading rules reminder (Task 2.12) */}
+          <div style={{
+            marginTop: 8, padding: '8px 12px', borderRadius: 6,
+            background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)',
+            fontSize: 11, color: 'var(--color-text-secondary)',
+          }}>
+            <div>A 股规则：T+1 交易，买入当日不可卖出</div>
+            <div>最小交易单位：100 股</div>
+          </div>
         </Space>
       </Modal>
     </div>

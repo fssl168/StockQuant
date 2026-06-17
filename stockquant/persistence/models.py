@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 
 from sqlalchemy import (
     Column,
@@ -25,7 +26,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 logger = logging.getLogger(__name__)
 
-
 # ── Base ────────────────────────────────────────────────────────────────
 
 
@@ -41,21 +41,28 @@ class Base(DeclarativeBase):
 _engine_cache: dict[str, Engine] = {}
 
 
-def get_engine(db_url: str = "sqlite:///./stockquant.db") -> Engine:
+def _default_db_url() -> str:
+    """获取默认数据库 URL，优先从环境变量读取。"""
+    return os.environ.get("DATABASE_URL", "sqlite:///./stockquant.db")
+
+
+def get_engine(db_url: str | None = None) -> Engine:
     """获取 SQLAlchemy 引擎（懒加载，模块级缓存）。"""
+    if db_url is None:
+        db_url = _default_db_url()
     if db_url not in _engine_cache:
         _engine_cache[db_url] = create_engine(db_url, echo=False)
     return _engine_cache[db_url]
 
 
-def init_db(engine_url: str = "sqlite:///./stockquant.db") -> Engine:
+def init_db(engine_url: str | None = None) -> Engine:
     """创建所有表（基于 Base.metadata）。"""
     engine = get_engine(engine_url)
     Base.metadata.create_all(engine)
     return engine
 
 
-def drop_db(engine_url: str = "sqlite:///./stockquant.db") -> None:
+def drop_db(engine_url: str | None = None) -> None:
     """删除所有表（仅测试 / 清理使用）。"""
     engine = get_engine(engine_url)
     Base.metadata.drop_all(engine)
@@ -173,4 +180,121 @@ class AuditLogModel(Base):
     __table_args__ = (
         Index("ix_audit_symbol_source", "symbol", "signal_source"),
         Index("ix_audit_timestamp", "timestamp"),
+    )
+
+
+class Notification(Base):
+    """通知持久化。"""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    notification_type: Mapped[str] = mapped_column(String(20), nullable=False, default="info")  # signal / alert / info
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    is_read: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)  # 0/1
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_notification_type_created", "notification_type", "created_at"),
+    )
+
+
+class HallucinationRecord(Base):
+    """幻觉记录持久化。"""
+
+    __tablename__ = "hallucination_records"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, index=True, default=func.now()
+    )
+    agent: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    input_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    hallucination_type: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    detection_method: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    original_output: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    corrected_output: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    user_feedback: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+
+    __table_args__ = (
+        Index("ix_hallucination_agent_type", "agent", "hallucination_type"),
+        Index("ix_hallucination_timestamp", "timestamp"),
+    )
+
+
+# ── AI Memory Models (PostgreSQL + pgvector) ──────────────────────────────
+
+# pgvector 扩展在 PostgreSQL 端通过 CREATE EXTENSION 启用
+# 此处使用 RAW 类型映射，避免硬依赖 pgvector Python 包
+
+try:
+    from pgvector.sqlalchemy import Vector
+    _HAS_PGVECTOR = True
+except ImportError:
+    _HAS_PGVECTOR = False
+    logger.info("pgvector Python 包未安装，L3 向量列将使用 Text 类型降级")
+
+
+class L2Memory(Base):
+    """L2 短期记忆 — PostgreSQL 持久化存储"""
+
+    __tablename__ = "l2_memory"
+
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False, default="", index=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    timestamp: Mapped[str] = mapped_column(String(30), nullable=False)
+    expires_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+
+    __table_args__ = (
+        Index("ix_l2_expires", "expires_at"),
+    )
+
+
+class L3Memory(Base):
+    """L3 长期记忆 — PostgreSQL + pgvector 向量存储"""
+
+    __tablename__ = "l3_memory"
+
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False, default="", index=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    timestamp: Mapped[str] = mapped_column(String(30), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    # 向量列: pgvector 安装时使用 Vector(1536)，否则降级为 Text
+    embedding = Column(
+        Vector(1536) if _HAS_PGVECTOR else Text,
+        nullable=True,
+    )
+
+    __table_args__ = (
+        Index("ix_l3_confidence", "confidence"),
+    )
+
+
+class EquitySnapshot(Base):
+    """权益快照 — 每日收盘后自动保存，用于历史权益曲线"""
+
+    __tablename__ = "equity_snapshots"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)  # YYYY-MM-DD
+    equity: Mapped[float] = mapped_column(Float, nullable=False)
+    cash: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    market_value: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    positions_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_equity_snapshot_date", "date", unique=True),
     )

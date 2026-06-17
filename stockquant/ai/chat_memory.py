@@ -5,12 +5,18 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from stockquant.persistence.repository import save_chat_message
 
 logger = logging.getLogger("stockquant.ai")
+
+
+def _default_db_url() -> str:
+    """获取默认数据库 URL，优先从环境变量读取。"""
+    return os.environ.get("DATABASE_URL", "sqlite:///:memory:")
 
 
 class ChatMemory:
@@ -30,11 +36,11 @@ class ChatMemory:
 
     def __init__(
         self,
-        db_url: Optional[str] = None,
+        db_url: str | None = None,
         max_context: int = 20,
         ttl_hours: int = 24,
     ) -> None:
-        self._db_url = db_url
+        self._db_url = db_url or _default_db_url()
         self._max_context = max_context
         self._ttl_hours = ttl_hours
         # 内存缓存: {conversation_id: list[ChatMessage]}
@@ -85,7 +91,7 @@ class ChatMemory:
         # 持久化
         try:
             save_chat_message(
-                engine_url=self._db_url or "sqlite:///:memory:",
+                engine_url=self._db_url,
                 conversation_id=conversation_id,
                 role=role,
                 content=content,

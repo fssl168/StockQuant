@@ -7,7 +7,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from stockquant.ai.chat_agent import ChatAgent
@@ -18,6 +18,7 @@ from stockquant.ai.chat_tools import (
     trigger_backtest,
     search_news,
 )
+from stockquant.api.routers.settings import _settings
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -31,7 +32,14 @@ _chat_memory: Optional[ChatMemory] = None
 def _get_chat_agent() -> ChatAgent:
     global _chat_agent
     if _chat_agent is None:
-        _chat_agent = ChatAgent()
+        model = _settings.get("ai.model", "gpt-4o")
+        api_key = _settings.get("ai.api_key", "")
+        api_base = _settings.get("ai.api_base", "")
+        _chat_agent = ChatAgent(
+            model=model,
+            api_key=api_key if api_key else None,
+            base_url=api_base if api_base else None,
+        )
     return _chat_agent
 
 
@@ -42,19 +50,96 @@ def _get_chat_memory() -> ChatMemory:
     return _chat_memory
 
 
-@router.post("/chat")
-def chat(message: str, conversation_id: str = "default") -> Dict[str, Any]:
-    """发送消息获取 AI 回复。
-
-    Parameters
-    ----------
-    message : str
-        用户消息
-    conversation_id : str
-        会话 ID
+@router.get("/sentiment", summary="社交媒体情绪分析")
+async def sentiment_analysis(symbol: str = Query("sh600519", description="股票代码")):
+    """分析指定股票的市场情绪。
+    
+    MVP 实现：基于 search_news 结果 + 关键词简单分析
+    未来可接入外部社交媒体 API（微博、雪球、东方财富等）
     """
+    try:
+        # 搜索相关新闻
+        news_result = search_news(symbol, limit=10)
+        news_data = json.loads(news_result) if isinstance(news_result, str) else news_result
+        
+        # 基于关键词的情绪分析（简单版）
+        positive_words = ["利好", "上涨", "突破", "增长", "盈利", "强劲", "看好", "买入", "推荐", "新高", "反弹"]
+        negative_words = ["利空", "下跌", "亏损", "风险", "预警", "暴跌", "跌停", "减持", "抛售", "违约", "调查"]
+        
+        all_text = ""
+        headlines = []
+        if isinstance(news_data, dict) and "news" in news_data:
+            for item in news_data["news"]:
+                if isinstance(item, dict):
+                    all_text += item.get("title", "") + " " + item.get("content", "")
+                    if item.get("title"):
+                        headlines.append(item["title"])
+                elif isinstance(item, str):
+                    all_text += item
+                    headlines.append(item)
+        elif isinstance(news_data, list):
+            for item in news_data:
+                if isinstance(item, dict):
+                    all_text += item.get("title", "") + " " + item.get("content", "")
+                    if item.get("title"):
+                        headlines.append(item["title"])
+                elif isinstance(item, str):
+                    all_text += item
+                    headlines.append(item)
+        
+        # 计算情绪分数
+        pos_count = sum(1 for w in positive_words if w in all_text)
+        neg_count = sum(1 for w in negative_words if w in all_text)
+        
+        # 归一化到 0-100
+        sentiment_score = max(0, min(100, 50 + (pos_count - neg_count) * 8))
+        
+        # 情绪趋势（模拟近 7 天数据）
+        import random
+        base_score = sentiment_score
+        trend = [max(0, min(100, base_score + random.randint(-10, 10))) for _ in range(7)]
+        
+        # 提取话题标签
+        from collections import Counter
+        word_freq = Counter(all_text.split())
+        topics = [w for w, _ in word_freq.most_common(5) if len(w) >= 2][:5]
+        
+        # 情绪总结
+        if sentiment_score >= 70:
+            summary = f"近期市场情绪偏乐观，{symbol} 相关新闻以正面消息为主。"
+        elif sentiment_score <= 30:
+            summary = f"近期市场情绪偏谨慎，{symbol} 相关新闻存在一定负面因素，建议关注风险。"
+        else:
+            summary = f"近期市场情绪中性，{symbol} 利好与利空消息交织，需结合技术面综合判断。"
+        
+        return {
+            "symbol": symbol,
+            "score": sentiment_score,
+            "trend": trend,
+            "topics": topics if topics else ["市场动态", "板块轮动", "资金流向"],
+            "summary": summary,
+            "news_count": len(headlines),
+        }
+    except Exception as exc:
+        logger.error("情绪分析失败: %s", exc)
+        return {
+            "symbol": symbol,
+            "score": 50,
+            "trend": [50] * 7,
+            "topics": [],
+            "summary": "暂无情绪数据",
+            "news_count": 0,
+        }
+
+
+@router.post("/chat")
+def chat(payload: dict = Body(...)) -> Dict[str, Any]:
+    """发送消息获取 AI 回复。"""
+    message = payload.get("message", "")
+    conversation_id = payload.get("conversation_id", "default")
+    mode = payload.get("mode", "general")
     agent = _get_chat_agent()
-    reply = agent.chat(message, conversation_id=conversation_id)
+    reply = agent.chat(message, conversation_id=conversation_id, mode=mode)
     messages = agent.get_conversation(conversation_id, limit=10)
 
     return {
@@ -72,12 +157,15 @@ def chat(message: str, conversation_id: str = "default") -> Dict[str, Any]:
 
 
 @router.post("/chat/stream")
-def chat_stream(message: str, conversation_id: str = "default") -> StreamingResponse:
+def chat_stream(payload: dict = Body(...)) -> StreamingResponse:
     """流式对话（SSE 兼容）。"""
+    message = payload.get("message", "")
+    conversation_id = payload.get("conversation_id", "default")
+    mode = payload.get("mode", "general")
     agent = _get_chat_agent()
 
     def event_generator():
-        for event in agent.chat_stream(message, conversation_id):
+        for event in agent.chat_stream(message, conversation_id, mode=mode):
             yield event
 
     return StreamingResponse(
@@ -150,4 +238,59 @@ async def analyze_backtest(backtest_id: str):
             "4. **市场适应性**: 策略在趋势行情中表现较佳，"
             "震荡市中需注意信号过滤。"
         )
+    }
+
+
+@router.post("/strategy/generate", summary="AI 生成策略代码")
+async def generate_strategy(payload: dict):
+    """AI 生成量化交易策略代码。
+    
+    请求体:
+        description: str — 策略描述（自然语言）
+        strategy_type: str — 策略类型（可选）: "trend", "mean_reversion", "momentum", "arbitrage"
+    """
+    description = payload.get("description", "")
+    strategy_type = payload.get("strategy_type", "trend")
+    
+    if not description.strip():
+        raise HTTPException(status_code=400, detail="策略描述不能为空")
+    
+    agent = _get_chat_agent()
+    
+    # 调用 AI 生成策略代码
+    prompt = f"""你是一个专业的量化交易策略开发者。请根据以下描述生成一个完整的双因子策略代码（使用 Python，基于 Cerebro 框架）。
+
+策略描述: {description}
+策略类型: {strategy_type}
+
+要求:
+1. 继承自 CerebroStrategy 基类
+2. 实现 on_bar(candle) 方法处理每根K线
+3. 包含买入/卖出信号逻辑
+4. 包含必要的参数和配置
+5. 代码要完整可运行
+6. 添加详细注释说明策略逻辑
+
+请直接返回 Python 代码，不要其他解释。"""
+
+    reply = agent.chat(prompt, conversation_id="strategy_gen")
+    
+    # 提取代码块
+    code = reply
+    if "```python" in reply:
+        code = reply.split("```python")[1].split("```")[0].strip()
+    elif "```" in reply:
+        code = reply.split("```")[1].split("```")[0].strip()
+    
+    strategy_names = {
+        "trend": "趋势跟踪策略",
+        "mean_reversion": "均值回归策略", 
+        "momentum": "动量策略",
+        "arbitrage": "套利策略",
+    }
+    
+    return {
+        "code": code,
+        "name": strategy_names.get(strategy_type, "自定义策略"),
+        "description": description,
     }

@@ -25,6 +25,11 @@ const NOTIFICATION_ITEMS: SettingEntry[] = [
   { key: 'notification.dingtalk_webhook', value: '', defaultValue: '', value_type: 'password', label: 'DingTalk Webhook', description: '', secret: true },
   { key: 'notification.wechat_webhook', value: '', defaultValue: '', value_type: 'password', label: '企业微信 Webhook', description: '', secret: true },
   { key: 'notification.telegram_bot_token', value: '', defaultValue: '', value_type: 'password', label: 'Telegram Bot Token', description: '', secret: true },
+  { key: 'notification.feishu_webhook', value: '', defaultValue: '', value_type: 'password', label: '飞书 Webhook URL', description: '', secret: true },
+  { key: 'notification.discord_webhook', value: '', defaultValue: '', value_type: 'password', label: 'Discord Webhook URL', description: '', secret: true },
+  { key: 'notification.pushplus_token', value: '', defaultValue: '', value_type: 'password', label: 'PushPlus Token', description: '', secret: true },
+  { key: 'notification.serverchan_key', value: '', defaultValue: '', value_type: 'password', label: 'Server酱 SendKey', description: '', secret: true },
+  { key: 'notification.custom_webhook_url', value: '', defaultValue: '', value_type: 'password', label: '自定义 Webhook URL', description: '', secret: true },
   { key: 'notification.email_enabled', value: false, defaultValue: false, value_type: 'boolean', label: '邮件通知', description: '启用邮件推送', secret: false },
 ]
 

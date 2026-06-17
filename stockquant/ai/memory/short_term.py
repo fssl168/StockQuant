@@ -1,37 +1,28 @@
 # -*- coding: utf-8 -*-
-"""F020 L2 短期记忆 — SQLite 存储，百万条"""
+"""F020 L2 短期记忆 — 委托给 L2Store (PostgreSQL + asyncpg)"""
 
 from __future__ import annotations
 
-import json
-import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("stockquant.ai.memory")
+from .l2_store import L2Store
 
 
 class ShortTermMemory:
-    """L2 短期记忆 — SQLite 存储
+    """L2 短期记忆 — 委托给 L2Store (PostgreSQL + asyncpg) 实现"""
 
-    支持 CRUD 和语义检索（退化：关键词匹配）
-    """
-
-    def __init__(self, db_url: str = "sqlite:///./stockquant_ai.db") -> None:
-        self._db_url = db_url
-        self._entries: List[Dict[str, Any]] = []
+    def __init__(self, db_url: str | None = None) -> None:
+        self._store = L2Store(db_url=db_url)
 
     def add(self, symbol: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         """添加条目"""
-        entry = {
-            "id": f"l2_{len(self._entries) + 1}",
+        return self._store.write({
             "symbol": symbol,
             "content": content,
             "metadata": metadata or {},
-            "timestamp": datetime.now().isoformat(),
-        }
-        self._entries.append(entry)
-        return entry["id"]
+        })
 
     def search(
         self,
@@ -40,28 +31,30 @@ class ShortTermMemory:
         limit: int = 20,
     ) -> List[Dict[str, Any]]:
         """搜索条目"""
-        results = self._entries
+        results = self._store.search(keyword or "", top_k=limit)
         if symbol:
-            results = [e for e in results if e.get("symbol") == symbol]
-        if keyword:
-            results = [e for e in results if keyword.lower() in e.get("content", "").lower()]
-        return results[-limit:]
+            results = [r for r in results if r.get("symbol") == symbol]
+        return results[:limit]
 
     def get_by_id(self, entry_id: str) -> Optional[Dict[str, Any]]:
-        for e in self._entries:
-            if e.get("id") == entry_id:
-                return e
+        """按 ID 获取条目"""
+        results = self._store.search("", top_k=1)
+        for r in results:
+            if r.get("id") == entry_id:
+                return r
         return None
 
     def delete(self, entry_id: str) -> bool:
-        for i, e in enumerate(self._entries):
-            if e.get("id") == entry_id:
-                self._entries.pop(i)
-                return True
-        return False
+        return self._store.delete(entry_id)
 
     def clear(self) -> None:
-        self._entries.clear()
+        """清空所有条目"""
+        items = self._store.get_all(limit=100000)
+        for item in items:
+            self._store.delete(item["id"])
 
     def count(self) -> int:
-        return len(self._entries)
+        return self._store.count()
+
+    def close(self) -> None:
+        self._store.close()

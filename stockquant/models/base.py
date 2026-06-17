@@ -22,6 +22,8 @@ class EventType(Enum):
     SENTIMENT = "SentimentEvent"
     SIGNAL = "SignalEvent"
     ALERT = "AlertEvent"
+    MEMORY_UPDATE = "MemoryUpdateEvent"
+    DECISION = "DecisionEvent"
 
 
 @dataclass

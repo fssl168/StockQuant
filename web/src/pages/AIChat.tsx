@@ -1,8 +1,20 @@
-import { useState } from 'react'
-import { Button } from 'antd'
+import { useState, useRef } from 'react'
+import { Button, Segmented } from 'antd'
 import { Plus } from '@phosphor-icons/react'
 import { useAIStore } from '@/stores/aiStore'
 import ChatPanel from '@/components/AI/ChatPanel'
+import { streamChat } from '@/api/ai'
+
+type ChatMode = 'general' | 'strategy' | 'analysis' | 'monitor' | 'decision' | 'indicator'
+
+const MODE_LABELS: Record<ChatMode, string> = {
+  general: '通用',
+  strategy: '策略',
+  analysis: '数据分析',
+  monitor: '盯盘',
+  decision: '决策',
+  indicator: '指标发现',
+}
 
 export default function AIChat() {
   const messages = useAIStore((s) => s.messages)
@@ -15,35 +27,28 @@ export default function AIChat() {
   const [sending, setSending] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  const [mode, setMode] = useState<ChatMode>('general')
+  const streamingRef = useRef('')
 
   const handleSend = async (text: string) => {
     if (sending) return
     addMessage('user', text)
     setSending(true)
     setIsStreaming(true)
+    streamingRef.current = ''
     setStreamingContent('')
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversation_id: convId, message: text }),
-      })
-      if (!res.ok || !res.body) throw new Error('请求失败')
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let accumulated = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        accumulated += decoder.decode(value, { stream: true })
-        setStreamingContent(accumulated)
+      for await (const chunk of streamChat(convId, text, { mode })) {
+        streamingRef.current += chunk
+        setStreamingContent(streamingRef.current)
       }
-      addMessage('assistant', accumulated)
+      addMessage('assistant', streamingRef.current)
     } catch {
-      addMessage('assistant', streamingContent || '请求失败，请重试。')
+      addMessage('assistant', streamingRef.current || '请求失败，请重试。')
     } finally {
       setIsStreaming(false)
       setSending(false)
+      streamingRef.current = ''
       setStreamingContent('')
     }
   }
@@ -110,16 +115,33 @@ export default function AIChat() {
       </div>
 
       {/* Right: Chat area */}
-      <ChatPanel
-        messages={messages.map((m) => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content as string,
-          timestamp: String(m.timestamp),
-        }))}
-        streamingContent={streamingContent}
-        isStreaming={isStreaming}
-        onSend={handleSend}
-      />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Mode selector */}
+        <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--color-border-default)' }}>
+          <Segmented
+            value={mode}
+            onChange={(v) => setMode(v as ChatMode)}
+            options={Object.entries(MODE_LABELS).map(([value, label]) => ({
+              value,
+              label,
+            }))}
+            size="small"
+          />
+        </div>
+
+        <ChatPanel
+          messages={messages.map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content as string,
+            timestamp: String(m.timestamp),
+          }))}
+          streamingContent={streamingContent}
+          isStreaming={isStreaming}
+          onSend={handleSend}
+          mode={mode}
+          onModeChange={(m) => setMode(m as ChatMode)}
+        />
+      </div>
     </div>
   )
 }

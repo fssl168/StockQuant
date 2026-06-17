@@ -8,6 +8,10 @@ from typing import Any, Dict, List, Optional
 
 from ..pipeline.collection import RawArticle
 
+from .checkpoints import CheckpointResult
+from .corrector import FiveStepCorrector
+from .modes import VerificationMode, get_checkpoints, get_threshold
+
 logger = logging.getLogger("stockquant.ai.hallucination")
 
 
@@ -20,6 +24,7 @@ class HallucinationPipeline:
 
     def __init__(self, strict_mode: bool = False) -> None:
         self._strict = strict_mode
+        self._corrector = FiveStepCorrector()
 
     def execute(self, articles: List[RawArticle]) -> Dict[str, Any]:
         """执行反幻觉检查"""
@@ -57,6 +62,71 @@ class HallucinationPipeline:
             results["issues"].append("综合可信度低于阈值，建议过滤")
 
         return results
+
+    def verify(self, data: Dict[str, Any], mode: VerificationMode = VerificationMode.STANDARD) -> Dict[str, Any]:
+        """基于验证模式执行检查点验证
+
+        Args:
+            data: 待验证的数据字典
+            mode: 验证模式 (STRICT/STANDARD/RELAXED/EMERGENCY)
+
+        Returns:
+            验证结果，包含 passed/score/checkpoints/correction 等字段
+        """
+        result: Dict[str, Any] = {
+            "mode": mode.value,
+            "passed": True,
+            "score": 1.0,
+            "checkpoints": [],
+            "correction": None,
+        }
+
+        # EMERGENCY 模式跳过所有验证
+        if mode == VerificationMode.EMERGENCY:
+            result["passed"] = True
+            result["score"] = 1.0
+            return result
+
+        checkpoints = get_checkpoints(mode)
+        threshold = get_threshold(mode)
+
+        scores: List[float] = []
+        for check_fn in checkpoints:
+            try:
+                passed, score, reason = check_fn(data)
+            except Exception as exc:
+                logger.warning("检查点 %s 异常: %s", check_fn.__name__, exc)
+                passed, score, reason = False, 0.0, f"异常: {exc}"
+
+            result["checkpoints"].append({
+                "name": check_fn.__name__,
+                "passed": passed,
+                "score": score,
+                "reason": reason,
+            })
+            scores.append(score)
+
+            if not passed:
+                result["issues"] = result.get("issues", [])
+                result["issues"].append(f"{check_fn.__name__}: {reason}")
+
+        # 计算综合评分
+        if scores:
+            avg_score = sum(scores) / len(scores)
+            result["score"] = round(avg_score, 3)
+            result["passed"] = avg_score >= threshold
+
+        # 如果有检查点失败，执行五步纠正
+        failed_checks = [cp for cp in result["checkpoints"] if not cp["passed"]]
+        if failed_checks:
+            correction = self._corrector.correct(data)
+            result["correction"] = correction
+            # 如果纠正后通过，更新结果
+            if correction.get("passed"):
+                result["passed"] = True
+                result["score"] = max(result["score"], correction.get("score", 0.0))
+
+        return result
 
     def _source_verify(self, articles: List[RawArticle]) -> Dict[str, Any]:
         known_sources = {"news_searcher", "eastmoney", "xueqiu", "cls", "cninfo"}

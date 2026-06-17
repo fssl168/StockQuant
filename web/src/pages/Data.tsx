@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Card, Space, Tag, Typography, Input, DatePicker, Switch } from 'antd'
-import { Database, Download } from '@phosphor-icons/react'
+import { Table, Button, Card, Space, Tag, Typography, Input, DatePicker, Switch, Modal, message } from 'antd'
+import { Database, Download, CloudArrowDown } from '@phosphor-icons/react'
 import ReactECharts from 'echarts-for-react'
 import dayjs from 'dayjs'
 import { useDataStore } from '@/stores/dataStore'
@@ -15,6 +15,10 @@ export default function Data() {
   useEffect(() => {
     fetchSources()
     fetchCacheStats()
+    // Fetch health status on page load (Task 2.11)
+    dataApi.health()
+      .then((data) => setHealthData(data ?? {}))
+      .catch(() => setHealthData({}))
   }, [])
 
   // K-line query state
@@ -23,6 +27,15 @@ export default function Data() {
   const [klineLoading, setKlineLoading] = useState(false)
   const [klineResult, setKlineResult] = useState<{ dates: string[]; data: [number, number, number, number, number][] } | null>(null)
   const [clearingCache, setClearingCache] = useState(false)
+
+  // Health status state (Task 2.11)
+  const [healthData, setHealthData] = useState<Record<string, { healthy: boolean }>>({})
+
+  // Collect state (Task 2.10)
+  const [collectingProvider, setCollectingProvider] = useState<string | null>(null)
+  const [collectSymbol, setCollectSymbol] = useState('sh600519')
+  const [collectModalOpen, setCollectModalOpen] = useState(false)
+  const [collectTargetProvider, setCollectTargetProvider] = useState<string>('')
 
   const handleClearCache = async () => {
     setClearingCache(true)
@@ -42,6 +55,22 @@ export default function Data() {
       fetchSources()
     } catch {
       // ignore
+    }
+  }
+
+  // Collect handler (Task 2.10)
+  const handleCollect = async (provider: string) => {
+    setCollectingProvider(provider)
+    const start = dayjs().subtract(1, 'year').format('YYYY-MM-DD')
+    const end = dayjs().format('YYYY-MM-DD')
+    try {
+      await dataApi.collect({ symbol: collectSymbol, source: provider, start, end })
+      message.success(`${provider} 采集成功`)
+    } catch {
+      message.error(`${provider} 采集失败`)
+    } finally {
+      setCollectingProvider(null)
+      setCollectModalOpen(false)
     }
   }
 
@@ -99,7 +128,12 @@ export default function Data() {
 
   const dataSourceColumns = [
     { title: '数据源', dataIndex: 'provider', key: 'provider', width: 120, render: (p: string) => <strong>{p}</strong> },
-    { title: '状态', key: 'status', width: 80, render: (_: any, r: any) => (
+    { title: '状态', key: 'health', width: 80, render: (_: any, r: any) => {
+      const health = healthData[r.provider]
+      if (health === undefined) return <Tag color="gold">未知</Tag>
+      return health.healthy ? <Tag color="green">健康</Tag> : <Tag color="red">异常</Tag>
+    }},
+    { title: '启用', key: 'enabled', width: 80, render: (_: any, r: any) => (
       <Switch
         size="small"
         checked={r.enabled !== false}
@@ -108,9 +142,20 @@ export default function Data() {
     ) },
     { title: '最后更新', key: 'last', width: 160, render: () => '2026-06-15 15:00' },
     { title: '记录数', key: 'records', width: 100, render: () => '1,234,567' },
-    { title: '操作', key: 'action', width: 120, render: () => (
+    { title: '操作', key: 'action', width: 160, render: (_: any, r: any) => (
       <Space>
         <Button size="small" icon={<Download size={14} />}>下载</Button>
+        <Button
+          size="small"
+          icon={<CloudArrowDown size={14} />}
+          loading={collectingProvider === r.provider}
+          onClick={() => {
+            setCollectTargetProvider(r.provider)
+            setCollectModalOpen(true)
+          }}
+        >
+          采集
+        </Button>
       </Space>
     )},
   ]
@@ -241,6 +286,40 @@ export default function Data() {
           size="small"
         />
       </Card>
+
+      {/* Collect Modal (Task 2.10) */}
+      <Modal
+        title={`采集数据 - ${collectTargetProvider}`}
+        open={collectModalOpen}
+        onOk={() => handleCollect(collectTargetProvider)}
+        onCancel={() => setCollectModalOpen(false)}
+        okText="开始采集"
+        cancelText="取消"
+        confirmLoading={collectingProvider !== null}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>股票代码</Text>
+            <Input
+              value={collectSymbol}
+              onChange={(e) => setCollectSymbol(e.target.value)}
+              placeholder="e.g. sh600519"
+              size="small"
+              style={{ marginTop: 4 }}
+            />
+          </div>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>数据源</Text>
+            <div style={{ marginTop: 4 }}><Tag>{collectTargetProvider}</Tag></div>
+          </div>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>日期范围</Text>
+            <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+              {dayjs().subtract(1, 'year').format('YYYY-MM-DD')} ~ {dayjs().format('YYYY-MM-DD')}
+            </div>
+          </div>
+        </Space>
+      </Modal>
     </div>
   )
 }
