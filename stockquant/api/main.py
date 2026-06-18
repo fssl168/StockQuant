@@ -281,11 +281,11 @@ def create_app() -> FastAPI:
     except Exception as e:
         logger.warning("Orchestrator 初始化失败（非致命）: %s", e)
 
-    # 从数据库加载自选股列表
+    # 从 Redis 加载自选股列表
     try:
-        from stockquant.api.routers.monitor import _load_watchlist_from_db
-        _load_watchlist_from_db()
-        logger.info("自选股列表已从数据库加载")
+        from stockquant.api.routers.monitor import _load_watchlist_from_redis
+        _load_watchlist_from_redis()
+        logger.info("自选股列表已从 Redis 加载")
     except Exception as e:
         logger.warning("自选股加载失败（非致命）: %s", e)
 

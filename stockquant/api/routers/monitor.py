@@ -16,15 +16,14 @@ from stockquant.ai.signal_fusion import SignalFusion, SourceSignal, SignalDirect
 from stockquant.api.deps import get_current_user, get_required_user
 from stockquant.api.websocket import ws_manager
 from stockquant.data import DataFetcherManager
-from stockquant.persistence.repository import get_watchlist as get_watchlist_db, add_to_watchlist as add_to_watchlist_db, remove_from_watchlist as remove_from_watchlist_db
-import os
+from stockquant.persistence.redis_client import get_watchlist as get_watchlist_redis, add_to_watchlist as add_to_watchlist_redis, remove_from_watchlist as remove_from_watchlist_redis
 
 router = APIRouter(prefix="/monitor", tags=["monitor"])
 
 logger = logging.getLogger("stockquant.ai")
 
 
-# ── 全局监控状态（使用数据库持久化） ──
+# ── 全局监控状态（使用 Redis 持久化） ──
 
 _watchlist: list[str] = []
 _alerts: list[MonitorSignal] = []
@@ -32,17 +31,13 @@ _agent: Optional[MonitorAgent] = None
 _agent_lock = threading.Lock()
 _signal_fusion = SignalFusion()
 
-def _get_db_url():
-    """获取数据库 URL"""
-    return os.environ.get("DATABASE_URL", "sqlite:///./stockquant.db")
-
-def _load_watchlist_from_db():
-    """从数据库加载自选股列表"""
+def _load_watchlist_from_redis():
+    """从 Redis 加载自选股列表"""
     global _watchlist
     try:
-        _watchlist = get_watchlist_db(_get_db_url())
+        _watchlist = get_watchlist_redis()
     except Exception as e:
-        logger.exception("Failed to load watchlist from database")
+        logger.exception("Failed to load watchlist from Redis")
         _watchlist = []
 
 
@@ -90,11 +85,11 @@ def add_to_watchlist(symbols: list[str]) -> list[str]:
     for s in symbols:
         if s not in _watchlist:
             _watchlist.append(s)
-    # 持久化到数据库
+    # 持久化到 Redis
     try:
-        add_to_watchlist_db(_get_db_url(), symbols)
+        add_to_watchlist_redis(symbols)
     except Exception as e:
-        logger.exception("Failed to save watchlist to database")
+        logger.exception("Failed to save watchlist to Redis")
     return _watchlist
 
 
@@ -106,11 +101,11 @@ def remove_from_watchlist(symbols: list[str]) -> list[str]:
     for s in symbols:
         if s in _watchlist:
             _watchlist.remove(s)
-    # 持久化到数据库
+    # 持久化到 Redis
     try:
-        remove_from_watchlist_db(_get_db_url(), symbols)
+        remove_from_watchlist_redis(symbols)
     except Exception as e:
-        logger.exception("Failed to remove from watchlist in database")
+        logger.exception("Failed to remove from watchlist in Redis")
     return _watchlist
 
 
