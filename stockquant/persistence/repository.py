@@ -17,6 +17,7 @@ from stockquant.persistence.models import (
     BacktestResult,
     ChatMessage,
     KlineData,
+    Watchlist,
     get_engine,
 )
 
@@ -472,3 +473,41 @@ def list_chat_sessions(
                 "title": title,
             })
         return result
+
+
+def get_watchlist(engine_url: str) -> List[str]:
+    """获取自选股列表"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        rows = session.query(Watchlist).order_by(Watchlist.created_at).all()
+        return [row.symbol for row in rows]
+
+
+def add_to_watchlist(engine_url: str, symbols: List[str]) -> None:
+    """添加股票到自选股"""
+    import uuid
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        for symbol in symbols:
+            # 检查是否已存在
+            existing = session.query(Watchlist).filter(Watchlist.symbol == symbol).first()
+            if not existing:
+                watchlist_item = Watchlist(
+                    id=str(uuid.uuid4()),
+                    symbol=symbol,
+                    created_at=datetime.now(),
+                )
+                session.add(watchlist_item)
+        session.commit()
+
+
+def remove_from_watchlist(engine_url: str, symbols: List[str]) -> None:
+    """从自选股移除股票"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        for symbol in symbols:
+            session.query(Watchlist).filter(Watchlist.symbol == symbol).delete()
+        session.commit()

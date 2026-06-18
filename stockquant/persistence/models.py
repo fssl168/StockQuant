@@ -288,6 +288,22 @@ class L3Memory(Base):
     )
 
 
+class Watchlist(Base):
+    """自选股列表 — 持久化存储用户自选股票"""
+
+    __tablename__ = "watchlist"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(16), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_watchlist_symbol", "symbol", unique=True),
+    )
+
+
 class EquitySnapshot(Base):
     """权益快照 — 每日收盘后自动保存，用于历史权益曲线"""
 

@@ -16,19 +16,34 @@ from stockquant.ai.signal_fusion import SignalFusion, SourceSignal, SignalDirect
 from stockquant.api.deps import get_current_user, get_required_user
 from stockquant.api.websocket import ws_manager
 from stockquant.data import DataFetcherManager
+from stockquant.persistence.repository import get_watchlist as get_watchlist_db, add_to_watchlist as add_to_watchlist_db, remove_from_watchlist as remove_from_watchlist_db
+import os
 
 router = APIRouter(prefix="/monitor", tags=["monitor"])
 
 logger = logging.getLogger("stockquant.ai")
 
 
-# ── 全局监控状态（生产环境应使用 Redis 等） ──
+# ── 全局监控状态（使用数据库持久化） ──
 
 _watchlist: list[str] = []
 _alerts: list[MonitorSignal] = []
 _agent: Optional[MonitorAgent] = None
 _agent_lock = threading.Lock()
 _signal_fusion = SignalFusion()
+
+def _get_db_url():
+    """获取数据库 URL"""
+    return os.environ.get("DATABASE_URL", "sqlite:///./stockquant.db")
+
+def _load_watchlist_from_db():
+    """从数据库加载自选股列表"""
+    global _watchlist
+    try:
+        _watchlist = get_watchlist_db(_get_db_url())
+    except Exception as e:
+        logger.exception("Failed to load watchlist from database")
+        _watchlist = []
 
 
 def _get_agent() -> MonitorAgent:
@@ -75,6 +90,11 @@ def add_to_watchlist(symbols: list[str]) -> list[str]:
     for s in symbols:
         if s not in _watchlist:
             _watchlist.append(s)
+    # 持久化到数据库
+    try:
+        add_to_watchlist_db(_get_db_url(), symbols)
+    except Exception as e:
+        logger.exception("Failed to save watchlist to database")
     return _watchlist
 
 
@@ -86,6 +106,11 @@ def remove_from_watchlist(symbols: list[str]) -> list[str]:
     for s in symbols:
         if s in _watchlist:
             _watchlist.remove(s)
+    # 持久化到数据库
+    try:
+        remove_from_watchlist_db(_get_db_url(), symbols)
+    except Exception as e:
+        logger.exception("Failed to remove from watchlist in database")
     return _watchlist
 
 
