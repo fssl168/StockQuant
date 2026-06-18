@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Input, Button, List, Avatar, Typography, Card } from 'antd'
-import { PaperPlaneTilt, User, ChatCircleText, Wrench, CheckCircle } from '@phosphor-icons/react'
+import { Input, Button, List, Avatar, Typography, Card, Spin } from 'antd'
+import { PaperPlaneTilt, User, ChatCircleText, Wrench, CheckCircle, ArrowClockwise } from '@phosphor-icons/react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
 import ReactECharts from 'echarts-for-react'
 import SignalCard from './SignalCard'
+import { aiApi } from '@/api/ai'
 
 const { Text, Paragraph } = Typography
 
@@ -84,6 +85,9 @@ interface ChatPanelProps {
   isStreaming?: boolean
   onSend: (message: string) => void
   mode?: 'general' | 'strategy' | 'analysis' | 'monitor' | 'decision' | 'indicator'
+  conversationId?: string
+  onLoadMore?: (messages: Message[]) => void
+  hasMore?: boolean
 }
 
 interface ChartRendererProps {
@@ -228,13 +232,44 @@ function InlineChartRenderer({ chartSpec }: { chartSpec: Record<string, unknown>
   )
 }
 
-export default function ChatPanel({ messages, streamingContent = '', isStreaming = false, onSend, mode = 'general' }: ChatPanelProps) {
+export default function ChatPanel({ messages, streamingContent = '', isStreaming = false, onSend, mode = 'general', conversationId, onLoadMore, hasMore = false }: ChatPanelProps) {
   const [input, setInput] = useState('')
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [prevScrollHeight, setPrevScrollHeight] = useState(0)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // 如果是加载更多，保持滚动位置
+    if (containerRef.current && prevScrollHeight > 0) {
+      const newHeight = containerRef.current.scrollHeight
+      containerRef.current.scrollTop = newHeight - prevScrollHeight
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages, streamingContent])
+
+  const handleLoadMore = async () => {
+    if (!conversationId || loadingMore || !onLoadMore) return
+    setLoadingMore(true)
+    setPrevScrollHeight(containerRef.current?.scrollHeight || 0)
+    try {
+      const msgData = await aiApi.getConversation(conversationId)
+      const moreMsgs: Message[] = (msgData.messages || []).map((m: any) => {
+        const ts = m.timestamp ? new Date(m.timestamp).getTime() : Date.now()
+        return {
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+          timestamp: isNaN(ts) ? Date.now() : ts,
+        }
+      })
+      onLoadMore(moreMsgs)
+    } catch (err) {
+      console.error('加载更多失败:', err)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const handleSend = () => {
     const text = input.trim()
@@ -324,7 +359,26 @@ export default function ChatPanel({ messages, streamingContent = '', isStreaming
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <div style={{ flex: 1, overflowY: 'auto', paddingRight: 8 }}>
+      <div ref={containerRef} style={{ flex: 1, overflowY: 'auto', paddingRight: 8, scrollbarWidth: 'thin', scrollbarColor: '#52525b #27272a' }}>
+        {/* 加载更多按钮 */}
+        {hasMore && messages.length > 0 && (
+          <div style={{ textAlign: 'center', padding: '12px 0' }}>
+            <Button
+              icon={<ArrowClockwise size={14} />}
+              onClick={handleLoadMore}
+              loading={loadingMore}
+              size="small"
+            >
+              {loadingMore ? '加载中...' : '加载更多历史消息'}
+            </Button>
+          </div>
+        )}
+        {loadingMore && (
+          <div style={{ textAlign: 'center', padding: '8px 0' }}>
+            <Spin size="small" /> 加载历史消息...
+          </div>
+        )}
+        
         {messages.length === 0 && !isStreaming && (
           mode === 'indicator' ? (
             <div style={{ textAlign: 'center', color: 'var(--color-text-tertiary)', marginTop: 60 }}>
@@ -500,6 +554,22 @@ export default function ChatPanel({ messages, streamingContent = '', isStreaming
         @keyframes thinking-bounce {
           0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
           40% { transform: scale(1); opacity: 1; }
+        }
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+          background: #27272a;
+          border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: #52525b;
+          border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: #71717a;
         }
       `}</style>
     </div>

@@ -18,6 +18,7 @@ const MODE_LABELS: Record<ChatMode, string> = {
 
 export default function AIChat() {
   const messages = useAIStore((s) => s.messages)
+  const setMessages = useAIStore((s) => (s as any).setMessages)
   const addMessage = useAIStore((s) => s.addMessage)
   const convId = useAIStore((s) => s.activeConversationId)
   const conversations = useAIStore((s) => s.conversations)
@@ -32,7 +33,31 @@ export default function AIChat() {
   const [streamingContent, setStreamingContent] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [mode, setMode] = useState<ChatMode>('general')
+  const [hasMore, setHasMore] = useState(false)
   const streamingRef = useRef('')
+
+  const handleLoadMore = (moreMsgs: typeof messages) => {
+    // 合并消息，去重
+    const existingIds = new Set(messages.map((m: any) => m.timestamp))
+    const newMsgs = moreMsgs.filter((m: any) => !existingIds.has(m.timestamp))
+    if (setMessages) {
+      setMessages([...newMsgs, ...messages])
+    }
+    // 如果返回的消息数少于限制，说明没有更多了
+    if (moreMsgs.length < 50) {
+      setHasMore(false)
+    }
+  }
+
+  // 当切换会话或初始化时检查是否有更多消息
+  useEffect(() => {
+    const conv = conversations.find((c: any) => c.id === activeConversationId)
+    if (conv && conv.messageCount > messages.length) {
+      setHasMore(true)
+    } else {
+      setHasMore(false)
+    }
+  }, [activeConversationId, messages.length, conversations])
 
   const handleSend = async (text: string) => {
     if (sending) return
@@ -134,7 +159,7 @@ export default function AIChat() {
         </div>
 
         <ChatPanel
-          messages={messages.map((m) => ({
+          messages={messages.map((m: any) => ({
             role: m.role as 'user' | 'assistant',
             content: m.content as string,
             timestamp: m.timestamp,
@@ -143,6 +168,9 @@ export default function AIChat() {
           isStreaming={isStreaming}
           onSend={handleSend}
           mode={mode}
+          conversationId={activeConversationId}
+          onLoadMore={handleLoadMore}
+          hasMore={hasMore}
         />
       </div>
     </div>
