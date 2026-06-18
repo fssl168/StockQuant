@@ -15,8 +15,10 @@ from stockquant.persistence.models import (
     AnalysisHistory,
     AuditLogModel,
     BacktestResult,
+    BacktestTask,
     ChatMessage,
     KlineData,
+    StrategyModel,
     Watchlist,
     get_engine,
 )
@@ -510,4 +512,151 @@ def remove_from_watchlist(engine_url: str, symbols: List[str]) -> None:
     with session_factory() as session:
         for symbol in symbols:
             session.query(Watchlist).filter(Watchlist.symbol == symbol).delete()
+        session.commit()
+
+
+# ── 回测任务持久化 ──
+
+def get_backtest_task(engine_url: str, task_id: str) -> Optional[Dict[str, Any]]:
+    """获取回测任务"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        task = session.query(BacktestTask).filter(BacktestTask.id == task_id).first()
+        if task:
+            return {
+                "id": task.id,
+                "status": task.status,
+                "result": task.result,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+            }
+        return None
+
+
+def save_backtest_task(engine_url: str, task_id: str, status: str, result: Optional[str] = None) -> None:
+    """保存或更新回测任务"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        task = session.query(BacktestTask).filter(BacktestTask.id == task_id).first()
+        if task:
+            task.status = status
+            if result is not None:
+                task.result = result
+            task.updated_at = datetime.now()
+        else:
+            task = BacktestTask(
+                id=task_id,
+                status=status,
+                result=result,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            session.add(task)
+        session.commit()
+
+
+def list_backtest_tasks(engine_url: str) -> List[Dict[str, Any]]:
+    """获取所有回测任务"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        tasks = session.query(BacktestTask).order_by(BacktestTask.created_at.desc()).all()
+        return [
+            {
+                "id": task.id,
+                "status": task.status,
+                "result": task.result,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+            }
+            for task in tasks
+        ]
+
+
+def delete_backtest_task(engine_url: str, task_id: str) -> None:
+    """删除回测任务"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        session.query(BacktestTask).filter(BacktestTask.id == task_id).delete()
+        session.commit()
+
+
+# ── 策略持久化 ──
+
+def get_strategy(engine_url: str, strategy_id: str) -> Optional[Dict[str, Any]]:
+    """获取策略"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        strategy = session.query(StrategyModel).filter(StrategyModel.id == strategy_id).first()
+        if strategy:
+            return {
+                "id": strategy.id,
+                "name": strategy.name,
+                "description": strategy.description,
+                "code": strategy.code,
+                "parameters": strategy.parameters,
+                "created_at": strategy.created_at.isoformat() if strategy.created_at else None,
+                "updated_at": strategy.updated_at.isoformat() if strategy.updated_at else None,
+            }
+        return None
+
+
+def save_strategy(engine_url: str, strategy_id: str, name: str, code: str, description: Optional[str] = None, parameters: Optional[str] = None) -> None:
+    """保存或更新策略"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        strategy = session.query(StrategyModel).filter(StrategyModel.id == strategy_id).first()
+        if strategy:
+            strategy.name = name
+            strategy.code = code
+            if description is not None:
+                strategy.description = description
+            if parameters is not None:
+                strategy.parameters = parameters
+            strategy.updated_at = datetime.now()
+        else:
+            strategy = StrategyModel(
+                id=strategy_id,
+                name=name,
+                code=code,
+                description=description,
+                parameters=parameters,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            session.add(strategy)
+        session.commit()
+
+
+def list_strategies(engine_url: str) -> List[Dict[str, Any]]:
+    """获取所有策略"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        strategies = session.query(StrategyModel).order_by(StrategyModel.created_at.desc()).all()
+        return [
+            {
+                "id": s.id,
+                "name": s.name,
+                "description": s.description,
+                "code": s.code,
+                "parameters": s.parameters,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            }
+            for s in strategies
+        ]
+
+
+def delete_strategy(engine_url: str, strategy_id: str) -> None:
+    """删除策略"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        session.query(StrategyModel).filter(StrategyModel.id == strategy_id).delete()
         session.commit()

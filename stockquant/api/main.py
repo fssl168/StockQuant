@@ -32,10 +32,12 @@ _APP_VERSION = "2.0.0-dev"
 logger = logging.getLogger("stockquant.api")
 
 # ------------------------------------------------------------------
-# 内存存储（MVP 用，后续换数据库）
+# 持久化存储（使用数据库）
 # ------------------------------------------------------------------
-_backtest_tasks: dict = {}  # task_id -> task dict
-_strategies: dict = {}  # strategy_id -> strategy dict
+from stockquant.persistence.persistent_store import BacktestTaskStore, StrategyStore
+
+_backtest_tasks: dict = BacktestTaskStore()  # task_id -> task dict
+_strategies: dict = StrategyStore()  # strategy_id -> strategy dict
 _startup_time: float = time.time()
 
 

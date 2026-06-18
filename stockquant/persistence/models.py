@@ -322,3 +322,41 @@ class EquitySnapshot(Base):
     __table_args__ = (
         Index("ix_equity_snapshot_date", "date", unique=True),
     )
+
+
+class BacktestTask(Base):
+    """回测任务 — 持久化存储回测任务状态"""
+
+    __tablename__ = "backtest_tasks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")  # "running", "completed", "failed"
+    result: Mapped[str] = mapped_column(Text, nullable=True)  # JSON 格式的回测结果
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    )
+
+
+class StrategyModel(Base):
+    """策略模型 — 持久化存储策略定义"""
+
+    __tablename__ = "strategies"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
+    code: Mapped[str] = mapped_column(Text, nullable=False)  # 策略代码
+    parameters: Mapped[str] = mapped_column(Text, nullable=True)  # JSON 格式的参数配置
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_strategy_name", "name"),
+    )
