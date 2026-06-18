@@ -110,7 +110,7 @@ export default function AIChat() {
                   {conv.messageCount} 条消息
                 </span>
                 <span style={{ fontSize: 10, color: 'var(--color-text-tertiary)' }}>
-                  {new Date(conv.createdAt).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+                  {new Date(conv.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
             </div>

@@ -440,10 +440,12 @@ def list_chat_sessions(
     session_factory = sessionmaker(bind=engine)
     with session_factory() as session:
         from sqlalchemy import func, desc
+        # 获取会话列表
         rows = (
             session.query(
                 ChatMessage.session_id,
                 func.max(ChatMessage.created_at).label("latest_at"),
+                func.min(ChatMessage.id).label("first_msg_id"),
                 func.count(ChatMessage.id).label("message_count"),
             )
             .group_by(ChatMessage.session_id)
@@ -451,12 +453,22 @@ def list_chat_sessions(
             .limit(limit)
             .all()
         )
-        return [
-            {
+        
+        result = []
+        for row in rows:
+            # 获取第一条用户消息作为标题
+            title = None
+            if row.first_msg_id:
+                first_msg = session.query(ChatMessage).filter(
+                    ChatMessage.id == row.first_msg_id
+                ).first()
+                if first_msg and first_msg.role == "user":
+                    title = first_msg.content[:30] if len(first_msg.content) > 30 else first_msg.content
+            
+            result.append({
                 "id": row.session_id,
                 "created_at": row.latest_at.isoformat() if row.latest_at else None,
                 "message_count": row.message_count,
-                "title": None,  # 前端用第一条消息作为标题
-            }
-            for row in rows
-        ]
+                "title": title,
+            })
+        return result
