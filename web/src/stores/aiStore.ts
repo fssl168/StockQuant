@@ -49,12 +49,15 @@ export const useAIStore = create<AIState>((set, get) => ({
     let activeId = ''
     try {
       const data = await aiApi.getConversations()
-      const convs: Conversation[] = (data.conversations || []).map((c: any) => ({
-        id: c.id,
-        title: c.title || '新对话',
-        createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
-        messageCount: c.message_count ?? 0,
-      }))
+      const convs: Conversation[] = (data.conversations || []).map((c: any) => {
+        const createdAt = c.created_at ? new Date(c.created_at).getTime() : Date.now()
+        return {
+          id: c.id,
+          title: c.title || '新对话',
+          createdAt: isNaN(createdAt) ? Date.now() : createdAt,
+          messageCount: c.message_count ?? 0,
+        }
+      })
       const state = get()
       activeId = state.activeConversationId || convs[0]?.id || ''
       set({ conversations: convs, activeConversationId: activeId || crypto.randomUUID(), isLoaded: true })
@@ -69,11 +72,14 @@ export const useAIStore = create<AIState>((set, get) => ({
     if (finalId) {
       try {
         const msgData = await aiApi.getConversation(finalId)
-        const msgs: Message[] = (msgData.messages || []).map((m: any) => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-          timestamp: m.timestamp ? new Date(m.timestamp).getTime() : Date.now(),
-        }))
+        const msgs: Message[] = (msgData.messages || []).map((m: any) => {
+          const ts = m.timestamp ? new Date(m.timestamp).getTime() : Date.now()
+          return {
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+            timestamp: isNaN(ts) ? Date.now() : ts,
+          }
+        })
         set({ messages: msgs })
       } catch { /* ignore */ }
     }
@@ -139,11 +145,14 @@ export const useAIStore = create<AIState>((set, get) => ({
     // 从后端加载目标会话消息
     try {
       const msgData = await aiApi.getConversation(id)
-      const msgs: Message[] = (msgData.messages || []).map((m: any) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-        timestamp: m.timestamp ? new Date(m.timestamp).getTime() : Date.now(),
-      }))
+      const msgs: Message[] = (msgData.messages || []).map((m: any) => {
+        const ts = m.timestamp ? new Date(m.timestamp).getTime() : Date.now()
+        return {
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+          timestamp: isNaN(ts) ? Date.now() : ts,
+        }
+      })
       set({ messages: msgs })
     } catch { /* ignore */ }
   },

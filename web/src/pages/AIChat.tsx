@@ -137,7 +137,7 @@ export default function AIChat() {
           messages={messages.map((m) => ({
             role: m.role as 'user' | 'assistant',
             content: m.content as string,
-            timestamp: String(m.timestamp),
+            timestamp: m.timestamp,
           }))}
           streamingContent={streamingContent}
           isStreaming={isStreaming}

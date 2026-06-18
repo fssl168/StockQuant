@@ -71,7 +71,7 @@ function renderChartBlock(content: string): ChartJsonSegment[] {
 interface Message {
   role: 'user' | 'assistant'
   content: string
-  timestamp: string
+  timestamp: number
   type?: 'text' | 'tool_call' | 'tool_result'
   toolName?: string
   toolParams?: Record<string, unknown>
