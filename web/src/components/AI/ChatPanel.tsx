@@ -281,8 +281,12 @@ export default function ChatPanel({ messages, streamingContent = '', isStreaming
   /** Detect trading signal keywords in assistant message content */
   function detectSignalType(content: string): 'BUY' | 'SELL' | null {
     const upper = content.toUpperCase()
-    if (/买入|BUY/.test(upper)) return 'BUY'
-    if (/卖出|SELL/.test(upper)) return 'SELL'
+    // 更严格的信号检测：需要在"信号"、"建议"、"推荐"、"触发"等上下文附近
+    const buyPattern = /(发出买入信号|建议买入|推荐买入|触发买入|买入信号|BUY SIGNAL|SIGNAL BUY)/
+    const sellPattern = /(发出卖出信号|建议卖出|推荐卖出|触发卖出|卖出信号|SELL SIGNAL|SIGNAL SELL)/
+    
+    if (buyPattern.test(upper)) return 'BUY'
+    if (sellPattern.test(upper)) return 'SELL'
     return null
   }
 
