@@ -17,7 +17,12 @@ from stockquant.persistence.models import (
     BacktestResult,
     BacktestTask,
     ChatMessage,
+    CollectTask,
+    ComparisonHistory,
     KlineData,
+    OptimizeTask,
+    OrderAudit,
+    PendingOrder,
     StrategyModel,
     Watchlist,
     get_engine,
@@ -660,3 +665,289 @@ def delete_strategy(engine_url: str, strategy_id: str) -> None:
     with session_factory() as session:
         session.query(StrategyModel).filter(StrategyModel.id == strategy_id).delete()
         session.commit()
+
+
+# ── 数据收集任务持久化 ──
+
+def save_collect_task(engine_url: str, task_id: str, status: str, progress: float = 0.0) -> None:
+    """保存或更新数据收集任务"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        task = session.query(CollectTask).filter(CollectTask.id == task_id).first()
+        if task:
+            task.status = status
+            task.progress = progress
+            task.updated_at = datetime.now()
+        else:
+            task = CollectTask(
+                id=task_id,
+                status=status,
+                progress=progress,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            session.add(task)
+        session.commit()
+
+
+def get_collect_task(engine_url: str, task_id: str) -> Optional[Dict[str, Any]]:
+    """获取数据收集任务"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        task = session.query(CollectTask).filter(CollectTask.id == task_id).first()
+        if task:
+            return {
+                "id": task.id,
+                "status": task.status,
+                "progress": task.progress,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+            }
+        return None
+
+
+def list_collect_tasks(engine_url: str) -> List[Dict[str, Any]]:
+    """获取所有数据收集任务"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        tasks = session.query(CollectTask).order_by(CollectTask.created_at.desc()).all()
+        return [
+            {
+                "id": task.id,
+                "status": task.status,
+                "progress": task.progress,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+            }
+            for task in tasks
+        ]
+
+
+def delete_collect_task(engine_url: str, task_id: str) -> None:
+    """删除数据收集任务"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        session.query(CollectTask).filter(CollectTask.id == task_id).delete()
+        session.commit()
+
+
+# ── 参数优化任务持久化 ──
+
+def save_optimize_task(engine_url: str, task_id: str, status: str, result: Optional[str] = None) -> None:
+    """保存或更新参数优化任务"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        task = session.query(OptimizeTask).filter(OptimizeTask.id == task_id).first()
+        if task:
+            task.status = status
+            if result is not None:
+                task.result = result
+            task.updated_at = datetime.now()
+        else:
+            task = OptimizeTask(
+                id=task_id,
+                status=status,
+                result=result,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            session.add(task)
+        session.commit()
+
+
+def get_optimize_task(engine_url: str, task_id: str) -> Optional[Dict[str, Any]]:
+    """获取参数优化任务"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        task = session.query(OptimizeTask).filter(OptimizeTask.id == task_id).first()
+        if task:
+            return {
+                "id": task.id,
+                "status": task.status,
+                "result": task.result,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+            }
+        return None
+
+
+def list_optimize_tasks(engine_url: str) -> List[Dict[str, Any]]:
+    """获取所有参数优化任务"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        tasks = session.query(OptimizeTask).order_by(OptimizeTask.created_at.desc()).all()
+        return [
+            {
+                "id": task.id,
+                "status": task.status,
+                "result": task.result,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+            }
+            for task in tasks
+        ]
+
+
+def delete_optimize_task(engine_url: str, task_id: str) -> None:
+    """删除参数优化任务"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        session.query(OptimizeTask).filter(OptimizeTask.id == task_id).delete()
+        session.commit()
+
+
+# ── 策略对比历史持久化 ──
+
+def save_comparison_history(engine_url: str, history_id: str, strategy_ids: str, result: Optional[str] = None) -> None:
+    """保存策略对比历史"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        history = ComparisonHistory(
+            id=history_id,
+            strategy_ids=strategy_ids,
+            result=result,
+            created_at=datetime.now(),
+        )
+        session.add(history)
+        session.commit()
+
+
+def list_comparison_history(engine_url: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """获取策略对比历史"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        histories = session.query(ComparisonHistory).order_by(ComparisonHistory.created_at.desc()).limit(limit).all()
+        return [
+            {
+                "id": h.id,
+                "strategy_ids": h.strategy_ids,
+                "result": h.result,
+                "created_at": h.created_at.isoformat() if h.created_at else None,
+            }
+            for h in histories
+        ]
+
+
+# ── 待处理订单持久化 ──
+
+def save_pending_order(engine_url: str, order_id: str, symbol: str, type: str, price: float, quantity: int, status: str = "pending") -> None:
+    """保存或更新待处理订单"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        order = session.query(PendingOrder).filter(PendingOrder.id == order_id).first()
+        if order:
+            order.symbol = symbol
+            order.type = type
+            order.price = price
+            order.quantity = quantity
+            order.status = status
+        else:
+            order = PendingOrder(
+                id=order_id,
+                symbol=symbol,
+                type=type,
+                price=price,
+                quantity=quantity,
+                status=status,
+                created_at=datetime.now(),
+            )
+            session.add(order)
+        session.commit()
+
+
+def get_pending_order(engine_url: str, order_id: str) -> Optional[Dict[str, Any]]:
+    """获取待处理订单"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        order = session.query(PendingOrder).filter(PendingOrder.id == order_id).first()
+        if order:
+            return {
+                "id": order.id,
+                "symbol": order.symbol,
+                "type": order.type,
+                "price": order.price,
+                "quantity": order.quantity,
+                "status": order.status,
+                "created_at": order.created_at.isoformat() if order.created_at else None,
+            }
+        return None
+
+
+def list_pending_orders(engine_url: str) -> List[Dict[str, Any]]:
+    """获取所有待处理订单"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        orders = session.query(PendingOrder).order_by(PendingOrder.created_at.desc()).all()
+        return [
+            {
+                "id": o.id,
+                "symbol": o.symbol,
+                "type": o.type,
+                "price": o.price,
+                "quantity": o.quantity,
+                "status": o.status,
+                "created_at": o.created_at.isoformat() if o.created_at else None,
+            }
+            for o in orders
+        ]
+
+
+def delete_pending_order(engine_url: str, order_id: str) -> None:
+    """删除待处理订单"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        session.query(PendingOrder).filter(PendingOrder.id == order_id).delete()
+        session.commit()
+
+
+# ── 订单审计持久化 ──
+
+def save_order_audit(engine_url: str, audit_id: str, order_id: str, action: str, details: Optional[str] = None) -> None:
+    """保存订单审计记录"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        audit = OrderAudit(
+            id=audit_id,
+            order_id=order_id,
+            action=action,
+            details=details,
+            created_at=datetime.now(),
+        )
+        session.add(audit)
+        session.commit()
+
+
+def list_order_audits(engine_url: str, order_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """获取订单审计记录"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        query = session.query(OrderAudit)
+        if order_id:
+            query = query.filter(OrderAudit.order_id == order_id)
+        audits = query.order_by(OrderAudit.created_at.desc()).all()
+        return [
+            {
+                "id": a.id,
+                "order_id": a.order_id,
+                "action": a.action,
+                "details": a.details,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in audits
+        ]

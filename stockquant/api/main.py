@@ -34,10 +34,23 @@ logger = logging.getLogger("stockquant.api")
 # ------------------------------------------------------------------
 # 持久化存储（使用数据库）
 # ------------------------------------------------------------------
-from stockquant.persistence.persistent_store import BacktestTaskStore, StrategyStore
+from stockquant.persistence.persistent_store import (
+    BacktestTaskStore,
+    StrategyStore,
+    CollectTaskStore,
+    OptimizeTaskStore,
+    ComparisonHistoryStore,
+    PendingOrderStore,
+    OrderAuditStore,
+)
 
 _backtest_tasks: dict = BacktestTaskStore()  # task_id -> task dict
 _strategies: dict = StrategyStore()  # strategy_id -> strategy dict
+_collect_tasks: dict = CollectTaskStore()  # task_id -> task dict
+_optimize_tasks: dict = OptimizeTaskStore()  # task_id -> task dict
+_comparison_history: list = ComparisonHistoryStore()  # strategy comparison history
+_pending_limit_orders: dict = PendingOrderStore()  # order_id -> Order
+_orders_audit: dict = OrderAuditStore()  # order_id -> audit dict
 _startup_time: float = time.time()
 
 
@@ -251,12 +264,14 @@ def create_app() -> FastAPI:
         finally:
             await ws_manager.disconnect(websocket, task_id)
 
-    # MVP 共享存储注入到路由模块
+    # 共享存储注入到路由模块
     backtest.set_storage(_backtest_tasks)
     strategy.set_storage(_strategies)
     dashboard.set_backtest_storage(_backtest_tasks)
-    comparison.set_storage(_backtest_tasks)
-    optimize.set_storage(_backtest_tasks)
+    comparison.set_storage(_backtest_tasks, _comparison_history)
+    optimize.set_storage(_optimize_tasks)
+    data.set_storage(_collect_tasks)
+    trading.set_storage(_pending_limit_orders, _orders_audit)
 
     # 健康检查
     @app.get("/api/health")

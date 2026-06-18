@@ -23,10 +23,10 @@ _backtest_tasks: dict = {}
 _comparison_history: list[dict] = []
 
 
-def set_storage(storage: dict):
+def set_storage(backtest_storage: dict, comparison_storage: list):
     global _backtest_tasks, _comparison_history
-    _backtest_tasks = storage
-    _comparison_history = storage.get("_comparison_history", [])
+    _backtest_tasks = backtest_storage
+    _comparison_history = comparison_storage
 
 
 # ── SQLite 持久化 ──

@@ -42,6 +42,11 @@ _source_health: dict = {
 _collect_tasks: dict = {}
 
 
+def set_storage(storage: dict):
+    global _collect_tasks
+    _collect_tasks = storage
+
+
 # ====================================================================
 # 辅助函数
 # ====================================================================

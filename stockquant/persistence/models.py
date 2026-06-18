@@ -360,3 +360,82 @@ class StrategyModel(Base):
     __table_args__ = (
         Index("ix_strategy_name", "name"),
     )
+
+
+class CollectTask(Base):
+    """数据收集任务 — 持久化存储数据收集任务状态"""
+
+    __tablename__ = "collect_tasks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
+    progress: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    )
+
+
+class OptimizeTask(Base):
+    """参数优化任务 — 持久化存储参数优化任务状态"""
+
+    __tablename__ = "optimize_tasks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
+    result: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    )
+
+
+class ComparisonHistory(Base):
+    """策略对比历史 — 持久化存储策略对比记录"""
+
+    __tablename__ = "comparison_history"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    strategy_ids: Mapped[str] = mapped_column(String(500), nullable=False)  # JSON 数组
+    result: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+
+
+class PendingOrder(Base):
+    """待处理订单 — 持久化存储待处理的限价订单"""
+
+    __tablename__ = "pending_orders"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(16), nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)  # "buy", "sell"
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+
+
+class OrderAudit(Base):
+    """订单审计 — 持久化存储订单操作审计记录"""
+
+    __tablename__ = "orders_audit"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    order_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(50), nullable=False)
+    details: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_order_audit_order_id", "order_id"),
+    )

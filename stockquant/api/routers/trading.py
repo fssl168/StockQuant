@@ -116,11 +116,17 @@ def _get_broker():
     return _paper_broker
 
 # 待撮合的 LIMIT 订单簿（由 Portfolio 上的持仓管理）
-# 格式: order_id -> Order
+# 格式: order_id -> Order（保持内存存储，因为 Order 是实时状态对象）
 _pending_limit_orders: dict[str, Order] = {}
 
 # 订单审计日志（API 层额外记录）
 _orders_audit: dict[str, dict] = {}
+
+
+def set_storage(pending_orders_storage: dict, orders_audit_storage: dict):
+    global _pending_limit_orders, _orders_audit
+    # _pending_limit_orders 保持内存存储（Order 对象无法直接序列化）
+    _orders_audit = orders_audit_storage
 
 # 绑定 PaperBroker 与 Portfolio，使 get_positions/get_balance 返回真实数据
 _paper_broker.bind_portfolio(_portfolio, _orders_audit)
