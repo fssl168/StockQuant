@@ -56,6 +56,10 @@ _paper_broker = PaperBroker(
 # 佣金模型
 _commission_info = CommissionInfo()
 
+# 行情缓存（避免频繁网络请求）
+_price_cache: dict[str, tuple[float, float]] = {}  # symbol -> (price, timestamp)
+_price_cache_timeout = 60  # 缓存有效期 60 秒
+
 
 # ====================================================================
 # Broker 模式切换
@@ -310,11 +314,35 @@ _recover_trading_state()
 # 工具函数
 # ====================================================================
 
+def _get_cached_price(symbol: str) -> float | None:
+    """获取标的最新价格（带缓存）"""
+    global _price_cache
+    
+    now = time.time()
+    
+    # 检查缓存
+    if symbol in _price_cache:
+        price, cached_time = _price_cache[symbol]
+        if now - cached_time < _price_cache_timeout:
+            return price
+    
+    # 缓存失效，重新获取
+    try:
+        bar = _get_latest_bar(symbol)
+        if bar:
+            _price_cache[symbol] = (bar.close, now)
+            return bar.close
+    except Exception as e:
+        logger.warning(f"获取最新价格失败: {symbol}, {e}")
+    
+    return None
+
+
 def _get_latest_bar(symbol: str) -> BarData | None:
     """获取标的最新日线 BarData"""
     try:
-        from stockquant.data.providers.baostock_feed import BaoStockFeed
-        feed = BaoStockFeed(symbols=[symbol], timeframe="1d")
+        from stockquant.data.providers.alphafeed_feed import AlphaFeedFeed
+        feed = AlphaFeedFeed(symbols=[symbol], timeframe="1d")
         feed.start()
         df = feed.get_dataframe()
         feed.stop()
@@ -322,13 +350,13 @@ def _get_latest_bar(symbol: str) -> BarData | None:
             row = df.iloc[-1]
             return BarData(
                 symbol=symbol,
-                datetime=datetime.strptime(row["date"], "%Y-%m-%d"),
+                datetime=row["datetime"],
                 open=float(row["open"]),
                 high=float(row["high"]),
                 low=float(row["low"]),
                 close=float(row["close"]),
                 volume=float(row["volume"]),
-                turnover=float(row["amount"] if "amount" in df.columns else 0),
+                turnover=float(row["turnover"] if "turnover" in df.columns else 0),
             )
     except Exception as e:
         logger.warning(f"获取最新行情失败: {symbol}, {e}")
@@ -629,10 +657,10 @@ async def get_positions():
     for symbol, pos in _portfolio.positions.items():
         if pos.quantity <= 0:
             continue
-        # 更新最新价格
-        bar = _get_latest_bar(symbol)
-        if bar:
-            pos.update_price(bar.close)
+        # 更新最新价格（使用缓存，避免频繁网络请求）
+        price = _get_cached_price(symbol)
+        if price:
+            pos.update_price(price)
 
         result.append({
             "symbol": pos.symbol,
