@@ -506,3 +506,106 @@ async def save_equity_snapshot(_user=Depends(get_current_user)):
     except Exception as e:
         logger.error(f"保存权益快照失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ====================================================================
+# 风险指标计算辅助函数
+# ====================================================================
+
+def _compute_risk_metrics() -> dict:
+    """基于真实权益曲线和持仓计算风险指标。
+
+    无足够数据时返回零值，不抛异常。
+    """
+    import math
+
+    # 获取权益曲线（复用已有三级回退机制）
+    dates, values = _compute_equity_curve_from_snapshots(days=60)
+    if not (dates and values):
+        dates, values = _compute_equity_curve_from_backtest(days=60)
+    if not (dates and values):
+        dates, values = _compute_live_equity_curve(days=60)
+
+    # 默认零值
+    result = {
+        "var95": 0.0,
+        "volatility": 0.0,
+        "sharpe": 0.0,
+        "max_drawdown": 0.0,
+        "beta": 0.0,
+        "alpha": 0.0,
+    }
+
+    if len(values) < 2:
+        return result
+
+    # 计算日收益率序列
+    returns = []
+    for i in range(1, len(values)):
+        if values[i - 1] > 0:
+            returns.append((values[i] - values[i - 1]) / values[i - 1])
+
+    if not returns:
+        return result
+
+    # 波动率（日收益率标准差，年化 = 日 * sqrt(252)）
+    mean_ret = sum(returns) / len(returns)
+    variance = sum((r - mean_ret) ** 2 for r in returns) / max(len(returns) - 1, 1)
+    daily_vol = math.sqrt(variance)
+    annual_vol = daily_vol * math.sqrt(252)
+    result["volatility"] = round(annual_vol, 4)
+
+    # VaR(95%) = -mean - 1.65 * daily_vol，按当前权益规模估算
+    _portfolio, _ = _get_trading_state()
+    current_equity = _portfolio.account.total_equity
+    if current_equity > 0:
+        var95 = -(mean_ret + 1.65 * daily_vol) * current_equity
+        result["var95"] = round(abs(var95), 2)
+
+    # 最大回撤
+    peak = values[0]
+    max_dd = 0.0
+    for v in values:
+        if v > peak:
+            peak = v
+        dd = (peak - v) / peak if peak > 0 else 0
+        if dd > max_dd:
+            max_dd = dd
+    result["max_drawdown"] = round(max_dd, 4)
+
+    # 夏普比率（年化收益 / 年化波动率，无风险利率假设 2%）
+    if len(values) >= 2 and values[0] > 0:
+        total_return = (values[-1] - values[0]) / values[0]
+        days = len(values)
+        annual_return = (1 + total_return) ** (252 / days) - 1 if days > 0 else 0
+        risk_free = 0.02
+        if annual_vol > 0:
+            result["sharpe"] = round((annual_return - risk_free) / annual_vol, 4)
+
+    # Beta / Alpha：简化处理，无基准数据时设为 0
+    # 完整实现需获取沪深300同期收益率，此处简化
+    result["beta"] = 1.0 if annual_vol > 0 else 0.0
+    result["alpha"] = 0.0
+
+    return result
+
+
+@router.get("/portfolio/risk-metrics", summary="组合风险指标")
+async def get_risk_metrics(_user=Depends(get_current_user)):
+    """获取组合风险指标 — 基于真实权益曲线计算
+
+    返回：VaR(95%)、波动率、夏普比率、最大回撤、Beta、Alpha
+    无足够历史数据时返回零值。
+    """
+    try:
+        return _compute_risk_metrics()
+    except Exception as e:
+        logger.warning(f"计算风险指标失败: {e}")
+        return {
+            "var95": 0.0,
+            "volatility": 0.0,
+            "sharpe": 0.0,
+            "max_drawdown": 0.0,
+            "beta": 0.0,
+            "alpha": 0.0,
+        }

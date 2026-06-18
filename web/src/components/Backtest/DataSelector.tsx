@@ -18,7 +18,8 @@ export default function DataSelector({ form: _form }: DataSelectorProps) {
         </Col>
         <Col span={12}>
           <Form.Item label="数据源" name="data_source">
-            <Select defaultValue="baostock" style={{ width: '100%' }}>
+            <Select defaultValue="alphafeed" style={{ width: '100%' }}>
+              <Option value="alphafeed">AlphaFeed</Option>
               <Option value="baostock">BaoStock</Option>
               <Option value="akshare">AkShare</Option>
               <Option value="csv">CSV</Option>

@@ -379,3 +379,84 @@ def save_chat_message(
         session.add(row)
         session.commit()
         return row.id
+
+
+def get_chat_messages(
+    engine_url: str,
+    session_id: str,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    """从数据库加载会话消息。
+
+    Parameters
+    ----------
+    engine_url : str
+        SQLAlchemy 引擎 URL
+    session_id : str
+        会话 ID
+    limit : int
+        最大返回条数
+
+    Returns
+    -------
+    list[dict]
+        消息列表，按 created_at 升序
+    """
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        rows = (
+            session.query(ChatMessage)
+            .filter(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_at.asc())
+            .limit(limit)
+            .all()
+        )
+        return [
+            {
+                "role": row.role,
+                "content": row.content,
+                "timestamp": row.created_at.isoformat(),
+            }
+            for row in rows
+        ]
+
+
+def delete_chat_messages(engine_url: str, session_id: str) -> None:
+    """删除会话的所有消息。"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        session.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
+        session.commit()
+
+
+def list_chat_sessions(
+    engine_url: str,
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """列出所有会话（按最新消息时间排序）。"""
+    engine = get_engine(engine_url)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as session:
+        from sqlalchemy import func, desc
+        rows = (
+            session.query(
+                ChatMessage.session_id,
+                func.max(ChatMessage.created_at).label("latest_at"),
+                func.count(ChatMessage.id).label("message_count"),
+            )
+            .group_by(ChatMessage.session_id)
+            .order_by(desc("latest_at"))
+            .limit(limit)
+            .all()
+        )
+        return [
+            {
+                "id": row.session_id,
+                "created_at": row.latest_at.isoformat() if row.latest_at else None,
+                "message_count": row.message_count,
+                "title": None,  # 前端用第一条消息作为标题
+            }
+            for row in rows
+        ]

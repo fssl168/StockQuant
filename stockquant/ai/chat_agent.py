@@ -86,12 +86,11 @@ class ChatMemory:
         """保存单条消息。"""
         try:
             from stockquant.persistence.repository import save_chat_message
-            from datetime import datetime
             save_chat_message(
+                engine_url=self._db_url,
                 conversation_id=conversation_id,
                 role=role,
                 content=content,
-                timestamp=datetime.now(),
             )
         except Exception:
             logger.exception("Failed to persist chat message")
@@ -100,7 +99,7 @@ class ChatMemory:
         """加载会话消息历史。"""
         try:
             from stockquant.persistence.repository import get_chat_messages
-            return get_chat_messages(conversation_id, limit=limit)
+            return get_chat_messages(self._db_url, conversation_id, limit=limit)
         except Exception:
             logger.exception("Failed to load chat messages")
             return []
@@ -109,7 +108,7 @@ class ChatMemory:
         """删除会话消息。"""
         try:
             from stockquant.persistence.repository import delete_chat_messages
-            delete_chat_messages(conversation_id)
+            delete_chat_messages(self._db_url, conversation_id)
         except Exception:
             logger.exception("Failed to delete chat messages")
 
@@ -308,25 +307,39 @@ class ChatAgent:
             from stockquant.agent.react_agent import ReActAgent
 
             react = ReActAgent(
-                llm_adapter=self._adapter,
-                tool_registry=self._tool_registry,
+                model=self._adapter._model,
+                api_key=self._adapter._api_key,
+                base_url=self._adapter._base_url,
                 max_steps=5,
             )
 
             result = react.run(message)
-            reply = result.final_response if result.final_response else result.content or "抱歉，我没有收到有效回复。"
-            conv.add_message("assistant", reply)
-            return reply
+
+            # ReActAgent 成功返回答案
+            if result.final_answer and result.success:
+                conv.add_message("assistant", result.final_answer)
+                return result.final_answer
+
+            # ReActAgent 未产出有效结果 → 降级为直接 LLM 调用
+            logger.warning(
+                "ReActAgent 未产出有效结果 (success=%s, error=%s)，降级为直接 LLM 调用",
+                result.success, result.error,
+            )
+            return self._chat_fallback(message, conversation_id, model)
 
         except ImportError:
             # 降级：直接调用 LLM（无工具）
             logger.warning("ReActAgent not available, falling back to direct LLM call")
             return self._chat_fallback(message, conversation_id, model)
         except Exception as exc:
-            error_msg = f"AI 调用失败: {exc}"
-            conv.add_message("assistant", error_msg)
-            logger.error("Chat failed for conversation %s: %s", conversation_id, exc)
-            return error_msg
+            # ReActAgent 初始化或运行时异常 → 降级
+            logger.error("ReActAgent 异常，降级为直接 LLM 调用: %s", exc)
+            try:
+                return self._chat_fallback(message, conversation_id, model)
+            except Exception as fallback_exc:
+                error_msg = f"AI 调用失败: {fallback_exc}"
+                conv.add_message("assistant", error_msg)
+                return error_msg
 
     def _chat_fallback(
         self,

@@ -31,7 +31,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       const res = await client.post('/auth/login', formData, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       })
-      const data = res.data as any
+      // 拦截器直接返回响应体裸数据（已 camelCase），无需再读 .data
+      const data = res as any
       const token = data.access_token || data.accessToken
       const user = data.user
       localStorage.setItem('auth_token', token)
@@ -55,7 +56,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     try {
       const res = await client.get('/auth/me')
-      const user = res.data as User
+      // /auth/me 直接返回 user 对象；拦截器返回裸数据，无需再读 .data
+      const user = res as unknown as User
       set({ token, user, isAuthenticated: true })
     } catch {
       localStorage.removeItem('auth_token')

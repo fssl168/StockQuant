@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Button, Segmented } from 'antd'
 import { Plus } from '@phosphor-icons/react'
 import { useAIStore } from '@/stores/aiStore'
@@ -24,6 +24,10 @@ export default function AIChat() {
   const activeConversationId = useAIStore((s) => s.activeConversationId)
   const createConversation = useAIStore((s) => s.createConversation)
   const switchConversation = useAIStore((s) => s.switchConversation)
+
+  useEffect(() => {
+    useAIStore.getState().init()
+  }, [])
   const [sending, setSending] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
@@ -139,7 +143,6 @@ export default function AIChat() {
           isStreaming={isStreaming}
           onSend={handleSend}
           mode={mode}
-          onModeChange={(m) => setMode(m as ChatMode)}
         />
       </div>
     </div>

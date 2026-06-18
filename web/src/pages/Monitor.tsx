@@ -82,13 +82,12 @@ export default function Monitor() {
           })
         }
       })
-      .catch(() => { /* use default values when API unavailable */ })
+      .catch((e: any) => console.warn('[Monitor] 获取风控参数失败:', e?.message))
   }, [])
 
   const { messages: wsMessages, connected: wsConnected } = useWebSocket(
     running ? '/ws/monitor' : null
   )
-
   // 处理 WS 消息 — Task 2.4: 实时行情 + alert通知 + 异动检测集成
   useEffect(() => {
     if (wsMessages.length === 0) return
@@ -130,14 +129,14 @@ export default function Monitor() {
           useMarketStore.getState().addWatchlist(wl)
         }
       })
-      .catch(() => {})
+      .catch((e: any) => console.warn('[Monitor] 获取自选股失败:', e?.message))
   }, [])
 
   // 加载监控状态
   useEffect(() => {
     monitorApi.status()
       .then((r: any) => setRunning(r.running ?? false))
-      .catch(() => {})
+      .catch((e: any) => console.warn('[Monitor] 获取监控状态失败:', e?.message))
   }, [])
 
   // Task 5: 加载盘前简报
@@ -149,77 +148,24 @@ export default function Monitor() {
       .finally(() => setBriefLoading(false))
   }, [])
 
-  // Fallback real-time prices when WS is not connected
+  // WS 未连接时不模拟行情数据，仅显示提示
+  // 实时行情完全依赖 WebSocket /ws/monitor 推送
   useEffect(() => {
-    if (running && !wsConnected) {
-      const basePrices: Record<string, number> = {}
-      symbols.forEach((s) => {
-        basePrices[s] = s.includes('600519') ? 1720 : s.includes('000858') ? 148 : s.includes('601318') ? 47 : 30
-      })
-      setLivePrices(Object.fromEntries(Object.entries(basePrices).map(([k, v]) => [k, { price: v, change: 0 }])))
-
-      priceTimer.current = setInterval(() => {
-        setLivePrices((prev) => {
-          const next = { ...prev }
-          Object.keys(next).forEach((sym) => {
-            const prevPrice = next[sym].price
-            const changePercent = (Math.random() - 0.48) * 2
-            const newPrice = prevPrice * (1 + changePercent / 100)
-            next[sym] = { price: Number(newPrice.toFixed(2)), change: Number(changePercent.toFixed(2)) }
-          })
-
-          // Check alert rules
-          Object.keys(next).forEach((sym) => {
-            const prevPrice = prev[sym]?.price
-            const newPrice = next[sym].price
-            if (prevPrice && alertRules.priceChangeEnabled) {
-              const changePct = Math.abs((newPrice - prevPrice) / prevPrice * 100)
-              if (changePct > alertRules.priceChangeThreshold) {
-                useNotificationStore.getState().add({
-                type: 'alert',
-                title: `${sym} 涨跌幅告警`,
-                message: `${sym} 涨跌幅 ${changePct.toFixed(2)}% 超过阈值 ${alertRules.priceChangeThreshold}%`,
-                time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-              })
-              }
-            }
-          })
-
-          return next
-        })
-
-        // Random signal generation (fallback only)
-        if (Math.random() < 0.15 && symbols.length > 0) {
-          const sym = symbols[Math.floor(Math.random() * symbols.length)]
-          setLivePrices((current) => {
-            const item = current[sym]
-            if (item) {
-              useNotificationStore.getState().add({
-                type: 'signal',
-                title: `${sym} 价格异动`,
-                message: `${sym} 当前价 ${item.price.toFixed(2)}，涨幅 ${item.change >= 0 ? '+' : ''}${item.change.toFixed(2)}%`,
-                time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-              })
-            }
-            return current
-          })
-        }
-      }, 3000)
-    } else {
+    if (!running || wsConnected) {
       if (priceTimer.current) { clearInterval(priceTimer.current); priceTimer.current = null }
     }
     return () => { if (priceTimer.current) { clearInterval(priceTimer.current); priceTimer.current = null } }
-  }, [running, wsConnected, symbols])
+  }, [running, wsConnected])
 
   const handleStart = async () => {
     try {
       await monitorApi.start(symbols)
       setRunning(true)
-    } catch { /* ignore */ }
+    } catch (e: any) { console.warn('[Monitor] 启动监控失败:', e?.message) }
   }
 
   const handleStop = async () => {
-    try { await monitorApi.stop() } catch { /* ignore */ }
+    try { await monitorApi.stop() } catch (e: any) { console.warn('[Monitor] 停止监控失败:', e?.message) }
     setRunning(false)
   }
 
@@ -227,7 +173,7 @@ export default function Monitor() {
     if (newSymbol.trim()) {
       const newSym = newSymbol.trim()
       addSymbol(newSym)
-      monitorApi.updateWatchlist([...symbols, newSym]).catch(() => {})
+      monitorApi.updateWatchlist([...symbols, newSym]).catch((e: any) => console.warn('[Monitor] 更新自选股失败:', e?.message))
       setNewSymbol('')
     }
   }
@@ -235,7 +181,7 @@ export default function Monitor() {
   const handleRemove = (symbol: string) => {
     removeSymbol(symbol)
     const remaining = symbols.filter((s) => s !== symbol)
-    monitorApi.updateWatchlist(remaining).catch(() => {})
+    monitorApi.updateWatchlist(remaining).catch((e: any) => console.warn('[Monitor] 更新自选股失败:', e?.message))
   }
 
   // Task 2.5: 获取收盘总结
@@ -243,7 +189,7 @@ export default function Monitor() {
     setSummaryLoading(true)
     try {
       const res = await monitorApi.summary() as any
-      setClosingSummary(res.summary ?? '暂无总结数据')
+      setClosingSummary(res ?? '暂无总结数据')
     } catch {
       setClosingSummary('获取收盘总结失败，请稍后重试')
     } finally {
@@ -263,14 +209,24 @@ export default function Monitor() {
       results.forEach((r) => {
         if (r.status === 'fulfilled') {
           const data = r.value as any
-          if (data.anomalies && Array.isArray(data.anomalies)) {
-            newAnomalies.push(...data.anomalies)
+          // 后端返回的是数组，兼容 { anomalies: [...] } 格式
+          const anomalies = Array.isArray(data) ? data : (data.anomalies ?? [])
+          for (const a of anomalies) {
+            if (typeof a === 'object' && a !== null) {
+              const newAnomaly: Anomaly = {
+                symbol: (a as any).symbol ?? '',
+                type: (a as any).type ?? '',
+                description: (a as any).description ?? (a as any).message ?? '',
+                time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              }
+              newAnomalies.push(newAnomaly)
+            }
           }
         }
       })
       setAnomalies((prev) => [...newAnomalies, ...prev])
-    } catch {
-      // ignore
+    } catch (e: any) {
+      console.warn('[Monitor] 扫描异动失败:', e?.message)
     } finally {
       setScanLoading(false)
     }
@@ -296,8 +252,9 @@ export default function Monitor() {
     try {
       const end = new Date().toISOString().slice(0, 10)
       const start = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)
-      const data = await dataApi.fetchKline(symbol, 'baostock', start, end)
-      setKlineData(Array.isArray(data) ? data : [])
+      const result = await dataApi.fetchKline(symbol, 'alphafeed', start, end) as any
+      // 后端返回 { data: [...] }，提取嵌套数组
+      setKlineData(Array.isArray(result?.data) ? result.data : (Array.isArray(result) ? result : []))
     } catch {
       setKlineData([])
     } finally {
@@ -492,21 +449,39 @@ export default function Monitor() {
 
           {/* F025: 决策模式切换 */}
           <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>决策模式</span>} style={{ marginTop: 12 }}>
-            <Segmented
-              block
-              value={decisionMode}
-              onChange={(v) => setDecisionMode(v as string)}
-              options={[
-                { value: 'auto', label: '全自动' },
-                { value: 'semi_auto', label: '半自动' },
-                { value: 'read_only', label: '只读' },
-              ]}
-            />
-            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 8 }}>
-              {decisionMode === 'auto' ? 'AI 自动执行交易信号' :
-               decisionMode === 'semi_auto' ? 'AI 建议，人工确认执行' :
-               'AI 仅提供建议，不执行交易'}
-            </Text>
+            <Space direction="vertical" style={{ width: '100%' }} size={6}>
+              <Button.Group style={{ width: '100%' }}>
+                <Button
+                  type={decisionMode === 'auto' ? 'primary' : 'default'}
+                  onClick={() => setDecisionMode('auto')}
+                  block
+                  style={{ fontWeight: decisionMode === 'auto' ? 700 : 400 }}
+                >
+                  🤖 全自动
+                </Button>
+                <Button
+                  type={decisionMode === 'semi_auto' ? 'primary' : 'default'}
+                  onClick={() => setDecisionMode('semi_auto')}
+                  block
+                  style={{ fontWeight: decisionMode === 'semi_auto' ? 700 : 400 }}
+                >
+                  ⚙️ 半自动
+                </Button>
+                <Button
+                  type={decisionMode === 'read_only' ? 'primary' : 'default'}
+                  onClick={() => setDecisionMode('read_only')}
+                  block
+                  style={{ fontWeight: decisionMode === 'read_only' ? 700 : 400 }}
+                >
+                  👁 只读
+                </Button>
+              </Button.Group>
+              <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
+                {decisionMode === 'auto' ? 'AI 自动执行交易信号' :
+                 decisionMode === 'semi_auto' ? 'AI 建议，人工确认执行' :
+                 'AI 仅提供建议，不执行交易'}
+              </Text>
+            </Space>
           </Card>
 
           {/* F026: 动态风控 */}

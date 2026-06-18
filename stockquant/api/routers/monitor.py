@@ -153,11 +153,11 @@ def get_status(_user=Depends(get_current_user)) -> Dict[str, Any]:
 
 
 @router.post("/start-monitoring")
-def start_monitoring(symbols: Optional[List[str]] = None) -> Dict[str, str]:
+def start_monitoring(body: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     """启动实时扫描"""
     try:
         agent = _get_agent()
-        targets = symbols or _watchlist
+        targets = (body or {}).get("symbols") or _watchlist
         if not targets:
             raise HTTPException(status_code=400, detail="No watchlist or symbols provided")
         agent.start_monitoring(targets)

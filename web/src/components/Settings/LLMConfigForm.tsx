@@ -70,13 +70,15 @@ export default function LLMConfigForm({ values, onChange }: LLMConfigFormProps) 
         )
       case 'password':
         return (
-          <Input.Password
-            value={val as string}
-            placeholder="sk-..."
-            size="small"
-            style={{ minWidth: 180 }}
-            onChange={(e) => onChange(item.key, e.target.value)}
-          />
+          <form onSubmit={(e) => e.preventDefault()}>
+            <Input.Password
+              value={val as string}
+              placeholder="sk-..."
+              size="small"
+              style={{ minWidth: 180 }}
+              onChange={(e) => onChange(item.key, e.target.value)}
+            />
+          </form>
         )
       case 'string':
         return (

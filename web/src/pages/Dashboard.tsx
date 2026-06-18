@@ -22,20 +22,25 @@ export default function Dashboard() {
   const notifications = useNotificationStore((s) => s.notifications)
 
   useEffect(() => {
+    // 基准（沪深300）K 线日期范围：最近 60 天，与权益曲线窗口对齐
+    const today = new Date()
+    const startDate = new Date(today.getTime() - 60 * 86400000)
+    const fmtDate = (d: Date) => d.toISOString().slice(0, 10)
     Promise.all([
-      dashboardApi.metrics()
-        .then((r: any) => { if (r) setMetrics(r.metrics ?? {}) })
-        .catch(() => {}),
+      // 聚合指标（总权益、今日盈亏、持仓数）
+      client.get('/dashboard/metrics')
+        .then((r: any) => { if (r) { setMetrics(r); setAggMetrics(r) } })
+        .catch((e: any) => console.warn('[Dashboard] 获取聚合指标失败:', e?.message)),
       dashboardApi.signals()
         .then((r: any) => { if (r) setSignals(Array.isArray(r) ? r : (r?.signals ?? r?.data ?? [])) })
-        .catch(() => setSignals([])),
+        .catch((e: any) => { console.warn('[Dashboard] 获取信号失败:', e?.message); setSignals([]) }),
       dashboardApi.recentBacktests()
         .then((r: any) => { if (r) setTasks(Array.isArray(r) ? r : (r?.tasks ?? r?.data ?? [])) })
-        .catch(() => setTasks([])),
+        .catch((e: any) => { console.warn('[Dashboard] 获取回测历史失败:', e?.message); setTasks([]) }),
       client.get('/portfolio/equity-curve')
         .then((r: any) => { if (r) setEquityCurve(r) })
-        .catch(() => {}),
-      client.get('/data/kline?symbol=sh000300&timeframe=d')
+        .catch((e: any) => console.warn('[Dashboard] 获取权益曲线失败:', e?.message)),
+      client.get(`/data/kline?symbol=sh000300&start=${fmtDate(startDate)}&end=${fmtDate(today)}&timeframe=1d`)
         .then((r: any) => {
           const rows = Array.isArray(r) ? r : (r?.data ?? r)
           if (Array.isArray(rows)) {
@@ -45,11 +50,7 @@ export default function Dashboard() {
             })
           }
         })
-        .catch(() => {}),
-      // 聚合指标（总权益、今日盈亏、持仓数）
-      client.get('/dashboard/metrics')
-        .then((r: any) => { if (r) setAggMetrics(r) })
-        .catch(() => {}),
+        .catch((e: any) => console.warn('[Dashboard] 获取基准数据失败:', e?.message)),
     ]).finally(() => setLoading(false))
   }, [])
 
@@ -218,7 +219,7 @@ export default function Dashboard() {
               <Skeleton active paragraph={{ rows: 8 }} />
             ) : (
               <EquityChart
-                data={equityCurve ? equityCurve.values : Array.from({ length: 30 }, () => 1_000_000 + Math.random() * 200_000)}
+                data={equityCurve ? equityCurve.values : []}
                 dates={equityCurve ? equityCurve.dates : undefined}
                 benchmarkData={benchmarkData ? benchmarkData.values : undefined}
                 benchmarkLabel="沪深300"

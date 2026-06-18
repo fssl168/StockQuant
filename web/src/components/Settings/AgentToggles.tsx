@@ -110,13 +110,15 @@ export default function AgentToggles({ values, onChange }: AgentTogglesProps) {
       }
       case 'password':
         return (
-          <Input.Password
-            value={String(val ?? '')}
-            size="small"
-            style={{ minWidth: 180 }}
-            placeholder="sk-..."
-            onChange={(e) => onChange(item.key, e.target.value)}
-          />
+          <form onSubmit={(e) => e.preventDefault()}>
+            <Input.Password
+              value={String(val ?? '')}
+              size="small"
+              style={{ minWidth: 180 }}
+              placeholder="sk-..."
+              onChange={(e) => onChange(item.key, e.target.value)}
+            />
+          </form>
         )
       case 'string':
         return (

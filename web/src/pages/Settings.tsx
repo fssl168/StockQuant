@@ -1,18 +1,19 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   Collapse, Button, InputNumber, Switch, Select, Slider, Input, Space, Typography,
-  Modal, Tag, Badge,
+  Modal, Tag, Badge, message,
 } from 'antd'
 import {
   Warning, Sparkle, Rocket, Bell, Brain,
   Laptop, Coin, Wallet, Target, Clock,
   WifiHigh, FunnelSimple, ArrowsClockwise,
   CheckCircle, XCircle, ArrowCounterClockwise,
-  Notebook,
+  Notebook, Database,
 } from '@phosphor-icons/react'
 import LLMConfigForm from '@/components/Settings/LLMConfigForm'
 import AgentToggles from '@/components/Settings/AgentToggles'
 import NotifierForm from '@/components/Settings/NotifierForm'
+import client from '@/api/client'
 
 const { Title, Text } = Typography
 
@@ -43,6 +44,17 @@ interface GroupEntry {
 }
 
 const GROUPS: GroupEntry[] = [
+  {
+    key: 'database', label: '数据库', icon: 'Database',
+    iconComponent: <Database size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
+    items: [
+      { key: 'database.url', value: '', defaultValue: '', value_type: 'password', label: '数据库 URL', description: '连接字符串（修改后需重启后端）', secret: true },
+      { key: 'database.pool_size', value: 10, defaultValue: 10, value_type: 'number', label: '连接池大小', description: '连接池核心连接数', secret: false, min: 1, max: 100, step: 1 },
+      { key: 'database.max_overflow', value: 20, defaultValue: 20, value_type: 'number', label: '最大溢出', description: '超出池大小的最大连接数', secret: false, min: 0, max: 100, step: 1 },
+      { key: 'database.pool_timeout', value: 30, defaultValue: 30, value_type: 'number', label: '超时时间', description: '获取连接超时（秒）', secret: false, min: 1, max: 300, step: 1 },
+      { key: 'database.echo', value: false, defaultValue: false, value_type: 'boolean', label: 'SQL 日志', description: '打印 SQL 语句（调试用）', secret: false },
+    ],
+  },
   {
     key: 'system_control', label: '系统总控', icon: 'Laptop',
     iconComponent: <Laptop size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} />,
@@ -209,10 +221,40 @@ export default function Settings() {
   const [activeKeys, setActiveKeys] = useState<string[]>([])
   const passwordRef = useRef<any>(null)
 
+  // 从后端加载配置 — 使用原生 fetch 绕过 client.ts 的 snakeToCamel 拦截器，
+  // 因为设置项的 key 含点号（如 ai.api_key），拦截器会错误地转为 apiKey
+  const loadSettings = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('auth_token')
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch('/api/settings', { headers })
+      const rawData = await res.json()
+      const settingsData = rawData?.settings ?? rawData
+      // 后端返回 {key: {value, source}}，展平为 {key: value} 供表单使用
+      const flat: Record<string, unknown> = {}
+      if (settingsData && typeof settingsData === 'object') {
+        Object.entries(settingsData).forEach(([k, v]) => {
+          flat[k] = (v && typeof v === 'object' && 'value' in (v as any)) ? (v as any).value : v
+        })
+      }
+      if (Object.keys(flat).length > 0) {
+        setValues((prev) => ({ ...prev, ...flat }))
+      }
+    } catch (e: any) {
+      console.warn('[Settings] 加载配置失败:', e?.message)
+    }
+  }, [])
+
   useEffect(() => {
     const initial: Record<string, unknown> = {}
     GROUPS.forEach((g) => g.items.forEach((item) => { initial[item.key] = item.value }))
     // Also include default values for extracted component keys
+    initial['database.url'] = ''
+    initial['database.pool_size'] = 10
+    initial['database.max_overflow'] = 20
+    initial['database.pool_timeout'] = 30
+    initial['database.echo'] = false
     initial['decision.mode'] = 'semi_auto'
     initial['ai.provider'] = 'openai'
     initial['ai.model'] = 'gpt-4o'
@@ -236,21 +278,9 @@ export default function Settings() {
     initial['notification.wechat_webhook'] = ''
     initial['notification.telegram_bot_token'] = ''
     initial['notification.email_enabled'] = false
-
-    // 从后端加载配置覆盖本地默认值
-    fetch('/api/settings')
-      .then(res => res.json())
-      .then(data => {
-        if (data?.settings) {
-          setValues({ ...initial, ...data.settings })
-        } else {
-          setValues(initial)
-        }
-      })
-      .catch(() => {
-        setValues(initial)
-      })
-  }, [])
+    setValues(initial)
+    loadSettings()
+  }, [loadSettings])
 
   const handleValueChange = useCallback((key: string, newVal: unknown) => {
     setValues((prev) => ({ ...prev, [key]: newVal }))
@@ -259,6 +289,11 @@ export default function Settings() {
       // Check against defaults from all sources
       const allDefaults: Record<string, unknown> = {}
       GROUPS.forEach((g) => g.items.forEach((item) => { allDefaults[item.key] = item.defaultValue }))
+      allDefaults['database.url'] = ''
+      allDefaults['database.pool_size'] = 10
+      allDefaults['database.max_overflow'] = 20
+      allDefaults['database.pool_timeout'] = 30
+      allDefaults['database.echo'] = false
       allDefaults['ai.provider'] = 'openai'
       allDefaults['ai.model'] = 'gpt-4o'
       allDefaults['ai.api_key'] = ''
@@ -313,29 +348,22 @@ export default function Settings() {
       dirtyKeys.forEach(k => { updates[k] = values[k] })
 
       if (Object.keys(updates).length > 0) {
-        const token = localStorage.getItem('auth_token')
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        }
+        const headers: Record<string, string> = {}
         if (adminToken) {
           headers['X-Admin-Token'] = adminToken
         }
-        const res = await fetch('/api/settings/save', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ settings: updates }),
-        })
-        if (!res.ok) {
-          console.error('保存配置失败:', res.statusText)
-        }
+        await client.post('/settings/save', { settings: updates }, { headers })
       }
 
       setDirtyKeys(new Set())
       setAdminModal(false)
       setAdminToken('')
-    } catch (e) {
+      // 保存成功后重新加载最新配置，确保 UI 显示已保存值
+      await loadSettings()
+      message.success('配置已保存')
+    } catch (e: any) {
       console.error('保存配置异常:', e)
+      message.error(`保存失败: ${e?.message || '未知错误'}`)
     } finally {
       setSaving(false)
     }
@@ -344,6 +372,11 @@ export default function Settings() {
   const handleDiscard = () => {
     const initial: Record<string, unknown> = {}
     GROUPS.forEach((g) => g.items.forEach((item) => { initial[item.key] = item.value }))
+    initial['database.url'] = ''
+    initial['database.pool_size'] = 10
+    initial['database.max_overflow'] = 20
+    initial['database.pool_timeout'] = 30
+    initial['database.echo'] = false
     initial['decision.mode'] = 'semi_auto'
     initial['ai.provider'] = 'openai'
     initial['ai.model'] = 'gpt-4o'
@@ -396,13 +429,15 @@ export default function Settings() {
         )
       case 'password':
         return (
-          <Input.Password
-            value={val as string}
-            placeholder="sk-..."
-            size="small"
-            style={{ minWidth: 180 }}
-            onChange={(e) => handleValueChange(item.key, e.target.value)}
-          />
+          <form onSubmit={(e) => e.preventDefault()}>
+            <Input.Password
+              value={val as string}
+              placeholder="sk-..."
+              size="small"
+              style={{ minWidth: 180 }}
+              onChange={(e) => handleValueChange(item.key, e.target.value)}
+            />
+          </form>
         )
       case 'time':
       case 'string':
@@ -529,7 +564,7 @@ export default function Settings() {
       {viewMode === 'wizard' && (
         <Collapse
           bordered={false}
-          expandIconPosition="right"
+          expandIconPosition="end"
           activeKey={activeKeys.length > 0 ? activeKeys : ['ai_model', 'broker_channel', 'notification']}
           onChange={(keys) => setActiveKeys(keys as string[])}
           style={{ background: 'transparent' }}
@@ -612,7 +647,7 @@ export default function Settings() {
       {viewMode === 'expert' && (
         <Collapse
           bordered={false}
-          expandIconPosition="right"
+          expandIconPosition="end"
           activeKey={activeKeys.length > 0 ? activeKeys : (allExpanded ? GROUPS.map((g) => g.key) : [])}
           onChange={(keys) => setActiveKeys(keys as string[])}
           style={{ background: 'transparent' }}
@@ -746,13 +781,15 @@ export default function Settings() {
         cancelText="取消"
       >
         <p style={{ marginBottom: 12 }}>检测到修改涉及敏感配置（API 密钥、密码、令牌等），请输入 <Text code>TRADING_ADMIN_TOKEN</Text> 以确认操作。</p>
-        <Input.Password
-          ref={passwordRef}
-          value={adminToken}
-          onChange={(e) => setAdminToken(e.target.value)}
-          placeholder="管理员口令"
-          onPressEnter={handleAdminConfirm}
-        />
+        <form onSubmit={(e) => { e.preventDefault(); handleAdminConfirm() }}>
+          <Input.Password
+            ref={passwordRef}
+            value={adminToken}
+            onChange={(e) => setAdminToken(e.target.value)}
+            placeholder="管理员口令"
+            onPressEnter={handleAdminConfirm}
+          />
+        </form>
       </Modal>
     </div>
   )

@@ -47,12 +47,18 @@ def _default_db_url() -> str:
 
 
 def get_engine(db_url: str | None = None) -> Engine:
-    """获取 SQLAlchemy 引擎（懒加载，模块级缓存）。"""
+    """获取 SQLAlchemy 引擎（懒加载，模块级缓存）。
+
+    注意：asyncpg 是异步驱动，同步 SQLAlchemy 需要使用 psycopg2 或标准 postgresql:// 前缀。
+    自动将 postgresql+asyncpg 转换为 postgresql:// 以支持同步访问。
+    """
     if db_url is None:
         db_url = _default_db_url()
-    if db_url not in _engine_cache:
-        _engine_cache[db_url] = create_engine(db_url, echo=False)
-    return _engine_cache[db_url]
+    # asyncpg 异步驱动无法用于同步 SQLAlchemy，转换为标准 postgresql://
+    sync_db_url = db_url.replace('+asyncpg', '') if '+asyncpg' in db_url else db_url
+    if sync_db_url not in _engine_cache:
+        _engine_cache[sync_db_url] = create_engine(sync_db_url, echo=False)
+    return _engine_cache[sync_db_url]
 
 
 def init_db(engine_url: str | None = None) -> Engine:

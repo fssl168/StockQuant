@@ -132,11 +132,11 @@ export default function Comparison() {
   const [activeTab, setActiveTab] = useState('compare')
 
   useEffect(() => {
-    backtestApi.list(50)
+    backtestApi.list()
       .then((r: any[]) => {
-        if (Array.isArray(r)) setBacktests(r)
+        if (Array.isArray(r)) setBacktests(r.slice(0, 50))
       })
-      .catch(() => {})
+      .catch((e: any) => console.warn('[Comparison] 获取回测列表失败:', e?.message))
   }, [])
 
   const selectedBacktests = useMemo(
@@ -149,10 +149,9 @@ export default function Comparison() {
     setLoading(true)
     setChartLoading(true)
     try {
-      const res = await client.post('/comparison', { strategy_ids: selectedIds })
-      if (res) {
-        setComparisonData(res.data)
-      }
+      const res = await client.post('/comparison', { strategy_ids: selectedIds }) as any
+      // 拦截器返回裸数据，直接传给 setState
+      setComparisonData(res)
     } catch (e) {
       console.error('对比请求失败:', e)
     } finally {
@@ -179,10 +178,8 @@ export default function Comparison() {
     if (selectedIds.length < 2) return
     setOptimizeLoading(true)
     try {
-      const res = await client.post('/comparison/optimize', { strategy_ids: selectedIds })
-      if (res) {
-        setOptimizeResult(res.data)
-      }
+      const res = await client.post('/comparison/optimize', { strategy_ids: selectedIds }) as any
+      setOptimizeResult(res)
     } catch (e) {
       console.error('组合优化请求失败:', e)
     } finally {
@@ -194,10 +191,8 @@ export default function Comparison() {
     if (!lifecycleStrategyId) return
     setLifecycleLoading(true)
     try {
-      const res = await client.get(`/comparison/lifecycle/${lifecycleStrategyId}`)
-      if (res) {
-        setLifecycleResult(res.data)
-      }
+      const res = await client.get(`/comparison/lifecycle/${lifecycleStrategyId}`) as any
+      setLifecycleResult(res)
     } catch (e) {
       console.error('生命周期建议请求失败:', e)
     } finally {

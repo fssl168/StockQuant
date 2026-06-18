@@ -18,7 +18,17 @@ export default function Data() {
     fetchCacheStats()
     // Fetch health status on page load (Task 2.11)
     dataApi.health()
-      .then((data) => setHealthData(data ?? {}))
+      .then((res: any) => {
+        // client 响应拦截器返回 axios response（数据在 .data）；后端返回数组，按 provider 转 map
+        const arr = res && typeof res === 'object' && 'data' in res ? res.data : res
+        const map: Record<string, { healthy: boolean }> = {}
+        if (Array.isArray(arr)) {
+          arr.forEach((p: any) => {
+            if (p?.provider) map[p.provider] = { healthy: !!p.healthy }
+          })
+        }
+        setHealthData(map)
+      })
       .catch(() => setHealthData({}))
   }, [])
 
@@ -45,8 +55,8 @@ export default function Data() {
     try {
       await dataApi.clearCache()
       fetchCacheStats()
-    } catch {
-      // ignore
+    } catch (e: any) {
+      console.warn('[Data] 清除缓存失败:', e?.message)
     } finally {
       setClearingCache(false)
     }
@@ -56,8 +66,8 @@ export default function Data() {
     try {
       await dataApi.updateSource({ provider, enabled } as any)
       fetchSources()
-    } catch {
-      // ignore
+    } catch (e: any) {
+      console.warn('[Data] 切换数据源失败:', e?.message)
     }
   }
 
@@ -77,26 +87,37 @@ export default function Data() {
     }
   }
 
-  const klineData = klineResult ?? { dates: [], data: [] }
+  // 标准化图表数据：{dates, data} 或 raw OHLCV 对象数组
+  const klineData = (() => {
+    if (!klineResult) return { dates: [] as string[], data: [] as unknown[] }
+    // 必须是对象且包含 data 属性
+    const r = klineResult as { dates?: unknown[]; data?: unknown[] }
+    if (typeof klineResult === 'object' && !Array.isArray(klineResult) && r.data !== undefined) {
+      return { dates: Array.isArray(r.dates) ? r.dates as string[] : [], data: Array.isArray(r.data) ? r.data : [] }
+    }
+    // raw OHLCV 对象数组 [{date, open, ...}, ...]
+    if (Array.isArray(klineResult)) {
+      const arr = klineResult as { date: string; open: number; close: number; low: number; high: number; volume: number }[]
+      return {
+        dates: arr.map((r) => r.date),
+        data: arr.map((r) => [r.open, r.close, r.low, r.high, r.volume]),
+      }
+    }
+    return { dates: [] as string[], data: [] as unknown[] }
+  })()
 
-  const previewData = klineResult && (klineResult as any).data
-    ? (klineResult as any).dates.slice(-10).map((d: string, i: number) => {
-        const idx = (klineResult as any).dates.length - 10 + i
-        const row = (klineResult as any).data[idx]
-        return { date: d, open: row?.[0], close: row?.[1], low: row?.[2], high: row?.[3], volume: row?.[4] }
-      })
-    : klineData.dates.slice(-10).map((d: string, i: number) => {
-        const idx = klineData.dates.length - 10 + i
-        const row = klineData.data[idx]
-        return { date: d, open: row?.[0], close: row?.[1], low: row?.[2], high: row?.[3], volume: row?.[4] }
-      })
+  // 预览表格数据（最近10条）
+  const previewData = (Array.isArray(klineData.dates) ? klineData.dates : []).slice(-10).map((d: string, i: number) => {
+    const row = klineData.data[klineData.dates.length - 10 + i] as number[] | undefined
+    return { date: d, open: row?.[0], close: row?.[1], low: row?.[2], high: row?.[3], volume: row?.[4] }
+  })
 
   const handleFetchKline = () => {
     setKlineLoading(true)
     setKlineError(null)
     const start = klineDates[0].format('YYYY-MM-DD')
     const end = klineDates[1].format('YYYY-MM-DD')
-    dataApi.fetchKline(klineSymbol, 'auto', start, end)
+    dataApi.fetchKline(klineSymbol, 'alphafeed', start, end)
       .then((data) => {
         if (data && (data as any).data) {
           setKlineResult((data as any).data)
@@ -126,8 +147,8 @@ export default function Data() {
         onChange={(checked) => handleToggleSource(r.provider, checked)}
       />
     ) },
-    { title: '最后更新', key: 'last', width: 160, render: () => '2026-06-15 15:00' },
-    { title: '记录数', key: 'records', width: 100, render: () => '1,234,567' },
+    { title: '最后更新', key: 'last', width: 160, render: (_: any, r: any) => r.last_check ? new Date(r.last_check).toLocaleString('zh-CN') : '—' },
+    { title: '记录数', key: 'records', width: 100, render: (_: any, r: any) => r.records != null ? Number(r.records).toLocaleString() : '—' },
     { title: '操作', key: 'action', width: 160, render: (_: any, r: any) => (
       <Space>
         <Button size="small" icon={<Download size={14} />} onClick={() => handleDownload(r.provider)}>下载</Button>
@@ -153,7 +174,7 @@ export default function Data() {
         const logs = Array.isArray(data) ? data : (data?.data ?? [])
         if (logs.length > 0) setLogData(logs)
       })
-      .catch(() => {})
+      .catch((e: any) => console.warn('[Data] 获取采集日志失败:', e?.message))
   }, [])
 
   const handleDownload = async (provider: string) => {
@@ -178,10 +199,10 @@ export default function Data() {
       {/* Cache stats */}
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <CacheStats
-          sizeMb={cacheStats ? cacheStats.total_size_mb : 0}
-          hitRate={cacheStats ? cacheStats.hit_rate : 0}
-          symbolCount={cacheStats ? cacheStats.symbol_count : 0}
-          lastUpdate={cacheStats ? cacheStats.last_update : '-'}
+          sizeMb={cacheStats?.sizeMb ?? 0}
+          hitRate={cacheStats?.hitRate ?? 0}
+          symbolCount={cacheStats?.symbolCount ?? 0}
+          lastUpdate={cacheStats?.lastUpdate ?? '-'}
         />
         <Button size="small" danger onClick={handleClearCache} loading={clearingCache}>
           清除缓存
@@ -214,7 +235,7 @@ export default function Data() {
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--color-danger)', fontSize: 13 }}>
             {klineError}
           </div>
-        ) : klineData.data.length > 0 ? (
+        ) : (klineData.data?.length ?? 0) > 0 ? (
         <ReactECharts
           option={{
             tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
@@ -264,15 +285,12 @@ export default function Data() {
       {/* Data sources */}
       <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>数据源配置</span>} styles={{ body: { padding: '0' } }} style={{ marginBottom: 12 }}>
         <Table
-          dataSource={sources.length > 0 ? sources : [
-            { provider: 'BaoStock', enabled: true },
-            { provider: 'AkShare', enabled: true },
-            { provider: 'CSV 本地', enabled: true },
-          ]}
+          dataSource={sources}
           columns={dataSourceColumns}
           rowKey="provider"
           pagination={false}
           size="small"
+          locale={{ emptyText: '暂无数据源配置' }}
         />
       </Card>
 
@@ -289,7 +307,7 @@ export default function Data() {
                 {s === 'success' ? '成功' : s === 'warning' ? '警告' : '失败'}
               </Tag>
             )},
-            { title: '记录数', dataIndex: 'records', key: 'records', width: 80, render: (v: number) => v.toLocaleString() },
+            { title: '记录数', dataIndex: 'records', key: 'records', width: 80, render: (v: number) => v?.toLocaleString() ?? '—' },
             { title: '备注', key: 'note', render: (_: any, r: any) => r.note ? <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{r.note}</span> : null },
           ]}
           rowKey="key"

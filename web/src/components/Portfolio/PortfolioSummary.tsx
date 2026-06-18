@@ -20,7 +20,7 @@ export default function PortfolioSummary({ totalValue, totalCost, totalPnl, tota
   return (
     <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
       {summaryItems.map((s) => (
-        <Col xs={24} sm={12} md={6} key={s.label}>
+        <Col key={s.label} flex={1} style={{ minWidth: 140 }}>
           <Card size="small" styles={{ body: { padding: '10px 14px' } }}>
             <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
             <div style={{ fontSize: 15, fontWeight: 600, fontFamily: 'var(--font-mono)', marginTop: 2, color: s.color || 'var(--color-text-primary)' }}>

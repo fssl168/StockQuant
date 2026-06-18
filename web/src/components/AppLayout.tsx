@@ -71,7 +71,7 @@ export default function AppLayout({ children }: Props) {
     const check = async () => {
       const start = performance.now()
       try {
-        const res = await fetch('/api/health', { method: 'GET', signal: AbortSignal.timeout(3000) })
+        const res = await fetch('/api/health', { method: 'GET' })
         setApiLatency(Math.round(performance.now() - start))
         setBackendAvailable(res.ok)
       } catch {

@@ -25,7 +25,9 @@ export const useDataStore = create<DataState>((set) => ({
   },
   fetchCacheStats: async () => {
     try {
-      const stats = await dataApi.cacheStats()
+      const res: any = await dataApi.cacheStats()
+      // client 响应拦截器返回 axios response（数据在 .data）；兼容测试中直接返回裸数据
+      const stats = res && typeof res === 'object' && 'data' in res ? res.data : res
       set({ cacheStats: stats })
     } catch {
       set({ cacheStats: null })

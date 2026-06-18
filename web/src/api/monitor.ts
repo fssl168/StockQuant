@@ -10,7 +10,7 @@ export const monitorApi = {
     return client.get(`/monitor/brief${params}`) as Promise<string>
   },
   summary: () => client.get('/monitor/summary') as Promise<{ summary: string }>,
-  scan: (symbol: string) => client.get(`/monitor/scan/${symbol}`) as Promise<{ anomalies: { symbol: string; type: string; description: string; time: string }[] }>,
+  scan: (symbol: string) => client.get(`/monitor/scan/${symbol}`) as Promise<any[]>,
   getWatchlist: () =>
     client.get('/monitor/watchlist') as Promise<string[]>,
   updateWatchlist: (symbols: string[]) =>

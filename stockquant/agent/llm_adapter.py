@@ -199,6 +199,8 @@ class LLMAdapter:
         self._fallback_models = fallback_models or []
         self._base_url = base_url
         self._litellm: Any = None
+        logger.info("LLMAdapter 初始化: model=%s, base_url=%s, api_key=%s",
+                     model, base_url, ("****" if self._api_key else "None"))
 
     def _ensure_litellm(self) -> None:
         """懒加载 litellm 模块。"""
@@ -257,6 +259,29 @@ class LLMAdapter:
             cls._cost_tracker["estimated_cost_usd"],
         )
 
+    def _normalize_model(self, model: str) -> str:
+        """规范化模型名称。
+
+        当使用自定义 base_url（OpenAI 兼容端点）时，
+        为没有 provider 前缀的模型名自动补全 ``openai/`` 前缀，
+        以满足 LiteLLM 的路由要求。
+        """
+        # 已有 provider 前缀 或 是特殊本地模型 → 直接返回
+        if (
+            "/" in model
+            or model.startswith("local/")
+            or model.startswith("ollama/")
+            or model == "local_rule_engine"
+        ):
+            return model
+
+        # 自定义 base_url + 无前缀模型名 → 补全 openai/ 前缀
+        if self._base_url:
+            logger.info("检测到自定义 base_url，自动为模型 %s 补全 openai/ 前缀", model)
+            return f"openai/{model}"
+
+        return model
+
     def call_with_tools(
         self,
         messages: list[dict],
@@ -290,7 +315,10 @@ class LLMAdapter:
             所有候选模型均调用失败时抛出
         """
         self._ensure_litellm()
-        candidates = [model or self._model] + self._fallback_models
+        raw_model = model or self._model
+        candidates = [self._normalize_model(raw_model)] + [
+            self._normalize_model(m) for m in self._fallback_models
+        ]
         last_exception: Optional[Exception] = None
 
         for candidate in candidates:
@@ -366,9 +394,11 @@ class LLMAdapter:
         if used_model.startswith("local/") or used_model.startswith("ollama/"):
             return self._call_local_llm(messages, used_model, **kwargs)
 
+        # 远程 LLM 路径 — 规范化模型名称（补全 provider 前缀）
+        normalized = self._normalize_model(used_model)
         self._ensure_litellm()
         response = self._litellm.completion(
-            model=used_model,
+            model=normalized,
             messages=messages,
             api_key=self._api_key,
             base_url=self._base_url,

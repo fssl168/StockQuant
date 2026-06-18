@@ -99,3 +99,10 @@ async def get_dashboard_metrics():
         "latest_backtest_status": latest_status,
         "latest_backtest_return": latest_return,
     }
+
+
+@router.get("/dashboard/signals", response_model=list, summary="仪表盘信号列表")
+async def get_dashboard_signals():
+    """返回最近的交易信号列表（供仪表盘展示）"""
+    # TODO: 接入真实的信号存储
+    return []

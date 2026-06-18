@@ -54,13 +54,15 @@ export default function NotifierForm({ values, onChange }: NotifierFormProps) {
         return <Switch checked={val as boolean} onChange={(v) => onChange(item.key, v)} size="small" />
       case 'password':
         return (
-          <Input.Password
-            value={val as string}
-            placeholder="sk-..."
-            size="small"
-            style={{ minWidth: 180 }}
-            onChange={(e) => onChange(item.key, e.target.value)}
-          />
+          <form onSubmit={(e) => e.preventDefault()}>
+            <Input.Password
+              value={val as string}
+              placeholder="sk-..."
+              size="small"
+              style={{ minWidth: 180 }}
+              onChange={(e) => onChange(item.key, e.target.value)}
+            />
+          </form>
         )
       default:
         return <Input value={String(val)} size="small" onChange={(e) => onChange(item.key, e.target.value)} />

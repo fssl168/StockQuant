@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -18,7 +19,7 @@ from stockquant.ai.chat_tools import (
     trigger_backtest,
     search_news,
 )
-from stockquant.api.routers.settings import _settings
+from stockquant.api.routers.settings import _settings, _decrypt_value
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -33,12 +34,17 @@ def _get_chat_agent() -> ChatAgent:
     global _chat_agent
     if _chat_agent is None:
         model = _settings.get("ai.model", "gpt-4o")
-        api_key = _settings.get("ai.api_key", "")
-        api_base = _settings.get("ai.api_base", "")
+        api_key_raw = _settings.get("ai.api_key", "")
+        api_base_raw = _settings.get("ai.api_base", "")
+        db_url = _settings.get("database.url")
+        # 解密敏感值（settings 存储的是 Fernet 加密后的值）
+        api_key = _decrypt_value(api_key_raw) if api_key_raw else ""
+        api_base = _decrypt_value(api_base_raw) if api_base_raw else ""
         _chat_agent = ChatAgent(
             model=model,
             api_key=api_key if api_key else None,
             base_url=api_base if api_base else None,
+            db_url=db_url,  # 传入 db_url 使内部 ChatMemory 生效，消息持久化到数据库
         )
     return _chat_agent
 
@@ -140,19 +146,28 @@ def chat(payload: dict = Body(...)) -> Dict[str, Any]:
     mode = payload.get("mode", "general")
     agent = _get_chat_agent()
     reply = agent.chat(message, conversation_id=conversation_id, mode=mode)
-    messages = agent.get_conversation(conversation_id, limit=10)
+    raw_messages = agent.get_conversation(conversation_id, limit=10)
+
+    # 兼容 dict 和 object 两种格式
+    history = []
+    for m in raw_messages:
+        if isinstance(m, dict):
+            history.append({
+                "role": m.get("role", ""),
+                "content": m.get("content", ""),
+                "timestamp": m.get("timestamp", "") if isinstance(m.get("timestamp"), str) else str(m.get("timestamp", "")),
+            })
+        else:
+            history.append({
+                "role": getattr(m, "role", ""),
+                "content": getattr(m, "content", ""),
+                "timestamp": getattr(m, "timestamp", "").isoformat() if hasattr(getattr(m, "timestamp", None), "isoformat") else str(getattr(m, "timestamp", "")),
+            })
 
     return {
         "conversation_id": conversation_id,
         "reply": reply,
-        "history": [
-            {
-                "role": m.role,
-                "content": m.content,
-                "timestamp": m.timestamp.isoformat() if hasattr(m.timestamp, "isoformat") else str(m.timestamp),
-            }
-            for m in messages[-10:]
-        ],
+        "history": history[-10:],
     }
 
 
@@ -177,35 +192,62 @@ def chat_stream(payload: dict = Body(...)) -> StreamingResponse:
 
 @router.get("/conversations")
 def list_conversations() -> Dict[str, Any]:
-    """列出所有会话。"""
-    agent = _get_chat_agent()
-    return {"conversations": agent.get_all_conversations()}
+    """列出所有会话（从数据库读取）。"""
+    try:
+        from stockquant.persistence.repository import list_chat_sessions
+        db_url = _settings.get("database.url")
+        sessions = list_chat_sessions(db_url)
+        return {"conversations": sessions}
+    except Exception:
+        # 降级：返回空列表
+        return {"conversations": []}
 
 
 @router.get("/conversation/{conversation_id}")
 def get_conversation(conversation_id: str, limit: int = 50) -> Dict[str, Any]:
-    """获取会话历史。"""
-    agent = _get_chat_agent()
-    messages = agent.get_conversation(conversation_id, limit=limit)
-    return {
-        "conversation_id": conversation_id,
-        "messages": [
-            {
-                "role": m.role,
-                "content": m.content,
-                "timestamp": m.timestamp.isoformat() if hasattr(m.timestamp, "isoformat") else str(m.timestamp),
-            }
-            for m in messages
-        ],
-    }
+    """获取会话历史（从数据库读取）。"""
+    try:
+        from stockquant.persistence.repository import get_chat_messages
+        db_url = _settings.get("database.url")
+        messages = get_chat_messages(db_url, conversation_id, limit=limit)
+        return {"conversation_id": conversation_id, "messages": messages}
+    except Exception:
+        return {"conversation_id": conversation_id, "messages": []}
+
+
+@router.post("/conversation/{conversation_id}/message")
+def save_message(
+    conversation_id: str,
+    payload: dict = Body(...),
+) -> Dict[str, Any]:
+    """保存单条消息到数据库（不触发 AI 回复）。"""
+    role = payload.get("role", "user")
+    content = payload.get("content", "")
+    try:
+        from stockquant.persistence.repository import save_chat_message
+        db_url = _settings.get("database.url")
+        from datetime import datetime
+        msg_id = save_chat_message(
+            engine_url=db_url,
+            conversation_id=conversation_id,
+            role=role,
+            content=content,
+        )
+        return {"saved": True, "id": msg_id}
+    except Exception:
+        return {"saved": False, "id": None}
 
 
 @router.delete("/conversation/{conversation_id}")
 def clear_conversation(conversation_id: str) -> Dict[str, Any]:
-    """清空会话。"""
-    agent = _get_chat_agent()
-    success = agent.clear_conversation(conversation_id)
-    return {"cleared": success}
+    """清空会话（从数据库删除）。"""
+    try:
+        from stockquant.persistence.repository import delete_chat_messages
+        db_url = _settings.get("database.url")
+        delete_chat_messages(db_url, conversation_id)
+        return {"cleared": True}
+    except Exception:
+        return {"cleared": False}
 
 
 @router.post("/tools/query_market_data")

@@ -139,15 +139,23 @@ class AlphaFeedFeed(DataFeed):
             self._fetch_all_akshare()
             return
 
+        all_failed = True
         for symbol in self._symbols:
             try:
                 bars = self._fetch_single(symbol)
                 self._bars[symbol] = bars
                 self._dataframes[symbol] = self._bars_to_df(symbol)
+                if bars:
+                    all_failed = False
             except Exception as e:
                 logger.error(f"AlphaFeedFeed: failed to fetch {symbol}: {e}")
                 self._bars[symbol] = []
                 self._dataframes[symbol] = pd.DataFrame()
+
+        # 所有标的都失败 → 降级到 AkShare
+        if all_failed:
+            logger.warning("AlphaFeed 全部请求失败，降级为 AkShare 数据源")
+            self._fetch_all_akshare()
 
     def _fetch_single(self, symbol: str) -> List[BarData]:
         """拉取单个标的数据"""
@@ -245,20 +253,41 @@ class AlphaFeedFeed(DataFeed):
     def _normalize_symbol(symbol: str) -> str:
         """将标的代码转为 AlphaFeed 格式
 
+        "sh600519" → "600519.SH"
+        "sz000858" → "000858.SZ"
         "600519" → "600519.SH"
-        "000858" → "000858.SZ"
         "600000.SH" → "600000.SH" (已符合格式)
         """
-        if "." in symbol:
-            return symbol
+        upper = symbol.upper()
 
-        # 根据代码规则判断交易所
-        if symbol.startswith(("6", "5", "9")):
-            return f"{symbol}.SH"  # 上海
-        elif symbol.startswith(("0", "3", "1")):
-            return f"{symbol}.SZ"  # 深圳
-        else:
-            return symbol  # 无法判断，原样返回
+        # 已符合 .SH / .SZ 格式，直接返回
+        if upper.endswith((".SH", ".SZ")):
+            return upper
+
+        # 去掉 sh/sz/bj 前缀
+        clean = symbol
+        exchange = None
+        if upper.startswith("SH"):
+            clean = clean[2:]
+            exchange = "SH"
+        elif upper.startswith("SZ"):
+            clean = clean[2:]
+            exchange = "SZ"
+        elif upper.startswith("BJ"):
+            clean = clean[2:]
+            exchange = "BJ"
+        elif len(clean) == 6:
+            # 纯6位数字，自动推断交易所
+            if clean[0] in ("6", "5", "9"):
+                exchange = "SH"
+            elif clean[0] in ("0", "3", "1"):
+                exchange = "SZ"
+            else:
+                return symbol  # 无法判断，原样返回
+
+        if exchange and clean:
+            return f"{clean}.{exchange}"
+        return symbol
 
     @staticmethod
     def _date_to_timestamp(date_str: str, end_of_day: bool = False) -> int:

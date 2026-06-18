@@ -14,11 +14,7 @@ const { Title, Text } = Typography
 export default function Portfolio() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
-  const [positions, setPositions] = useState([
-    { key: '1', symbol: 'sh600519', name: '贵州茅台', shares: 100, cost: 1680, price: 1725.5, pnl: 4550, pnlPct: 2.71 },
-    { key: '2', symbol: 'sz000858', name: '五粮液', shares: 500, cost: 152, price: 148.3, pnl: -1850, pnlPct: -2.43 },
-    { key: '3', symbol: 'sh601318', name: '中国平安', shares: 300, cost: 45.5, price: 47.8, pnl: 690, pnlPct: 5.05 },
-  ])
+  const [positions, setPositions] = useState<any[]>([])
 
   const [summary, setSummary] = useState<{ totalValue: number; totalCost: number; totalPnl: number; totalPnlPct: number } | null>(null)
   const [portfolioCurve, setPortfolioCurve] = useState<{ dates: string[]; values: number[] } | null>(null)
@@ -31,7 +27,7 @@ export default function Portfolio() {
   useEffect(() => {
     const p1 = client.get('/portfolio/positions')
       .then((data) => { if (Array.isArray(data) && data.length > 0) setPositions(data) })
-      .catch(() => {})
+      .catch((e: any) => console.warn('[Portfolio] 获取持仓失败:', e?.message))
     const p2 = client.get('/portfolio/account')
       .then((data: any) => {
         if (data) {
@@ -43,16 +39,16 @@ export default function Portfolio() {
           })
         }
       })
-      .catch(() => {})
+      .catch((e: any) => console.warn('[Portfolio] 获取账户失败:', e?.message))
     const p3 = client.get('/portfolio/equity-curve')
       .then((data: any) => { if (data?.dates?.length) setPortfolioCurve(data) })
-      .catch(() => {})
+      .catch((e: any) => console.warn('[Portfolio] 获取权益曲线失败:', e?.message))
     const p4 = client.get('/trading/trades')
       .then((data: any) => {
         const trades = Array.isArray(data) ? data : (data?.data ?? [])
         if (trades.length > 0) setTradeHistory(trades)
       })
-      .catch(() => {})
+      .catch((e: any) => console.warn('[Portfolio] 获取交易记录失败:', e?.message))
     const p5 = client.get('/portfolio/risk-metrics')
       .then((data: any) => {
         const rm = data?.data ?? data
@@ -67,7 +63,7 @@ export default function Portfolio() {
           ])
         }
       })
-      .catch(() => {})
+      .catch((e: any) => console.warn('[Portfolio] 获取风险指标失败:', e?.message))
     Promise.all([p1, p2, p3, p4, p5]).finally(() => setLoading(false))
   }, [])
 

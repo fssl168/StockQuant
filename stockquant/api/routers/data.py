@@ -16,7 +16,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from stockquant.api.routers.settings import _settings
+from stockquant.api.routers.settings import _settings, _decrypt_value
 
 logger = logging.getLogger("stockquant.api.data")
 
@@ -86,9 +86,86 @@ def _calculate_cache_stats() -> dict:
     }
 
 
+def _fetch_kline_baostock(symbol: str, start: str, end: str, timeframe: str = "1d") -> list[dict]:
+    """使用 BaoStock 获取 K 线数据（最终降级方案）"""
+    import baostock as bs
+
+    # BaoStock 全局只有一个登录会话，确保干净状态
+    try:
+        bs.logout()
+    except Exception:
+        pass
+
+    rs = bs.login()
+    if rs.error_code != "0":
+        logger.error(f"BaoStock login failed: {rs.error_msg}")
+        return []
+
+    try:
+        fields = "date,open,high,low,close,volume"
+
+        upper_s = symbol.upper()
+        if upper_s.startswith("SH"):
+            bs_symbol = f"sh.{symbol[2:]}"
+        elif upper_s.startswith("SZ"):
+            bs_symbol = f"sz.{symbol[2:]}"
+        elif upper_s.startswith("BJ"):
+            bs_symbol = f"bj.{symbol[2:]}"
+        elif len(symbol) == 6 and symbol[0] in ("6", "5", "9"):
+            bs_symbol = f"sh.{symbol}"
+        elif len(symbol) == 6 and symbol[0] in ("0", "3", "1"):
+            bs_symbol = f"sz.{symbol}"
+        else:
+            bs_symbol = symbol
+
+        bs_start = start[:10] if len(start) >= 10 else start
+        bs_end = end[:10] if len(end) >= 10 else end
+
+        freq_map = {"1d": "d", "1w": "w", "1M": "d", "1m": "5", "5m": "5", "15m": "15", "30m": "30", "60m": "60"}
+        freq = freq_map.get(timeframe, "d")
+
+        kdata = bs.query_history_k_data_plus(
+            bs_symbol, fields,
+            start_date=bs_start, end_date=bs_end,
+            frequency=freq, adjustflag="2",
+        )
+
+        if kdata.error_code != "0":
+            logger.error(f"BaoStock query failed for {symbol}: {kdata.error_msg}")
+            return []
+
+        rows = []
+        while kdata.error_code == "0" and kdata.next():
+            rows.append(kdata.get_row_data())
+
+        kline_data = []
+        for r in rows:
+            if len(r) >= 6:
+                kline_data.append({
+                    "date": r[0],
+                    "open": round(float(r[1]), 2),
+                    "high": round(float(r[2]), 2),
+                    "low": round(float(r[3]), 2),
+                    "close": round(float(r[4]), 2),
+                    "volume": int(float(r[5])),
+                })
+
+        logger.info(f"BaoStock: fetched {len(kline_data)} bars for {symbol}")
+        return kline_data
+
+    finally:
+        try:
+            bs.logout()
+        except Exception:
+            pass
+
+
 def _fetch_kline_sync(symbol: str, start: str, end: str, timeframe: str = "1d") -> list[dict]:
-    """同步获取 K 线数据 — AlphaFeed 优先，BaoStock 降级"""
+    """同步获取 K 线数据 — AlphaFeed 优先，AkShare 降级，BaoStock 兜底"""
+    # 优先尝试 AlphaFeed/AkShare
     from stockquant.data.providers.alphafeed_feed import AlphaFeedFeed
+
+    _alphafeed_key = _decrypt_value(_settings.get("data_provider.alphafeed_key", ""))
 
     feed = AlphaFeedFeed(
         symbols=[symbol],
@@ -96,27 +173,40 @@ def _fetch_kline_sync(symbol: str, start: str, end: str, timeframe: str = "1d") 
         start=start,
         end=end,
         cache_dir=str(_get_cache_dir()),
+        api_key=_alphafeed_key or None,
     )
     feed.start()
     df = feed.get_dataframe()
     feed.stop()
 
-    if df is None or df.empty:
-        return []
+    if df is not None and not df.empty:
+        # DataFrame 转为前端格式 — 兼容多种列名格式
+        kline_data = []
+        for _, row in df.iterrows():
+            # 优先使用 datetime 列，其次 date
+            date_val = row.get("datetime", row.get("date", str(_)))
+            if hasattr(date_val, "strftime"):
+                date_val = date_val.strftime("%Y-%m-%d")
+            elif isinstance(date_val, (int, float)):
+                from datetime import datetime as _dt
+                date_val = _dt.fromtimestamp(date_val / 1000 if date_val > 1e12 else date_val).strftime("%Y-%m-%d")
+            elif isinstance(date_val, str):
+                # 如果是数字字符串（索引），跳过用 date 列
+                if date_val.isdigit() and "date" in row.index:
+                    date_val = row["date"]
+            kline_data.append({
+                "date": str(date_val),
+                "open": round(float(row.get("open", 0)), 2),
+                "high": round(float(row.get("high", 0)), 2),
+                "low": round(float(row.get("low", 0)), 2),
+                "close": round(float(row.get("close", 0)), 2),
+                "volume": int(row.get("volume", 0)),
+            })
+        return kline_data
 
-    # DataFrame 转为前端格式
-    kline_data = []
-    for idx, row in df.iterrows():
-        kline_data.append({
-            "date": str(idx) if not isinstance(idx, str) else idx,
-            "open": round(float(row.get("open", 0)), 2),
-            "high": round(float(row.get("high", 0)), 2),
-            "low": round(float(row.get("low", 0)), 2),
-            "close": round(float(row.get("close", 0)), 2),
-            "volume": int(row.get("volume", 0)),
-        })
-
-    return kline_data
+    # AlphaFeed/AkShare 失败，降级到 BaoStock
+    logger.info(f"AlphaFeed/AkShare 无数据，降级到 BaoStock 获取 {symbol}")
+    return _fetch_kline_baostock(symbol, start, end, timeframe)
 
 
 # ====================================================================
@@ -195,7 +285,7 @@ async def get_kline(
 async def collect_data(payload: dict):
     """手动触发数据采集/下载"""
     symbol = payload.get("symbol", "")
-    source = payload.get("source", "baostock")
+    source = payload.get("source", "alphafeed")
     start = payload.get("start", "")
     end = payload.get("end", "")
 
@@ -251,3 +341,106 @@ async def get_data_health():
             "error": health["error"],
         })
     return result
+
+
+@router.get("/data/collect-logs", summary="数据采集日志")
+async def get_collect_logs():
+    """获取数据采集任务历史日志。
+
+    从内存中的 _collect_tasks 返回最近 20 条采集记录，
+    按 created_at 倒序排列。
+    """
+    tasks = sorted(
+        _collect_tasks.values(),
+        key=lambda t: t.get("created_at", ""),
+        reverse=True,
+    )[:20]
+
+    logs = []
+    for t in tasks:
+        status = t.get("status", "")
+        # 状态映射：collecting → warning, completed → success, failed → error
+        status_label = "warning" if status == "collecting" else (
+            "success" if status == "completed" else "error"
+        )
+        logs.append({
+            "key": t.get("task_id", ""),
+            "time": t.get("created_at", ""),
+            "source": t.get("source", ""),
+            "symbol": t.get("symbol", ""),
+            "status": status_label,
+            "records": t.get("count", 0),
+            "note": t.get("error", "") if status == "failed" else "",
+        })
+
+    return logs
+
+
+@router.get("/data/download", summary="批量下载数据")
+async def download_data(provider: str = Query(..., description="数据源名称")):
+    """触发指定数据源的批量下载。
+
+    下载默认股票池（沪深300成分股前10只）的最新日线数据。
+    """
+    # 默认股票池（沪深300前10只成分股）
+    default_symbols = [
+        "sh600519", "sz000858", "sh601318", "sh600036",
+        "sh600030", "sz000333", "sz300750", "sh600276",
+        "sz000568", "sh600104",
+    ]
+
+    # 验证 provider
+    valid_providers = {"baostock", "akshare", "alphafeed", "csv"}
+    if provider not in valid_providers:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的数据源: {provider}, 支持: {', '.join(valid_providers)}"
+        )
+
+    # 生成下载任务
+    task_id = f"DL-{uuid.uuid4().hex[:8].upper()}"
+    _collect_tasks[task_id] = {
+        "task_id": task_id,
+        "symbol": ",".join(default_symbols[:3]) + "...",
+        "source": provider,
+        "status": "collecting",
+        "created_at": datetime.now().isoformat(),
+    }
+
+    total_count = 0
+
+    async def _do_download():
+        nonlocal total_count
+        try:
+            loop = asyncio.get_event_loop()
+            for symbol in default_symbols:
+                try:
+                    data = await loop.run_in_executor(
+                        None, _fetch_kline_sync, symbol, "", "", "1d"
+                    )
+                    total_count += len(data)
+                except Exception as e:
+                    logger.warning(f"下载 {symbol} 失败: {e}")
+
+            _collect_tasks[task_id].update({
+                "status": "completed",
+                "count": total_count,
+                "updated_at": datetime.now().isoformat(),
+            })
+        except Exception as e:
+            _collect_tasks[task_id].update({
+                "status": "failed",
+                "error": str(e),
+                "updated_at": datetime.now().isoformat(),
+            })
+
+    asyncio.create_task(_do_download())
+
+    return {
+        "success": True,
+        "task_id": task_id,
+        "provider": provider,
+        "symbols": default_symbols,
+        "status": "collecting",
+        "message": f"已启动 {provider} 数据下载任务，共 {len(default_symbols)} 只股票",
+    }

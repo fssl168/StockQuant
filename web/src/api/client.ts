@@ -28,8 +28,8 @@ function getToken(): string | null {
 }
 
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
-  timeout: 5000,
+  baseURL: import.meta.env.VITE_API_URL || '',
+  timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
 })
 
@@ -44,9 +44,9 @@ client.interceptors.request.use((config) => {
 
 client.interceptors.response.use(
   (r) => {
-    // Convert snake_case keys to camelCase so frontend types work
-    const data = snakeToCamel(r.data)
-    return { ...r, data }
+    // Convert snake_case keys to camelCase so frontend types work.
+    // 直接返回响应体数据（而非整个 axios response），与各调用方及单测 mock 的契约一致。
+    return snakeToCamel(r.data) as any
   },
   (error) => {
     const status = error.response?.status
@@ -58,10 +58,8 @@ client.interceptors.response.use(
         // ignore
       }
     }
-    if (status && status >= 500) {
-      console.warn(`API ${error.config?.url} returned ${status}`)
-      return null
-    }
+    // 统一错误处理：5xx 不再返回 null，而是 reject Error
+    // 调用方通过 try/catch 处理错误
     const msg = error.response?.data?.detail || error.message || '请求失败'
     return Promise.reject(new Error(msg))
   },

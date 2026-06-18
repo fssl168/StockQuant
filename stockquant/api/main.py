@@ -6,18 +6,19 @@ from __future__ import annotations
 import logging
 import os
 import time
+from pathlib import Path
+
+# 最早加载 .env 文件，使所有配置生效
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent.parent / ".env", override=True)
+except ImportError:
+    pass
 
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
-# Rate limiting (optional, graceful degradation)
-try:
-    from slowapi import Limiter, _rate_limit_exceeded_handler
-    from slowapi.util import get_remote_address
-    from slowapi.errors import RateLimitExceeded
-    USE_RATE_LIMIT = True
-except ImportError:
-    USE_RATE_LIMIT = False
+USE_RATE_LIMIT = False
 
 from stockquant.api.routers import backtest, strategy, dashboard, monitor, ai_chat, comparison, notification, data, settings, trading, portfolio, optimize
 from stockquant.api.routers import auth as auth_router
@@ -67,15 +68,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # 速率限制
-    if USE_RATE_LIMIT:
-        limiter = Limiter(key_func=get_remote_address, default_limits=["100 per minute"])
-        app.state.limiter = limiter
-        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-        logger.info("速率限制已启用: 默认 100 req/min")
-    else:
-        logger.info("速率限制未启用（slowapi 未安装）")
-
+    # 速率限制（已禁用，避免 Windows GBK 编码问题）
     # 注册路由
     app.include_router(backtest.router, prefix="/api", tags=["回测"])
     app.include_router(strategy.router, prefix="/api", tags=["策略"])

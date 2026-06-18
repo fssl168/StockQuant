@@ -38,7 +38,7 @@ describe('Data API', () => {
 
   // ---- cacheStats ----
   it('dataApi.cacheStats should call GET /data/cache', async () => {
-    const mockStats = { total_size_mb: 128.5, hit_rate: 0.85, last_update: '2024-01-01', symbol_count: 50 }
+    const mockStats = { sizeMb: 128.5, hitRate: 0.85, lastUpdate: '2024-01-01', symbolCount: 50 }
     vi.mocked(client.get).mockResolvedValueOnce(mockStats)
     const result = await dataApi.cacheStats()
     expect(client.get).toHaveBeenCalledWith('/data/cache')

@@ -54,11 +54,10 @@ describe('AI API', () => {
   })
 
   // ---- analyzeBacktest ----
-  // analyzeBacktest does: const { data } = await client.post(...)
-  // so mock must return { data: <payload> } for destructuring to work
+  // client 响应拦截器直接返回响应体，故 mock 直接返回 payload
   it('analyzeBacktest should call POST /ai/analyze-backtest/:id and return insight', async () => {
     const mockInsight = { insight: 'test insight' }
-    vi.mocked(client.post).mockResolvedValueOnce({ data: mockInsight })
+    vi.mocked(client.post).mockResolvedValueOnce(mockInsight)
     const result = await analyzeBacktest('bt-1')
     expect(client.post).toHaveBeenCalledWith('/ai/analyze-backtest/bt-1')
     expect(result).toEqual(mockInsight)

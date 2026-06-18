@@ -21,7 +21,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
 from stockquant.api.deps import get_current_user, get_trader_user
-from stockquant.api.routers.settings import _settings
+from stockquant.api.routers.settings import _settings, _decrypt_value
 from stockquant.engine.broker import PaperBroker, LiveBroker
 from stockquant.engine.commission import CommissionInfo
 from stockquant.models.account import Account
@@ -91,7 +91,7 @@ def _get_broker():
                 from stockquant.execution.brokers.xtp_broker import XTPBroker
                 return XTPBroker(
                     user=_settings.get("xtp.user", ""),
-                    password=_settings.get("xtp.password", ""),
+                    password=_decrypt_value(_settings.get("xtp.password", "")),
                     app_id=int(_settings.get("xtp.app_id", "0")),
                     client_id=int(_settings.get("xtp.client_id", "0")),
                     server_addr=_settings.get("xtp.server_addr", ""),
@@ -104,7 +104,7 @@ def _get_broker():
                 from stockquant.execution.brokers.ctp_broker import CTPBroker
                 return CTPBroker(
                     user=_settings.get("ctp.user", ""),
-                    password=_settings.get("ctp.password", ""),
+                    password=_decrypt_value(_settings.get("ctp.password", "")),
                     broker_id=_settings.get("ctp.broker_id", ""),
                     front_addr=_settings.get("ctp.front_addr", ""),
                     app_id=_settings.get("ctp.app_id", ""),

@@ -1,20 +1,26 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Input, Button, List, Avatar, Typography, Card, Segmented } from 'antd'
+import { Input, Button, List, Avatar, Typography, Card } from 'antd'
 import { PaperPlaneTilt, User, ChatCircleText, Wrench, CheckCircle } from '@phosphor-icons/react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/github-dark.css'
 import ReactECharts from 'echarts-for-react'
 import SignalCard from './SignalCard'
 
 const { Text, Paragraph } = Typography
 
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-})
+// 配置 marked v15 使用 highlight.js 高亮代码块
+const renderer = new marked.Renderer()
+renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
+  const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
+  const highlighted = hljs.highlight(text, { language }).value
+  return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`
+}
+marked.use({ renderer, breaks: true, gfm: true })
 
 function renderMarkdown(content: string): string {
-  return DOMPurify.sanitize(marked(content) as string)
+  return DOMPurify.sanitize(marked.parse(content) as string)
 }
 
 /** Parse ```chart-json ... ``` blocks from content and return mixed segments */
@@ -77,8 +83,7 @@ interface ChatPanelProps {
   streamingContent?: string
   isStreaming?: boolean
   onSend: (message: string) => void
-  mode?: 'general' | 'strategy' | 'analysis' | 'monitor' | 'decision' | 'indicator'  // default 'general'
-  onModeChange?: (mode: string) => void
+  mode?: 'general' | 'strategy' | 'analysis' | 'monitor' | 'decision' | 'indicator'
 }
 
 interface ChartRendererProps {
@@ -223,7 +228,7 @@ function InlineChartRenderer({ chartSpec }: { chartSpec: Record<string, unknown>
   )
 }
 
-export default function ChatPanel({ messages, streamingContent = '', isStreaming = false, onSend, mode = 'general', onModeChange }: ChatPanelProps) {
+export default function ChatPanel({ messages, streamingContent = '', isStreaming = false, onSend, mode = 'general' }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -319,23 +324,6 @@ export default function ChatPanel({ messages, streamingContent = '', isStreaming
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <Segmented
-        value={mode}
-        onChange={(v) => onModeChange?.(v as string)}
-        options={[
-          { label: '默认', value: 'general' },
-          { label: '策略开发', value: 'strategy' },
-          { label: '数据分析', value: 'analysis' },
-          { label: '盯盘', value: 'monitor' },
-          { label: '指标发现', value: 'indicator' },
-        ]}
-        size="small"
-        style={{ marginBottom: 12 }}
-      />
-      <Text type="secondary" style={{ marginBottom: 16, fontSize: 12 }}>
-        与 AI 量化助手对话，探索策略、分析数据、解读回测结果
-      </Text>
-
       <div style={{ flex: 1, overflowY: 'auto', paddingRight: 8 }}>
         {messages.length === 0 && !isStreaming && (
           mode === 'indicator' ? (
@@ -426,7 +414,7 @@ export default function ChatPanel({ messages, streamingContent = '', isStreaming
                           : (
                             <div
                               style={{ marginTop: 6, fontSize: 13, lineHeight: 1.7, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                              dangerouslySetInnerHTML={{ __html: msg.content }}
+                              dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
                             />
                           )
                         }
@@ -462,15 +450,25 @@ export default function ChatPanel({ messages, streamingContent = '', isStreaming
               </Avatar>}
               title={<Text strong style={{ fontSize: 12, color: 'var(--color-text-primary)' }}>AI 助手</Text>}
               description={
-                <div
-                  style={{ marginTop: 6, fontSize: 13, lineHeight: 1.7, color: 'var(--color-text-secondary)' }}
-                  dangerouslySetInnerHTML={{
-                    __html: streamingContent ? renderMarkdown(streamingContent) : '',
-                  }}
-                >
-                  {!streamingContent && <span style={{ color: 'var(--color-text-tertiary)' }}>思考中...</span>}
-                  <span className="typing-cursor" style={{ animation: 'blink 1s step-end infinite' }}>|</span>
-                </div>
+                streamingContent ? (
+                  <div
+                    style={{ marginTop: 6, fontSize: 13, lineHeight: 1.7, color: 'var(--color-text-secondary)' }}
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(streamingContent) }}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {[0, 1, 2].map(i => (
+                        <div key={i} style={{
+                          width: 6, height: 6, borderRadius: '50%',
+                          background: 'var(--color-brand-primary)',
+                          animation: `thinking-bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
+                        }} />
+                      ))}
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>正在思考...</span>
+                  </div>
+                )
               }
             />
           </List.Item>
@@ -499,7 +497,10 @@ export default function ChatPanel({ messages, streamingContent = '', isStreaming
       </div>
 
       <style>{`
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes thinking-bounce {
+          0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+          40% { transform: scale(1); opacity: 1; }
+        }
       `}</style>
     </div>
   )

@@ -47,6 +47,13 @@ export function useWebSocket(url: string | null, options?: UseWebSocketOptions):
           wsUrl = `${proto}//${window.location.host}${url}`
         }
       }
+      // 附加 JWT token 以通过后端 WS 端点的 token 校验（后端 ?token= 查询参数）
+      try {
+        const token = localStorage.getItem('auth_token')
+        if (token) {
+          wsUrl += (wsUrl.includes('?') ? '&' : '?') + `token=${encodeURIComponent(token)}`
+        }
+      } catch { /* ignore localStorage access errors */ }
       const ws = new WebSocket(wsUrl)
       wsRef.current = ws
 

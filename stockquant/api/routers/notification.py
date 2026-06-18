@@ -15,7 +15,7 @@ from sqlalchemy.orm import sessionmaker
 
 from stockquant.api.deps import get_current_user, get_required_user
 from stockquant.api.websocket import ws_manager
-from stockquant.api.routers.settings import _settings
+from stockquant.api.routers.settings import _settings, _decrypt_value
 from stockquant.persistence.models import Notification, init_db, get_engine
 
 logger = logging.getLogger("stockquant.api.notification")
@@ -151,7 +151,7 @@ def add_notification(data: dict) -> dict:
         if wechat_url:
             router.register_notifier("wechat", WeChatNotifier(webhook=wechat_url))
 
-        tg_token = _settings.get("notification.telegram_bot_token", "")
+        tg_token = _decrypt_value(_settings.get("notification.telegram_bot_token", ""))
         tg_chat = _settings.get("notification.telegram_chat_id", "")
         if tg_token and tg_chat:
             router.register_notifier("telegram", TelegramNotifier(bot_token=tg_token, chat_id=tg_chat))
@@ -164,7 +164,7 @@ def add_notification(data: dict) -> dict:
         if discord_url:
             router.register_notifier("discord", DiscordNotifier(webhook_url=discord_url))
 
-        pushplus_token = _settings.get("notification.pushplus_token", "")
+        pushplus_token = _decrypt_value(_settings.get("notification.pushplus_token", ""))
         if pushplus_token:
             router.register_notifier("pushplus", PushPlusNotifier(token=pushplus_token))
 
@@ -183,7 +183,7 @@ def add_notification(data: dict) -> dict:
                 smtp_server=email_smtp,
                 smtp_port=int(_settings.get("notification.email_smtp_port", "465")),
                 username=_settings.get("notification.email_user", ""),
-                password=_settings.get("notification.email_password", ""),
+                password=_decrypt_value(_settings.get("notification.email_password", "")),
                 from_addr=_settings.get("notification.email_from", ""),
                 to_addrs=_settings.get("notification.email_to", "").split(",") if _settings.get("notification.email_to") else [],
             ))

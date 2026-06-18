@@ -5,6 +5,22 @@ export const aiApi = {
     client.post('/chat', { conversation_id: conversationId, message }) as Promise<{ reply: string }>,
   conversations: () => client.get('/chat/conversations') as Promise<string[]>,
   clear: (id: string) => client.delete(`/chat/${id}`) as Promise<void>,
+  getConversations: () =>
+    client.get('/ai/conversations') as Promise<{
+      conversations: { id: string; title: string; created_at: string; message_count: number }[]
+    }>,
+  getConversation: (id: string) =>
+    client.get(`/ai/conversation/${id}`) as Promise<{
+      conversation_id: string
+      messages: { role: string; content: string; timestamp: string }[]
+    }>,
+  saveMessage: (conversationId: string, role: string, content: string) =>
+    client.post(`/ai/conversation/${conversationId}/message`, { role, content }) as Promise<{
+      saved: boolean
+      id: number | null
+    }>,
+  deleteConversation: (id: string) =>
+    client.delete(`/ai/conversation/${id}`) as Promise<{ cleared: boolean }>,
 }
 
 export async function* streamChat(
@@ -46,6 +62,5 @@ export async function* streamChat(
 }
 
 export async function analyzeBacktest(backtestId: string): Promise<{ insight: string }> {
-  const { data } = await client.post(`/ai/analyze-backtest/${backtestId}`)
-  return data as { insight: string }
+  return await client.post(`/ai/analyze-backtest/${backtestId}`) as { insight: string }
 }

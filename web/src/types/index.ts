@@ -161,10 +161,10 @@ export interface DataSourceConfig {
 }
 
 export interface CacheStats {
-  total_size_mb: number
-  hit_rate: number
-  last_update: string
-  symbol_count: number
+  sizeMb: number
+  hitRate: number
+  lastUpdate: string
+  symbolCount: number
 }
 
 // ====== Trading Types ======

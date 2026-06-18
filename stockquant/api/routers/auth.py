@@ -90,7 +90,12 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     if user.get("disabled"):
         raise HTTPException(status_code=400, detail="账户已禁用")
 
-    access_token = create_access_token(data={"sub": user["username"], "roles": user.get("roles", [])})
+    access_token = create_access_token(data={
+        "sub": user["username"],
+        "roles": user.get("roles", []),
+        # role 字段须与 deps.UserRole 枚举值（大写）对齐，get_admin_user 据此鉴权
+        "role": (user.get("roles", ["viewer"])[0] or "viewer").upper(),
+    })
     return {
         "access_token": access_token,
         "token_type": "bearer",

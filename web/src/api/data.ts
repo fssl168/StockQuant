@@ -11,7 +11,9 @@ export const dataApi = {
   clearCache: () =>
     client.delete('/data/cache') as Promise<{ success: boolean }>,
   fetchKline: (symbol: string, source: string, start: string, end: string) =>
-    client.get(`/data/kline?symbol=${symbol}&source=${source}&start=${start}&end=${end}`) as Promise<any[]>,
+    client.get(`/data/kline?symbol=${symbol}&source=${source}&start=${start}&end=${end}`) as Promise<{
+      symbol: string; start: string; end: string; data: any[]; error?: string;
+    }>,
   collect: (data: { symbol: string; source: string; start: string; end: string }) =>
     client.post('/data/collect', data) as Promise<{ success: boolean }>,
   health: () =>

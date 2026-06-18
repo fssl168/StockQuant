@@ -56,14 +56,14 @@ def _save_settings_to_file():
 
 _SENSITIVE_KEYS = {
     "ai.api_key", "ai.api_base",
+    "ai.anthropic_api_key", "ai.anthropic_api_base",
     "evolution.api_key", "evolution.api_base",
-    "data_provider.api_key",
+    "data_provider.api_key", "data_provider.alphafeed_key",
     "trading.qmt_password", "trading.xtp_password", "trading.ctp_password",
     "trading.admin_token",
-    "notifications.smtp_password",
-    "openai_api_key", "anthropic_api_key",
-    "redis_password",
-    "jwt_secret_key",
+    "notification.smtp_password", "notification.email_password",
+    "redis.password",
+    "jwt.secret_key",
 }
 
 # 加密模块：try/except 兼容未安装 cryptography 的情况
@@ -151,7 +151,7 @@ _ENV_VAR_MAP: Dict[str, str] = {
     "data_provider.source": "DATA_PROVIDER_SOURCE",
     "data_provider.api_key": "DATA_PROVIDER_API_KEY",
     "data_provider.api_url": "DATA_PROVIDER_API_URL",
-    "data_provider.alphafeed_key": "ALPHAFEED_KEY",
+    "data_provider.alphafeed_key": "ALPHAFEED_TOKEN",
     "data_provider.tushare_token": "TUSHARE_TOKEN",
     "data_provider.akshare_proxy": "AKSHARE_PROXY",
     "data_provider.jqdata_mobile": "JQDATA_MOBILE",
@@ -615,7 +615,7 @@ _track_sources()
 
 def _safe_value(key: str, value: Any) -> Any:
     """安全取值：对敏感 key 做掩码处理"""
-    if key in _SENSITIVE_KEYS and isinstance(value, str) and len(value) > 8:
+    if key in _SENSITIVE_KEYS and isinstance(value, str) and value:
         return _mask_value(value)
     return value
 

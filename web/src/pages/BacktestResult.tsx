@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Row, Col, Card, Button, Typography, Tag, Alert, Skeleton, Dropdown } from 'antd'
+import { Row, Col, Card, Button, Typography, Tag, Alert, Skeleton, Dropdown, message } from 'antd'
 import { ArrowCounterClockwise, DownloadSimple, FileHtml, FilePdf, FileText } from '@phosphor-icons/react'
 import { backtestApi } from '@/api/dashboard'
 import { analyzeBacktest } from '@/api/ai'
@@ -36,7 +36,7 @@ export default function BacktestResult() {
   useEffect(() => {
     if (!id) return
     backtestApi.get(id)
-      .then(setTask)
+      .then((task: any) => setTask(task))
       .catch(() => setTask(null))
       .finally(() => setLoading(false))
   }, [id])
@@ -78,8 +78,9 @@ export default function BacktestResult() {
       a.download = `backtest-report-${id}.${ext}`
       a.click()
       URL.revokeObjectURL(url)
-    } catch {
-      // silently fail
+      message.success(`报表已导出为 ${ext.toUpperCase()}`)
+    } catch (e: any) {
+      message.error(`导出失败: ${e?.message || '未知错误'}`)
     }
   }
 

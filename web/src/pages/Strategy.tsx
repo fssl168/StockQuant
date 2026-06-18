@@ -198,7 +198,10 @@ export default function Strategy() {
       setCurrentStrategyId(null)
       setPreviewCode(null)
       setSizerConfig({ ...DEFAULT_SIZER_CONFIG })
-    } catch { /* ignore */ }
+    } catch (e: any) {
+      console.warn('[Strategy] 保存策略失败:', e?.message)
+      message.error('保存策略失败')
+    }
   }
 
   const handleTemplate = (code: string) => {
@@ -222,7 +225,7 @@ export default function Strategy() {
         message.error(body.message || body.error || 'AI 未返回有效策略代码，请尝试更详细的描述')
       }
     } catch (err: any) {
-      const errMsg = err?.response?.data?.detail || err?.message || 'AI 策略生成失败，请检查 LLM 配置后重试'
+      const errMsg = err?.message || 'AI 策略生成失败，请检查 LLM 配置后重试'
       message.error(errMsg)
     } finally {
       setAiGenerating(false)

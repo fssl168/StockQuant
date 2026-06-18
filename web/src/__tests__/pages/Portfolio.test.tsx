@@ -12,7 +12,16 @@ vi.mock('echarts-for-react', () => ({
 
 vi.mock('@/api/client', () => ({
   default: {
-    get: vi.fn(() => Promise.resolve(null)),
+    get: vi.fn((url: string) => {
+      // 持仓数据由 API 提供（已移除硬编码 mock），测试按路径返回样例持仓
+      if (url === '/portfolio/positions') {
+        return Promise.resolve([
+          { symbol: 'sh600519', name: '贵州茅台', shares: 100, cost: 1700, price: 1750, pnl: 5000, pnlPct: 2.94, sector: '白酒' },
+          { symbol: 'sz000858', name: '五粮液', shares: 200, cost: 160, price: 155, pnl: -1000, pnlPct: -3.12, sector: '白酒' },
+        ])
+      }
+      return Promise.resolve(null)
+    }),
   },
 }))
 
