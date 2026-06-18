@@ -183,7 +183,14 @@ def create_app() -> FastAPI:
                             except Exception:
                                 pass
                         if quotes:
-                            await websocket.send_json({"type": "quote", "data": quotes})
+                            # 转换为对象格式 {symbol: {price, change}} 供前端使用
+                            quotes_dict = {}
+                            for q in quotes:
+                                quotes_dict[q["symbol"]] = {
+                                    "price": q["price"],
+                                    "change": q["change_pct"],
+                                }
+                            await websocket.send_json({"type": "quote", "data": quotes_dict})
                     except Exception:
                         break
 
