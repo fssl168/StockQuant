@@ -241,20 +241,11 @@ _HAS_PGVECTOR = False
 _VectorClass: Any = Text  # 默认使用 Text 类型
 
 try:
-    import pgvector
-    # 动态获取 Vector 类
-    Vector = getattr(pgvector, 'Vector', None)
-    if Vector is None:
-        try:
-            from pgvector.sqlalchemy import Vector as SqlAlchemyVector
-            Vector = SqlAlchemyVector
-        except (ImportError, AttributeError):
-            pass
-    if Vector is not None:
-        _VectorClass = Vector(1536)
-        _HAS_PGVECTOR = True
-    else:
-        logger.info("pgvector 包已安装但未找到 Vector 类，L3 向量列将使用 Text 类型降级")
+    # pgvector 0.4+ 使用方式
+    from pgvector.sqlalchemy import Vector
+    _VectorClass = Vector
+    _HAS_PGVECTOR = True
+    logger.info("pgvector 已启用，向量存储功能可用")
 except ImportError:
     logger.info("pgvector Python 包未安装，L3 向量列将使用 Text 类型降级")
 
