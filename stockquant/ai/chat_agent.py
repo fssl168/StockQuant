@@ -395,12 +395,12 @@ class ChatAgent:
             )
             reply = response.content or ""
             conv.add_message("assistant", reply)
-            yield f"data: {json.dumps({'type': 'message', 'content': reply}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
+            for char in reply:
+                yield char
         except Exception as exc:
             error_msg = f"AI 调用失败: {exc}"
-            yield f"data: {json.dumps({'type': 'error', 'message': error_msg}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
+            for char in error_msg:
+                yield char
 
     def get_conversation(self, conversation_id: str, limit: int = 50) -> List[Dict]:
         """获取会话消息历史"""

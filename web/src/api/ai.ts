@@ -41,24 +41,12 @@ export async function* streamChat(
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
-  let buffer = ''
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? ''
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6)
-        if (data === '[DONE]') return
-        yield data
-      } else if (line.trim() && !line.startsWith(':')) {
-        yield line
-      }
-    }
+    const chunk = decoder.decode(value, { stream: true })
+    yield chunk
   }
-  if (buffer.trim()) yield buffer
 }
 
 export async function analyzeBacktest(backtestId: string): Promise<{ insight: string }> {

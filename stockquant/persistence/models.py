@@ -237,11 +237,25 @@ class HallucinationRecord(Base):
 # pgvector 扩展在 PostgreSQL 端通过 CREATE EXTENSION 启用
 # 此处使用 RAW 类型映射，避免硬依赖 pgvector Python 包
 
+_HAS_PGVECTOR = False
+_VectorClass: Any = Text  # 默认使用 Text 类型
+
 try:
-    from pgvector.sqlalchemy import Vector
-    _HAS_PGVECTOR = True
+    import pgvector
+    # 动态获取 Vector 类
+    Vector = getattr(pgvector, 'Vector', None)
+    if Vector is None:
+        try:
+            from pgvector.sqlalchemy import Vector as SqlAlchemyVector
+            Vector = SqlAlchemyVector
+        except (ImportError, AttributeError):
+            pass
+    if Vector is not None:
+        _VectorClass = Vector(1536)
+        _HAS_PGVECTOR = True
+    else:
+        logger.info("pgvector 包已安装但未找到 Vector 类，L3 向量列将使用 Text 类型降级")
 except ImportError:
-    _HAS_PGVECTOR = False
     logger.info("pgvector Python 包未安装，L3 向量列将使用 Text 类型降级")
 
 
@@ -276,10 +290,7 @@ class L3Memory(Base):
     timestamp: Mapped[str] = mapped_column(String(30), nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
     # 向量列: pgvector 安装时使用 Vector(1536)，否则降级为 Text
-    embedding = Column(
-        Vector(1536) if _HAS_PGVECTOR else Text,
-        nullable=True,
-    )
+    embedding = Column(_VectorClass, nullable=True)
 
     __table_args__ = (
         Index("ix_l3_confidence", "confidence"),

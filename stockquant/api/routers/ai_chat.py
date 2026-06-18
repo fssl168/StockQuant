@@ -138,9 +138,9 @@ async def sentiment_analysis(symbol: str = Query("sh600519", description="股票
         }
 
 
-@router.post("/chat")
+@router.post("/chat/complete")
 def chat(payload: dict = Body(...)) -> Dict[str, Any]:
-    """发送消息获取 AI 回复。"""
+    """发送消息获取 AI 回复（非流式）。"""
     message = payload.get("message", "")
     conversation_id = payload.get("conversation_id", "default")
     mode = payload.get("mode", "general")
@@ -171,7 +171,7 @@ def chat(payload: dict = Body(...)) -> Dict[str, Any]:
     }
 
 
-@router.post("/chat/stream")
+@router.post("/chat")
 def chat_stream(payload: dict = Body(...)) -> StreamingResponse:
     """流式对话（SSE 兼容）。"""
     message = payload.get("message", "")
