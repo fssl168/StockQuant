@@ -3,10 +3,14 @@
 
 from __future__ import annotations
 
+import logging
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from stockquant.models.account import Account
 from stockquant.models.position import Position
+
+logger = logging.getLogger(__name__)
 
 
 class Portfolio:
@@ -20,6 +24,8 @@ class Portfolio:
         self,
         initial_cash: float = 1_000_000,
         leverage: float = 1.0,
+        margin_rate: float = 0.0,
+        margin_call_threshold: float = 0.3,
     ):
         self._account = Account(
             account_id="default",
@@ -33,6 +39,13 @@ class Portfolio:
         # 权益曲线
         self._equity_curve: List[float] = []
         self._peak_equity: float = initial_cash
+
+        # 保证金相关
+        self._margin_rate = margin_rate
+        self._margin_call_threshold = margin_call_threshold
+        self._borrowed_amount: float = 0.0
+        self._margin_called: bool = False
+        self._last_margin_interest_time: datetime = datetime.now()
 
     @property
     def account(self) -> Account:
@@ -62,6 +75,66 @@ class Portfolio:
     def leverage(self) -> float:
         return self._leverage
 
+    @property
+    def borrowed_amount(self) -> float:
+        """当前融券（借入）金额"""
+        return self._borrowed_amount
+
+    @property
+    def is_margin_called(self) -> bool:
+        """是否已触发警戒线"""
+        return self._margin_called
+
+    @property
+    def margin_rate(self) -> float:
+        return self._margin_rate
+
+    @property
+    def margin_call_threshold(self) -> float:
+        return self._margin_call_threshold
+
+    def calc_margin_interest(self, equity: Optional[float] = None, days: int = 1) -> float:
+        """
+        计算并扣除保证金利息。
+
+        日利息 = 融券金额 * margin_rate / 252
+        利息从 cash 中扣除。
+        """
+        if self._margin_rate <= 0 or self._borrowed_amount <= 0:
+            return 0.0
+        interest = self._borrowed_amount * self._margin_rate / 252 * days
+        self._account.cash -= interest
+        self._account.available_cash -= interest
+        self._account.update_equity(sum(p.market_value for p in self._positions.values()))
+        self._last_margin_interest_time = datetime.now()
+        return interest
+
+    def check_margin_call(self) -> bool:
+        """
+        检查是否触发警戒线。
+
+        当 equity / initial_cash < (1 - margin_call_threshold) 时触发。
+        """
+        if self._account.initial_cash <= 0:
+            return False
+        ratio = self._account.total_equity / self._account.initial_cash
+        if ratio < (1 - self._margin_call_threshold):
+            self._margin_called = True
+            logger.warning(
+                "Margin call triggered: equity=%.2f / initial_cash=%.2f = %.4f < %.4f",
+                self._account.total_equity,
+                self._account.initial_cash,
+                ratio,
+                1 - self._margin_call_threshold,
+            )
+            return True
+        return False
+
+    def _update_borrowed(self):
+        """更新融券金额 = max(0, 持仓市值 - cash)"""
+        market_value = sum(p.market_value for p in self._positions.values())
+        self._borrowed_amount = max(0.0, market_value - self._account.cash)
+
     def update_price(self, symbol: str, price: float):
         """更新某标的当前价格"""
         if symbol in self._positions:
@@ -73,6 +146,8 @@ class Portfolio:
         if symbol not in self._positions:
             self._positions[symbol] = Position(symbol=symbol)
         self._positions[symbol].add_fill(quantity, price, is_today)
+        # 保证金: 如果买入后持仓市值 > 现金, 差额为融券金额
+        self._update_borrowed()
         self._recompute()
 
     def remove_position(self, symbol: str, quantity: float, price: float):
@@ -97,6 +172,8 @@ class Portfolio:
 
     def _recompute(self):
         """重新计算权益"""
+        # 先计算保证金利息（距上次计算的日数）
+        self.calc_margin_interest()
         market_value = sum(p.market_value for p in self._positions.values())
         self._account.update_equity(market_value)
         # 追踪峰值

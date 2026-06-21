@@ -12,11 +12,13 @@ import os
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, List, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 
 from stockquant.api.routers.settings import _settings, _decrypt_value
+from stockquant.api.schemas import UpdateDataRequest, CollectDataRequest
+from stockquant.persistence.persistent_store import CollectTaskStore
 
 logger = logging.getLogger("stockquant.api.data")
 
@@ -30,6 +32,15 @@ _sources: list[dict] = [
     {"provider": "csv", "name": "CSV 文件", "enabled": False, "priority": 4, "api_key": "", "api_url": ""},
 ]
 
+# ── AI 信息采集器数据源 ──────────────────────────────────────────────
+_collector_sources: list[dict] = [
+    {"provider": "eastmoney", "name": "东方财富快讯", "enabled": True, "category": "新闻", "description": "7x24 实时财经快讯"},
+    {"provider": "xueqiu", "name": "雪球热帖", "enabled": True, "category": "社交媒体", "description": "雪球社区热门讨论"},
+    {"provider": "cls", "name": "财联社电报", "enabled": True, "category": "新闻", "description": "财联社实时电报推送"},
+    {"provider": "akshare_news", "name": "AkShare 新闻", "enabled": True, "category": "新闻", "description": "AkShare 个股新闻接口"},
+    {"provider": "alphafeed_news", "name": "AlphaFeed 资讯", "enabled": True, "category": "新闻", "description": "AlphaFeed 专业资讯（需 API Key）"},
+]
+
 # 数据源健康状态
 _source_health: dict = {
     "alphafeed": {"healthy": True, "last_check": "", "error": ""},
@@ -39,10 +50,10 @@ _source_health: dict = {
 }
 
 # 采集任务
-_collect_tasks: dict = {}
+_collect_tasks: CollectTaskStore = {}  # type: ignore[assignment]
 
 
-def set_storage(storage: dict):
+def set_storage(storage: CollectTaskStore):
     global _collect_tasks
     _collect_tasks = storage
 
@@ -64,7 +75,7 @@ def _get_cache_dir() -> Path:
     return p
 
 
-def _calculate_cache_stats() -> dict:
+def _calculate_cache_stats() -> Dict[str, Any]:
     """计算真实缓存统计"""
     cache_dir = _get_cache_dir()
     total_size = 0
@@ -91,7 +102,7 @@ def _calculate_cache_stats() -> dict:
     }
 
 
-def _fetch_kline_baostock(symbol: str, start: str, end: str, timeframe: str = "1d") -> list[dict]:
+def _fetch_kline_baostock(symbol: str, start: str, end: str, timeframe: str = "1d") -> List[Dict[str, Any]]:
     """使用 BaoStock 获取 K 线数据（最终降级方案）"""
     import baostock as bs
 
@@ -165,7 +176,7 @@ def _fetch_kline_baostock(symbol: str, start: str, end: str, timeframe: str = "1
             pass
 
 
-def _fetch_kline_sync(symbol: str, start: str, end: str, timeframe: str = "1d") -> list[dict]:
+def _fetch_kline_sync(symbol: str, start: str, end: str, timeframe: str = "1d") -> List[Dict[str, Any]]:
     """同步获取 K 线数据 — AlphaFeed 优先，AkShare 降级，BaoStock 兜底"""
     # 优先尝试 AlphaFeed/AkShare
     from stockquant.data.providers.alphafeed_feed import AlphaFeedFeed
@@ -225,14 +236,34 @@ async def get_sources():
 
 
 @router.post("/data/sources", summary="更新数据源配置")
-async def update_source(payload: dict):
+async def update_source(payload: UpdateDataRequest) -> Dict[str, Any]:
     """更新数据源配置"""
-    provider = payload.get("provider")
+    provider = payload.provider
     for i, s in enumerate(_sources):
         if s["provider"] == provider:
             _sources[i].update(payload)
             return {"success": True, "provider": provider}
     raise HTTPException(status_code=404, detail=f"数据源 {provider} 不存在")
+
+
+@router.put("/data/sources/{provider}", summary="编辑单个数据源配置")
+async def update_source_by_provider(provider: str, payload: UpdateDataRequest) -> Dict[str, Any]:
+    """编辑单个数据源配置"""
+    for i, s in enumerate(_sources):
+        if s["provider"] == provider:
+            _sources[i].update(payload)
+            return {"success": True, "provider": provider}
+    raise HTTPException(status_code=404, detail=f"数据源 {provider} 不存在")
+
+
+@router.delete("/data/sources/{provider}", summary="删除数据源")
+async def delete_source(provider: str):
+    """删除单个数据源配置"""
+    original_len = len(_sources)
+    _sources[:] = [s for s in _sources if s["provider"] != provider]
+    if len(_sources) == original_len:
+        raise HTTPException(status_code=404, detail=f"数据源 {provider} 不存在")
+    return {"success": True, "provider": provider}
 
 
 @router.get("/data/cache", summary="缓存统计")
@@ -287,12 +318,12 @@ async def get_kline(
 
 
 @router.post("/data/collect", summary="手动触发数据采集")
-async def collect_data(payload: dict):
+async def collect_data(payload: CollectDataRequest) -> Dict[str, Any]:
     """手动触发数据采集/下载"""
-    symbol = payload.get("symbol", "")
-    source = payload.get("source", "alphafeed")
-    start = payload.get("start", "")
-    end = payload.get("end", "")
+    symbol = payload.symbol
+    source = payload.source
+    start = payload.start
+    end = payload.end
 
     if not symbol:
         raise HTTPException(status_code=400, detail="股票代码不能为空")
@@ -449,3 +480,69 @@ async def download_data(provider: str = Query(..., description="数据源名称"
         "status": "collecting",
         "message": f"已启动 {provider} 数据下载任务，共 {len(default_symbols)} 只股票",
     }
+
+
+@router.post("/data/upload-csv", summary="上传 CSV 数据文件")
+async def upload_csv(file: UploadFile = File(..., description="CSV 文件")):
+    """上传 CSV 数据文件，存入本地缓存目录供回测使用。
+
+    CSV 格式要求：
+    - 必须包含列: date, open, high, low, close, volume
+    - 可选列: symbol（无 symbol 列时需在回测配置中指定标的代码）
+    - 日期格式: YYYY-MM-DD
+    """
+    import pandas as pd
+
+    if not file.filename or not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="仅支持 .csv 文件")
+
+    try:
+        content = await file.read()
+        df = pd.read_csv(pd.io.common.BytesIO(content))
+
+        # 验证必需列
+        required = {"date", "open", "high", "low", "close", "volume"}
+        missing = required - set(df.columns.str.lower())
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"CSV 缺少必需列: {', '.join(sorted(missing))}。"
+                       f"当前列: {', '.join(df.columns.tolist())}",
+            )
+
+        # 标准化列名
+        df.columns = df.columns.str.lower()
+
+        # 保存到本地缓存
+        cache_dir = Path(_settings.get("data.cache_dir", "data/cache"))
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # 提取 symbol 信息
+        symbols = []
+        if "symbol" in df.columns:
+            symbols = df["symbol"].unique().tolist()
+            # 按 symbol 分拆保存
+            for sym in symbols:
+                sym_df = df[df["symbol"] == sym].sort_values("date")
+                out_path = cache_dir / f"{sym}_{file.filename}"
+                sym_df.to_csv(out_path, index=False)
+                logger.info("CSV 上传: %s → %s (%d rows)", sym, out_path, len(sym_df))
+        else:
+            # 单标的文件
+            out_path = cache_dir / file.filename
+            df.sort_values("date").to_csv(out_path, index=False)
+            logger.info("CSV 上传: %s (%d rows)", out_path, len(df))
+
+        return {
+            "success": True,
+            "filename": file.filename,
+            "rows": len(df),
+            "symbols": symbols,
+            "columns": df.columns.tolist(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("CSV 上传失败: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"CSV 解析失败: {e}")

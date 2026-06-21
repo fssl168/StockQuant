@@ -307,10 +307,15 @@ class Cerebro:
         # 5. 生成结果
         results = []
         for strategy in self._strategies:
+            # 从 broker 获取成交记录（如果可用）
+            trades = self._trades.copy() if self._trades else []
+            if self._broker and hasattr(self._broker, 'trade_log'):
+                trades = self._broker.trade_log
+            
             results.append({
                 "name": strategy.name,
                 "metrics": self._calculate_metrics(strategy),
-                "trades": self._trades,
+                "trades": trades,
                 "equity_curve": self._equity_curve,
             })
 
@@ -381,7 +386,7 @@ class Cerebro:
                         combo[k] = v
                 param_combos.append(combo)
         elif optimizer == "walkforward":
-            param_combos = []  # placeholder — walkforward generates its own combos
+            param_combos = []  # walkforward generates its own combos via _run_walkforward()
         else:
             raise ValueError(f"Unknown optimizer: {optimizer}. Use 'grid', 'random', or 'walkforward'.")
 
@@ -644,9 +649,21 @@ class Cerebro:
         return None
 
     def _clone_feed(self, feed: "DataFeed") -> "DataFeed":
-        """克隆数据源（简化版：直接返回原引用，优化时共享只读数据）"""
-        # 注：对于纯只读数据源，共享引用是安全的
-        return feed
+        """
+        克隆数据源用于并行优化。
+
+        对于只读 DataFeed，共享引用是安全的（数据不可变）。
+        但若 feed 有状态（如内部缓存），则创建浅拷贝隔离状态。
+        """
+        import copy
+        try:
+            # 优先尝试 deepcopy
+            cloned = copy.deepcopy(feed)
+            return cloned
+        except Exception:
+            # deepcopy 失败（某些对象不可序列化），返回原引用
+            # 对于只读数据源，共享引用是安全的
+            return feed
 
     # ------------------------------------------------------------------
     # 持仓管理
@@ -673,9 +690,13 @@ class Cerebro:
     def _calculate_metrics(self, strategy: BaseStrategy) -> dict:
         """计算回测指标（F005）"""
         from stockquant.engine.metrics import BacktestMetrics
+        # 使用 broker 的实际成交记录
+        trades = self._trades.copy() if self._trades else []
+        if self._broker and hasattr(self._broker, 'trade_log'):
+            trades = self._broker.trade_log
         return BacktestMetrics.calculate(
             equity_curve=self._equity_curve,
-            trades=self._trades,
+            trades=trades,
             initial_cash=self._cash,
         )
 

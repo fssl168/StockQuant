@@ -29,15 +29,21 @@ except ImportError:
 class QMTBroker(Broker):
     """QMT 券商 Broker — 通过 xtquant SDK 连接 QMT 客户端"""
 
-    def __init__(self, qmt_path: str = "", account_id: str = ""):
+    api = "qmt"
+
+    def __init__(self, qmt_path: str = "", account_id: str = "", _mock_xt_trader: Any = None):
         self._qmt_path = qmt_path
         self._account_id = account_id
-        self._xt_trader = None
+        self._xt_trader = _mock_xt_trader  # 测试用 mock SDK
         self._connected = False
         self._order_log: List[OrderAuditLog] = []
         self._open_orders: Dict[str, Order] = {}
 
-        if QMT_AVAILABLE and qmt_path:
+        if self._xt_trader is not None:
+            # Mock SDK 模式
+            self._connected = True
+            logger.info("QMT Broker 使用 Mock SDK，连接成功")
+        elif QMT_AVAILABLE and qmt_path:
             self._connect()
 
     def _connect(self):
@@ -79,18 +85,31 @@ class QMTBroker(Broker):
             return trade
 
         try:
-            # 真实 QMT 下单
-            side = xtconstant.STOCK_BUY if order.side == OrderSide.BUY else xtconstant.STOCK_SELL
-            order_type = xtconstant.FIX_PRICE if order.order_type == OrderType.LIMIT else xtconstant.MARKET_BEST5_TO_CANCEL
-
-            xt_order_id = self._xt_trader.order_stock(
-                account=self._account_id,
-                stock_code=order.symbol,
-                order_type=order_type,
-                order_volume=int(order.quantity),
-                price_type=side,
-                price=float(order.price),
-            )
+            if self._xt_trader is not None:
+                # Mock SDK 或真实 SDK，统一调用 order_stock
+                # 传入简单整数参数，避免依赖 xtconstant（SDK 未安装时不可用）
+                side_val = 1 if order.side == OrderSide.BUY else 2
+                price_type_val = 1 if order.order_type == OrderType.LIMIT else 2
+                xt_order_id = self._xt_trader.order_stock(
+                    account=self._account_id,
+                    stock_code=order.symbol,
+                    order_type=price_type_val,
+                    order_volume=int(order.quantity),
+                    price_type=side_val,
+                    price=float(order.price),
+                )
+            else:
+                # 真实 QMT 下单
+                side = xtconstant.STOCK_BUY if order.side == OrderSide.BUY else xtconstant.STOCK_SELL
+                order_type = xtconstant.FIX_PRICE if order.order_type == OrderType.LIMIT else xtconstant.MARKET_BEST5_TO_CANCEL
+                xt_order_id = self._xt_trader.order_stock(
+                    account=self._account_id,
+                    stock_code=order.symbol,
+                    order_type=order_type,
+                    order_volume=int(order.quantity),
+                    price_type=side,
+                    price=float(order.price),
+                )
 
             order.update_status(OrderStatus.SUBMITTED)
             self._open_orders[order.order_id] = order

@@ -48,7 +48,8 @@ class SocialCollector(BaseCollector):
     async def _collect_alphafeed(self, symbol: str, limit: int) -> List[RawInfoItem]:
         """从 AlphaFeed 采集社交情绪数据"""
         try:
-            # AlphaFeed 暂无独立社交情绪 API，未来版本可扩展
+            # AlphaFeed 暂无独立 API，保留接口供未来扩展。
+            # Returns: [] — AlphaFeed SDK 尚未集成
             return []
         except Exception as exc:
             logger.warning("AlphaFeed 社交情绪采集失败: %s", exc)

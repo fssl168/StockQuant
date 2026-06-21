@@ -28,7 +28,7 @@ export default function Dashboard() {
     const fmtDate = (d: Date) => d.toISOString().slice(0, 10)
     Promise.all([
       // 聚合指标（总权益、今日盈亏、持仓数）
-      client.get('/dashboard/metrics')
+      client.get('/api/dashboard/metrics')
         .then((r: any) => { if (r) { setMetrics(r); setAggMetrics(r) } })
         .catch((e: any) => console.warn('[Dashboard] 获取聚合指标失败:', e?.message)),
       dashboardApi.signals()
@@ -37,10 +37,10 @@ export default function Dashboard() {
       dashboardApi.recentBacktests()
         .then((r: any) => { if (r) setTasks(Array.isArray(r) ? r : (r?.tasks ?? r?.data ?? [])) })
         .catch((e: any) => { console.warn('[Dashboard] 获取回测历史失败:', e?.message); setTasks([]) }),
-      client.get('/portfolio/equity-curve')
+      client.get('/api/portfolio/equity-curve')
         .then((r: any) => { if (r) setEquityCurve(r) })
         .catch((e: any) => console.warn('[Dashboard] 获取权益曲线失败:', e?.message)),
-      client.get(`/data/kline?symbol=sh000300&start=${fmtDate(startDate)}&end=${fmtDate(today)}&timeframe=1d`)
+      client.get(`/api/data/kline?symbol=sh000300&start=${fmtDate(startDate)}&end=${fmtDate(today)}&timeframe=1d`)
         .then((r: any) => {
           const rows = Array.isArray(r) ? r : (r?.data ?? r)
           if (Array.isArray(rows)) {
@@ -139,7 +139,7 @@ export default function Dashboard() {
   const backtestColumns = [
     {
       title: '策略',
-      dataIndex: 'strategy_name',
+      dataIndex: 'strategyName',
       key: 'name',
       width: 200,
       render: (s: string) => <Text strong>{s}</Text>,
@@ -185,7 +185,7 @@ export default function Dashboard() {
     },
     {
       title: '创建时间',
-      dataIndex: 'created_at',
+      dataIndex: 'createdAt',
       key: 'time',
       width: 160,
       render: (d: string) => new Date(d).toLocaleString('zh-CN', { hour12: false }),

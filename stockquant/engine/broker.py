@@ -67,6 +67,10 @@ class BacktestBroker(Broker):
     - 限价单：价格优先、时间优先
       - Buy Limit：实际价格 ≤ 限价 → 按限价成交
       - Sell Limit：实际价格 ≥ 限价 → 按限价成交
+    - STOP（止损单）：当 bar 的 high/low 触及止损价时触发，
+      触发后按 bar.close（+滑点）作为市价执行
+    - STOP_LIMIT（止损限价单）：止损价触发后，
+      按限价条件撮合（Buy: close ≤ limit；Sell: close ≥ limit）
     - 涨跌停板限制
     - 100 股整数倍
 
@@ -85,6 +89,120 @@ class BacktestBroker(Broker):
         self._slippage = slippage
         self._limit_up_ratio = limit_up_ratio
         self._limit_down_ratio = limit_down_ratio
+        self._order_book: Dict[str, List[Order]] = {}  # 未成交订单
+        self._trade_log: List[TradeData] = []
+        self._portfolio: Optional[Any] = None  # 绑定的 Portfolio 实例
+        self._next_order_seq: int = 0  # 订单自增序列号
+
+    # ------------------------------------------------------------------
+    # 内部工具
+    # ------------------------------------------------------------------
+
+    def _alloc_order_id(self, symbol: str) -> str:
+        """分配一个确定性订单 ID"""
+        self._next_order_seq += 1
+        return f"{symbol}_seq{self._next_order_seq}"
+
+    def _compute_exec_price(self, bar: BarData, side: str) -> float:
+        """在 bar.close 基础上应用滑点"""
+        exec_price = bar.close
+        if self._slippage:
+            exec_price = self._slippage.apply(bar.close, side)
+        return exec_price
+
+    def _try_fill(self, order: Order, exec_price: float, bar: BarData) -> Optional[TradeData]:
+        """执行一笔成交，返回 TradeData；失败返回 None"""
+        order.update_status(OrderStatus.FILLED)
+        order.add_fill(order.quantity, exec_price)
+
+        trade = TradeData(
+            trade_id=f"{order.order_id}_trade",
+            order_id=order.order_id,
+            symbol=order.symbol,
+            side=order.side.value,
+            price=exec_price,
+            quantity=order.quantity,
+        )
+        self._trade_log.append(trade)
+        return trade
+
+    # ------------------------------------------------------------------
+    # STOP / STOP_LIMIT 撮合
+    # ------------------------------------------------------------------
+
+    def _check_stop_orders(self, bar: BarData) -> List[TradeData]:
+        """检查 order_book 中所有 STOP / STOP_LIMIT 订单是否触发/成交。
+
+        被 place_order 以及回测引擎在每一根新 K 线上调用。
+        返回本周期新成交的 TradeData 列表。
+        """
+        filled_trades: List[TradeData] = []
+        symbol = bar.symbol
+
+        if symbol not in self._order_book:
+            return filled_trades
+
+        still_pending: List[Order] = []
+        for order in self._order_book[symbol]:
+            # 已过期的订单（例如已被用户撤销）
+            if order.status == OrderStatus.CANCELLED:
+                continue
+
+            is_buy = order.side == OrderSide.BUY
+            stop_price = order.price  # STOP/STOP_LIMIT 的 trigger 价格
+
+            # ---- STOP 订单 ----
+            if order.order_type == OrderType.STOP:
+                crossed = False
+                if is_buy and bar.high >= stop_price:
+                    crossed = True
+                elif not is_buy and bar.low <= stop_price:
+                    crossed = True
+
+                if crossed:
+                    # 触发后按市价单执行（用 bar.close + 滑点）
+                    side_str = "buy" if is_buy else "sell"
+                    exec_price = self._compute_exec_price(bar, side_str)
+                    trade = self._try_fill(order, exec_price, bar)
+                    if trade:
+                        filled_trades.append(trade)
+                else:
+                    still_pending.append(order)
+
+            # ---- STOP_LIMIT 订单 ----
+            elif order.order_type == OrderType.STOP_LIMIT:
+                crossed = False
+                if is_buy and bar.high >= stop_price:
+                    crossed = True
+                elif not is_buy and bar.low <= stop_price:
+                    crossed = True
+
+                if crossed:
+                    # 止损触发，退化为 LIMIT 订单：检查 limit price 是否满足
+                    limit_price = order.price
+                    if is_buy and bar.close <= limit_price:
+                        # 可以成交：按限价价格（较好价格）
+                        exec_price = min(limit_price, bar.close)
+                        trade = self._try_fill(order, exec_price, bar)
+                        if trade:
+                            filled_trades.append(trade)
+                    elif not is_buy and bar.close >= limit_price:
+                        exec_price = max(limit_price, bar.close)
+                        trade = self._try_fill(order, exec_price, bar)
+                        if trade:
+                            filled_trades.append(trade)
+                    else:
+                        # 触发但限价未满足，挂入 order_book 等待后续 K 线
+                        still_pending.append(order)
+                else:
+                    still_pending.append(order)
+
+        self._order_book[symbol] = still_pending
+        return filled_trades
+
+    # ------------------------------------------------------------------
+    # 公开接口
+    # ------------------------------------------------------------------
 
     def place_order(self, order: Order, bar: BarData) -> Optional[TradeData]:
         """
@@ -108,7 +226,56 @@ class BacktestBroker(Broker):
             order.update_status(OrderStatus.REJECTED)
             return None
 
-        # 3. 限价单价格检查
+        # 3. STOP 订单：止损触发逻辑
+        if order.order_type == OrderType.STOP:
+            is_buy = order.side == OrderSide.BUY
+            stop_price = order.price
+
+            # 先检查本 bar 是否已触发
+            if is_buy and bar.high >= stop_price:
+                # 触发，按市价单执行（bar.close + 滑点）
+                exec_price = self._compute_exec_price(bar, "buy")
+                return self._try_fill(order, exec_price, bar)
+            elif not is_buy and bar.low <= stop_price:
+                exec_price = self._compute_exec_price(bar, "sell")
+                return self._try_fill(order, exec_price, bar)
+
+            # 未触发，挂入 order_book 等待后续 bar
+            symbol = order.symbol
+            if symbol not in self._order_book:
+                self._order_book[symbol] = []
+            self._order_book[symbol].append(order)
+            order.update_status(OrderStatus.QUEUED)
+            return None
+
+        # 4. STOP_LIMIT 订单：止损+限价逻辑
+        if order.order_type == OrderType.STOP_LIMIT:
+            is_buy = order.side == OrderSide.BUY
+            stop_price = order.price
+
+            # 先检查止损价位是否触发
+            if is_buy and bar.high >= stop_price:
+                # 止损触发，再检查限价是否满足（买入要求 close ≤ limit）
+                if bar.close <= stop_price:
+                    exec_price = min(stop_price, bar.close)
+                    return self._try_fill(order, exec_price, bar)
+                # 限价不满足，挂入 order_book
+            elif not is_buy and bar.low <= stop_price:
+                # 止损触发，再检查限价是否满足（卖出要求 close ≥ limit）
+                if bar.close >= stop_price:
+                    exec_price = max(stop_price, bar.close)
+                    return self._try_fill(order, exec_price, bar)
+                # 限价不满足，挂入 order_book
+
+            # 未触发或触发但限价不满足，挂入 order_book
+            symbol = order.symbol
+            if symbol not in self._order_book:
+                self._order_book[symbol] = []
+            self._order_book[symbol].append(order)
+            order.update_status(OrderStatus.QUEUED)
+            return None
+
+        # 5. LIMIT 单价格检查
         if order.order_type.name == "LIMIT":
             if order.side == OrderSide.BUY and order.price < bar.close:
                 # 买单限价低于市价，不会成交（简化：按市价撮合）
@@ -116,25 +283,12 @@ class BacktestBroker(Broker):
             elif order.side == OrderSide.SELL and order.price > bar.close:
                 pass
 
-        # 4. 应用滑点
+        # 6. 市价单 / 可成交限价单 — 应用滑点并执行
         side = "buy" if order.side == OrderSide.BUY else "sell"
-        exec_price = bar.close
-        if self._slippage:
-            exec_price = self._slippage.apply(bar.close, side)
+        exec_price = self._compute_exec_price(bar, side)
 
-        # 5. 成交
-        order.update_status(OrderStatus.FILLED)
-        order.add_fill(order.quantity, exec_price)
-
-        trade = TradeData(
-            trade_id=f"{order.order_id}_trade",
-            order_id=order.order_id,
-            symbol=order.symbol,
-            side=order.side.value,
-            price=exec_price,
-            quantity=order.quantity,
-        )
-        return trade
+        # 7. 成交
+        return self._try_fill(order, exec_price, bar)
 
     def cancel_order(self, order: Order) -> bool:
         if order.status.name in ("PENDING", "SUBMITTED", "QUEUED"):
@@ -393,6 +547,144 @@ class PaperBroker(Broker):
             self._logger.info(f"已从 {filepath} 恢复状态: {len(self._trade_log)} 条交易记录")
         except Exception as e:
             self._logger.warning(f"加载状态失败: {e}")
+
+    # ── F012 补充：模拟盘实时循环与回测对比 ──────────────────
+
+    def run_realtime_loop(
+        self,
+        data_feed,
+        strategies: Optional[List[Any]] = None,
+        interval_seconds: float = 1.0,
+        max_bars: Optional[int] = None,
+        callback: Optional[Any] = None,
+    ) -> List[TradeData]:
+        """
+        模拟盘实时循环 — 从 DataFeed 逐 Bar 推送行情，撮合限价单。
+
+        模拟真实盘中行情推送场景，支持在循环中调用策略的 on_bar/on_tick 回调。
+
+        Args:
+            data_feed: 实现了 __len__ 和 __getitem__ 的数据源
+            strategies: 策略实例列表（可选）
+            interval_seconds: 每根 Bar 之间的模拟延迟（秒）
+            max_bars: 最多处理多少根 Bar（None = 全部）
+            callback: 每根 Bar 处理后的回调 (bar, trades) → None
+
+        Returns:
+            所有成交的 TradeData 列表
+        """
+        import time
+
+        total = len(data_feed)
+        if max_bars:
+            total = min(total, max_bars)
+
+        all_trades: List[TradeData] = []
+
+        for i in range(total):
+            bar = data_feed[i]
+
+            # 1. 处理挂单撮合
+            trades = self.on_bar(bar, dict(self._order_book))
+            all_trades.extend(trades)
+
+            # 2. 通知策略
+            if strategies:
+                for strategy in strategies:
+                    if hasattr(strategy, 'on_bar'):
+                        strategy.on_bar(bar)
+                    if hasattr(strategy, 'on_tick'):
+                        strategy.on_tick(bar)
+
+            # 3. 回调
+            if callback:
+                callback(bar, trades)
+
+            # 4. 保存状态（可选）
+            if self._state_file and trades:
+                self.save_state(self._state_file)
+
+            # 5. 模拟延迟（控制推送节奏）
+            if interval_seconds > 0:
+                time.sleep(interval_seconds)
+
+        return all_trades
+
+    def compare_with_backtest(
+        self,
+        backtest_equity: List[float],
+        paper_equity: List[float],
+    ) -> Dict[str, Any]:
+        """
+        模拟盘 vs 回测 结果对比分析。
+
+        Args:
+            backtest_broker: 回测 Broker 实例
+            backtest_equity: 回测权益曲线 [equity_value, ...]
+            paper_equity: 模拟盘权益曲线 [equity_value, ...]
+
+        Returns:
+            对比结果字典，包含误差、差异分析
+        """
+        import math
+
+        if not backtest_equity or not paper_equity:
+            return {"error": "No data to compare"}
+
+        # 对齐长度
+        min_len = min(len(backtest_equity), len(paper_equity))
+        bt = backtest_equity[:min_len]
+        pe = paper_equity[:min_len]
+
+        # 计算各项误差
+        absolute_errors = [abs(b - p) for b, p in zip(bt, pe)]
+        pct_errors = [
+            (b - p) / b * 100 if b != 0 else 0.0
+            for b, p in zip(bt, pe)
+        ]
+
+        max_abs_error = max(absolute_errors) if absolute_errors else 0
+        avg_abs_error = sum(absolute_errors) / len(absolute_errors) if absolute_errors else 0
+        max_pct_error = max(abs(e) for e in pct_errors) if pct_errors else 0
+
+        # 累计收益对比
+        bt_total_return = (bt[-1] - bt[0]) / bt[0] if bt[0] != 0 else 0
+        pe_total_return = (pe[-1] - pe[0]) / pe[0] if pe[0] != 0 else 0
+        return_diff = abs(bt_total_return - pe_total_return)
+
+        # 最大回撤对比
+        def _max_drawdown(equity_curve):
+            peak = equity_curve[0]
+            max_dd = 0
+            for eq in equity_curve:
+                if eq > peak:
+                    peak = eq
+                dd = (peak - eq) / peak if peak > 0 else 0
+                max_dd = max(max_dd, dd)
+            return max_dd
+
+        bt_max_dd = _max_drawdown(bt)
+        pe_max_dd = _max_drawdown(pe)
+
+        return {
+            "bar_count": min_len,
+            "backtest_final_equity": bt[-1],
+            "paper_final_equity": pe[-1],
+            "backtest_total_return": round(bt_total_return, 6),
+            "paper_total_return": round(pe_total_return, 6),
+            "return_diff_pct": round(return_diff * 100, 4),
+            "max_abs_error": round(max_abs_error, 2),
+            "avg_abs_error": round(avg_abs_error, 2),
+            "max_pct_error": round(max_pct_error, 4),
+            "backtest_max_drawdown": round(bt_max_dd, 6),
+            "paper_max_drawdown": round(pe_max_dd, 6),
+            "max_drawdown_diff": round(abs(bt_max_dd - pe_max_dd), 6),
+            "within_1_percent": return_diff < 0.01,
+            "summary": (
+                "模拟盘与回测误差 < 1%" if return_diff < 0.01
+                else f"模拟盘与回测误差 {return_diff*100:.2f}%，超出 1% 阈值"
+            ),
+        }
 
 
 class LiveBroker(Broker):

@@ -81,7 +81,8 @@ export default function Trading() {
   }
 
   // Status tag helper
-  const statusTag = (status: OrderStatus) => {
+  const statusTag = (status: OrderStatus | undefined | null) => {
+    if (!status) return <Tag>未知</Tag>
     const map: Record<OrderStatus, { color: string; label: string }> = {
       PENDING: { color: 'default', label: '待提交' },
       SUBMITTED: { color: 'processing', label: '已报' },
@@ -91,6 +92,7 @@ export default function Trading() {
       REJECTED: { color: 'error', label: '拒单' },
     }
     const s = map[status]
+    if (!s) return <Tag>{String(status)}</Tag>
     return <Tag color={s.color}>{s.label}</Tag>
   }
 
@@ -178,7 +180,7 @@ export default function Trading() {
           </span>} style={{ marginBottom: 12 }}>
             <Space direction="vertical" style={{ width: '100%' }} size={10}>
               {/* Symbol */}
-              <div>
+              <div key="symbol">
                 <Text type="secondary" style={{ fontSize: 11 }}>股票代码</Text>
                 <Input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())}
                   placeholder="e.g. sh600519" size="small" style={{ fontFamily: 'var(--font-mono)', marginTop: 4 }}
@@ -189,8 +191,8 @@ export default function Trading() {
               </div>
 
               {/* Side + Type row */}
-              <Space size={8} style={{ width: '100%', justifyContent: 'space-between' }}>
-                <div style={{ flex: 1 }}>
+              <Space key="side-type" size={8} style={{ width: '100%', justifyContent: 'space-between' }}>
+                <div key="side-col" style={{ flex: 1 }}>
                   <Text type="secondary" style={{ fontSize: 11 }}>方向</Text>
                   <Radio.Group value={side} onChange={(e) => setSide(e.target.value)}
                     optionType="button" buttonStyle="solid" size="small" style={{ marginTop: 4, width: '100%' }}
@@ -200,7 +202,7 @@ export default function Trading() {
                     ]}
                   />
                 </div>
-                <div style={{ flex: 1 }}>
+                <div key="type-col" style={{ flex: 1 }}>
                   <Text type="secondary" style={{ fontSize: 11 }}>类型</Text>
                   <Select value={orderType} onChange={(v) => setOrderType(v as OrderType)}
                     size="small" style={{ width: '100%', marginTop: 4 }}
@@ -214,7 +216,7 @@ export default function Trading() {
               </Space>
 
               {/* Price */}
-              <div>
+              <div key="price">
                 <Text type="secondary" style={{ fontSize: 11 }}>
                   价格 {orderType === 'MARKET' ? '(市价)' : ''}
                 </Text>
@@ -227,7 +229,7 @@ export default function Trading() {
               </div>
 
               {/* Quantity */}
-              <div>
+              <div key="quantity">
                 <Text type="secondary" style={{ fontSize: 11 }}>数量（股）</Text>
                 <InputNumber value={quantity} onChange={(v) => setQuantity(v ?? 0)}
                   size="small" min={100} step={100}
@@ -238,7 +240,7 @@ export default function Trading() {
               </div>
 
               {/* Estimated amount */}
-              <div style={{
+              <div key="estimated" style={{
                 padding: '8px 12px', borderRadius: 6, background: 'var(--color-bg-elevated)',
                 border: '1px solid var(--color-border-default)',
                 display: 'flex', justifyContent: 'space-between',
@@ -251,6 +253,7 @@ export default function Trading() {
 
               {/* Action Buttons */}
               <Button
+                key="submit"
                 type="primary" block size="large"
                 icon={side === 'BUY' ? <ArrowUpRight weight="bold" size={16} /> : <ArrowDownLeft weight="bold" size={16} />}
                 loading={placingOrder}
@@ -269,18 +272,18 @@ export default function Trading() {
           </span>}>
             <Table
               dataSource={orders}
-              rowKey="id"
+              rowKey={(r) => r?.id || r?.order_id || Math.random().toString(36).slice(2)}
               size="small"
               pagination={false}
               scroll={{ y: 260 }}
               columns={[
-                { title: 'ID', dataIndex: 'id', key: 'id', width: 80, render: (t: string) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{t.split('-')[1]}</span> },
-                { title: '代码', dataIndex: 'symbol', key: 'symbol', width: 80, render: (t: string) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{t}</span> },
+                { title: 'ID', dataIndex: 'id', key: 'id', width: 80, render: (t: string) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{t?.split('-')?.[1] || t}</span> },
+                { title: '代码', dataIndex: 'symbol', key: 'symbol', width: 80, render: (t: string) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{t ?? ''}</span> },
                 { title: '方向', dataIndex: 'side', key: 'side', width: 50, render: (t: string) =>
                   <Tag color={t === 'BUY' ? 'red' : 'green'} style={{ fontSize: 10 }}>{t === 'BUY' ? '买' : '卖'}</Tag>
                 },
-                { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 60, render: (n: number) => n.toLocaleString() },
-                { title: '价格', dataIndex: 'price', key: 'price', width: 70, render: (n: number) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{n.toFixed(2)}</span> },
+                { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 60, render: (n: number) => (n ?? 0).toLocaleString() },
+                { title: '价格', dataIndex: 'price', key: 'price', width: 70, render: (n: number) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{(n ?? 0).toFixed(2)}</span> },
                 { title: '状态', dataIndex: 'status', key: 'status', width: 90, render: (t: OrderStatus) => statusTag(t) },
                 { title: '操作', key: 'action', width: 60, render: (_: unknown, r: Order) =>
                   (r.status === 'PENDING' || r.status === 'SUBMITTED') ? (
@@ -304,19 +307,19 @@ export default function Trading() {
               size="small"
               pagination={false}
               columns={[
-                { title: '代码', dataIndex: 'symbol', key: 'symbol', width: 85, render: (t: string) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{t}</span> },
+                { title: '代码', dataIndex: 'symbol', key: 'symbol', width: 85, render: (t: string) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{t ?? ''}</span> },
                 { title: '名称', dataIndex: 'name', key: 'name', width: 80 },
-                { title: '持仓', dataIndex: 'shares', key: 'shares', width: 60, render: (n: number) => n.toLocaleString() },
-                { title: '成本价', dataIndex: 'cost', key: 'cost', width: 70, render: (n: number) => <span style={{ fontFamily: 'var(--font-mono)' }}>{n.toFixed(2)}</span> },
-                { title: '现价', dataIndex: 'price', key: 'price', width: 70, render: (n: number) => <span style={{ fontFamily: 'var(--font-mono)' }}>{n.toFixed(2)}</span> },
+                { title: '持仓', dataIndex: 'shares', key: 'shares', width: 60, render: (n: number) => (n ?? 0).toLocaleString() },
+                { title: '成本价', dataIndex: 'cost', key: 'cost', width: 70, render: (n: number) => <span style={{ fontFamily: 'var(--font-mono)' }}>{(n ?? 0).toFixed(2)}</span> },
+                { title: '现价', dataIndex: 'price', key: 'price', width: 70, render: (n: number) => <span style={{ fontFamily: 'var(--font-mono)' }}>{(n ?? 0).toFixed(2)}</span> },
                 { title: '盈亏', dataIndex: 'pnl', key: 'pnl', width: 90, render: (n: number) =>
-                  <span style={{ color: n >= 0 ? '#10b981' : '#ef4444', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
-                    {n >= 0 ? '+' : ''}{n.toFixed(0)}
+                  <span style={{ color: (n ?? 0) >= 0 ? '#10b981' : '#ef4444', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
+                    {(n ?? 0) >= 0 ? '+' : ''}{(n ?? 0).toFixed(0)}
                   </span>
                 },
                 { title: '收益率', dataIndex: 'pnlPct', key: 'pnlPct', width: 70, render: (n: number) =>
-                  <Tag color={n >= 0 ? 'green' : 'red'} style={{ fontFamily: 'var(--font-mono)' }}>
-                    {n >= 0 ? '+' : ''}{n.toFixed(2)}%
+                  <Tag color={(n ?? 0) >= 0 ? 'green' : 'red'} style={{ fontFamily: 'var(--font-mono)' }}>
+                    {(n ?? 0) >= 0 ? '+' : ''}{(n ?? 0).toFixed(2)}%
                   </Tag>
                 },
               ]}
@@ -329,21 +332,21 @@ export default function Trading() {
           </span>}>
             <Table
               dataSource={trades}
-              rowKey="id"
+              rowKey={(r) => r?.id || r?.trade_id || Math.random().toString(36).slice(2)}
               size="small"
               pagination={{ pageSize: 8, size: 'small' }}
               scroll={{ x: 500 }}
               columns={[
                 { title: '时间', dataIndex: 'timestamp', key: 'time', width: 140, render: (t: string) =>
-                  new Date(t).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                  t ? new Date(t).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-'
                 },
-                { title: '代码', dataIndex: 'symbol', key: 'symbol', width: 80, render: (t: string) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{t}</span> },
+                { title: '代码', dataIndex: 'symbol', key: 'symbol', width: 80, render: (t: string) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{t ?? ''}</span> },
                 { title: '方向', dataIndex: 'side', key: 'side', width: 50, render: (t: string) =>
-                  <Tag color={t === 'BUY' ? 'red' : 'green'} style={{ fontSize: 10 }}>{t === 'BUY' ? '买' : '卖'}</Tag>
+                  <Tag color={(t ?? '') === 'BUY' ? 'red' : 'green'} style={{ fontSize: 10 }}>{(t ?? '') === 'BUY' ? '买' : '卖'}</Tag>
                 },
-                { title: '价格', dataIndex: 'price', key: 'price', width: 70, render: (n: number) => <span style={{ fontFamily: 'var(--font-mono)' }}>{n.toFixed(2)}</span> },
-                { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 60, render: (n: number) => n.toLocaleString() },
-                { title: '手续费', dataIndex: 'commission', key: 'commission', width: 70, render: (n: number) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{n.toFixed(2)}</span> },
+                { title: '价格', dataIndex: 'price', key: 'price', width: 70, render: (n: number) => <span style={{ fontFamily: 'var(--font-mono)' }}>{(n ?? 0).toFixed(2)}</span> },
+                { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 60, render: (n: number) => (n ?? 0).toLocaleString() },
+                { title: '手续费', dataIndex: 'commission', key: 'commission', width: 70, render: (n: number) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{(n ?? 0).toFixed(2)}</span> },
               ] as ColumnsType<TradeRecord>}
             />
           </Card>
@@ -362,37 +365,29 @@ export default function Trading() {
         okType={side === 'BUY' ? 'primary' : 'danger'}
       >
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div key="stock" style={{ display: 'flex', justifyContent: 'space-between' }}>
             <Text type="secondary">股票</Text>
             <Text strong>{symbol || '--'}</Text>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div key="side" style={{ display: 'flex', justifyContent: 'space-between' }}>
             <Text type="secondary">方向</Text>
             <Tag color={side === 'BUY' ? 'red' : 'green'}>{side === 'BUY' ? '买入' : '卖出'}</Tag>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div key="type" style={{ display: 'flex', justifyContent: 'space-between' }}>
             <Text type="secondary">类型</Text>
             <Text>{orderType === 'MARKET' ? '市价' : orderType === 'LIMIT' ? '限价' : '止损'}</Text>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div key="price" style={{ display: 'flex', justifyContent: 'space-between' }}>
             <Text type="secondary">价格</Text>
             <Text strong style={{ fontFamily: 'var(--font-mono)' }}>
               {orderType === 'MARKET' ? '市价' : `¥${price.toFixed(2)}`}
             </Text>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div key="quantity" style={{ display: 'flex', justifyContent: 'space-between' }}>
             <Text type="secondary">数量</Text>
             <Text strong style={{ fontFamily: 'var(--font-mono)' }}>{quantity.toLocaleString()} 股</Text>
           </div>
-          <Divider style={{ margin: '8px 0' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Text type="secondary">预估金额</Text>
-            <Text strong style={{ fontSize: 16, fontFamily: 'var(--font-mono)', color: side === 'BUY' ? '#ef4444' : '#10b981' }}>
-              ¥{((price || 0) * (quantity || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </Text>
-          </div>
-          <Divider style={{ margin: '8px 0' }} />
-          {/* Fee estimates (Task 2.12) */}
+          <Divider key="divider-1" style={{ margin: '8px 0' }} />
           {(() => {
             const amount = (price || 0) * (quantity || 0)
             const commission = Math.max(amount * 0.00025, 5)
@@ -401,28 +396,29 @@ export default function Trading() {
             const totalFee = commission + stampTax + transferFee
             return (
               <>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div key="commission" style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Text type="secondary">佣金（万2.5，最低5元）</Text>
                   <Text style={{ fontFamily: 'var(--font-mono)' }}>¥{commission.toFixed(2)}</Text>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div key="stamp" style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Text type="secondary">印花税（卖出千1）</Text>
                   <Text style={{ fontFamily: 'var(--font-mono)' }}>¥{stampTax.toFixed(2)}</Text>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div key="transfer" style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Text type="secondary">过户费（十万1）</Text>
                   <Text style={{ fontFamily: 'var(--font-mono)' }}>¥{transferFee.toFixed(2)}</Text>
                 </div>
-                <Divider style={{ margin: '4px 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Divider key="divider-fee" style={{ margin: '4px 0' }} />
+                <div key="total-fee" style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Text strong>总费用</Text>
                   <Text strong style={{ fontFamily: 'var(--font-mono)', color: '#f59e0b' }}>¥{totalFee.toFixed(2)}</Text>
                 </div>
               </>
             )
           })()}
+          <Divider key="divider-2" style={{ margin: '8px 0' }} />
           {/* A-stock trading rules reminder (Task 2.12) */}
-          <div style={{
+          <div key="rules" style={{
             marginTop: 8, padding: '8px 12px', borderRadius: 6,
             background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)',
             fontSize: 11, color: 'var(--color-text-secondary)',

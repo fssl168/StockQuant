@@ -1,18 +1,22 @@
-StockQuant 文档
-================
-
-StockQuant 是一个基于 Python 的量化交易框架，集成 AI 决策、回测引擎、实盘交易和数据管理。
+StockQuant API Documentation
+============================
 
 .. toctree::
    :maxdepth: 2
-   :caption: 目录
+   :caption: Modules:
 
-   architecture
+   engine
+   strategy
+   indicators
+   data
+   models
+   ai
    api
-   nfr
+   execution
+   persistence
 
-索引
-----
+Indices and tables
+==================
 
 * :ref:`genindex`
 * :ref:`modindex`

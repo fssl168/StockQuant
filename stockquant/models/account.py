@@ -22,6 +22,12 @@ class Account:
     realized_pnl: float = 0.0
     unrealized_pnl: float = 0.0
 
+    # 保证金相关
+    leverage: float = 1.0              # 杠杆倍数 (1.0 = 无杠杆, 2.0 = 2倍杠杆)
+    margin_used: float = 0.0           # 已用保证金
+    margin_call_price: float = 0.0     # 保证金追缴线
+    margin_interest_rate: float = 0.0001  # 每日保证金利息
+
     def update_equity(self, market_value: float):
         """更新总权益"""
         self.market_value = market_value

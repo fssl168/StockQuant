@@ -8,7 +8,7 @@ import { OptimizeConfig, OptimizeResult } from '../types'
  * POST /backtest/optimize → { task_id }
  */
 export async function runOptimization(config: OptimizeConfig): Promise<string> {
-  const data: any = await client.post('/backtest/optimize', config)
+  const data: any = await client.post('/api/backtest/optimize', config)
   return data.task_id
 }
 
@@ -23,7 +23,7 @@ export async function getOptimizeStatus(taskId: string): Promise<{
   best_result?: any
   error?: string
 }> {
-  return client.get(`/backtest/optimize/${taskId}`) as any
+  return client.get(`/api/backtest/optimize/${taskId}`) as any
 }
 
 /**

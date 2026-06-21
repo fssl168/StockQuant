@@ -40,8 +40,7 @@ export const useTradingStore = create<TradingState>((set, get) => ({
       ])
       set({ account, orders: orders ?? [], positions: positions ?? [], trades: trades ?? [], loading: false })
     } catch (err) {
-      console.error('[tradingStore] refreshAll failed:', err)
-      message.error('数据加载失败')
+      console.warn('[tradingStore] refreshAll skipped (paper trading, no live data):', err)
       set({ orders: [], positions: [], trades: [], loading: false })
     }
   },

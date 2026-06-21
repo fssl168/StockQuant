@@ -25,10 +25,10 @@ export default function Portfolio() {
   const [riskMetrics, setRiskMetrics] = useState<{ label: string; value: string; color?: string }[]>([])
 
   useEffect(() => {
-    const p1 = client.get('/portfolio/positions')
+    const p1 = client.get('/api/portfolio/positions')
       .then((data) => { if (Array.isArray(data) && data.length > 0) setPositions(data) })
       .catch((e: any) => console.warn('[Portfolio] 获取持仓失败:', e?.message))
-    const p2 = client.get('/portfolio/account')
+    const p2 = client.get('/api/portfolio/account')
       .then((data: any) => {
         if (data) {
           setSummary({
@@ -40,16 +40,16 @@ export default function Portfolio() {
         }
       })
       .catch((e: any) => console.warn('[Portfolio] 获取账户失败:', e?.message))
-    const p3 = client.get('/portfolio/equity-curve')
+    const p3 = client.get('/api/portfolio/equity-curve')
       .then((data: any) => { if (data?.dates?.length) setPortfolioCurve(data) })
       .catch((e: any) => console.warn('[Portfolio] 获取权益曲线失败:', e?.message))
-    const p4 = client.get('/trading/trades')
+    const p4 = client.get('/api/trading/trades')
       .then((data: any) => {
         const trades = Array.isArray(data) ? data : (data?.data ?? [])
         if (trades.length > 0) setTradeHistory(trades)
       })
       .catch((e: any) => console.warn('[Portfolio] 获取交易记录失败:', e?.message))
-    const p5 = client.get('/portfolio/risk-metrics')
+    const p5 = client.get('/api/portfolio/risk-metrics')
       .then((data: any) => {
         const rm = data?.data ?? data
         if (rm && typeof rm === 'object') {
@@ -76,7 +76,7 @@ export default function Portfolio() {
     setEquitySymbol(symbol)
     setEquityLoading(true)
     try {
-      const data = await client.get(`/portfolio/equity-curve/${symbol}`) as any
+      const data = await client.get(`/api/portfolio/equity-curve/${symbol}`) as any
       setEquityCurveData(data)
     } catch {
       setEquityCurveData(null)
@@ -107,19 +107,19 @@ export default function Portfolio() {
       <Text style={{ fontFamily: 'var(--font-mono)' }}>{s}</Text>
     )},
     { title: '名称', dataIndex: 'name', key: 'name', width: 120 },
-    { title: '股数', dataIndex: 'shares', key: 'shares', width: 90, render: (v: number) => v.toLocaleString() },
-    { title: '成本', dataIndex: 'cost', key: 'cost', width: 90, render: (v: number) => v.toFixed(2) },
-    { title: '现价', dataIndex: 'price', key: 'price', width: 90, render: (v: number) => v.toFixed(2) },
-    { title: '市值', key: 'value', width: 110, render: (_: any, r: any) => (r.shares * r.price).toFixed(0) },
+    { title: '股数', dataIndex: 'shares', key: 'shares', width: 90, render: (v: number) => (v ?? 0).toLocaleString() },
+    { title: '成本', dataIndex: 'cost', key: 'cost', width: 90, render: (v: number) => (v ?? 0).toFixed(2) },
+    { title: '现价', dataIndex: 'price', key: 'price', width: 90, render: (v: number) => (v ?? 0).toFixed(2) },
+    { title: '市值', key: 'value', width: 110, render: (_: any, r: any) => ((r.shares ?? 0) * (r.price ?? 0)).toFixed(0) },
     { title: '盈亏', key: 'pnl', width: 110, render: (_pnl: any, r: any) => (
-      <Text style={{ color: r.pnl >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-        {r.pnl >= 0 ? <ArrowUpRight size={12} weight="bold" /> : <ArrowDownRight size={12} weight="bold" />}
-        {' '}¥{Math.abs(r.pnl).toFixed(0)}
+      <Text style={{ color: (r.pnl ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+        {(r.pnl ?? 0) >= 0 ? <ArrowUpRight size={12} weight="bold" /> : <ArrowDownRight size={12} weight="bold" />}
+        {' '}¥{Math.abs(r.pnl ?? 0).toFixed(0)}
       </Text>
     )},
     { title: '盈亏%', key: 'pnlPct', width: 80, render: (_: any, r: any) => (
-      <Tag color={r.pnlPct >= 0 ? 'green' : 'red'} style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-        {r.pnlPct >= 0 ? '+' : ''}{r.pnlPct.toFixed(2)}%
+      <Tag color={(r.pnlPct ?? 0) >= 0 ? 'green' : 'red'} style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+        {(r.pnlPct ?? 0) >= 0 ? '+' : ''}{(r.pnlPct ?? 0).toFixed(2)}%
       </Tag>
     )},
     { title: '操作', key: 'action', width: 100, render: (_: any, r: any) => (

@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { Row, Col, Card, Button, Typography, Tag, Alert, Skeleton, Dropdown, message } from 'antd'
 import { ArrowCounterClockwise, DownloadSimple, FileHtml, FilePdf, FileText } from '@phosphor-icons/react'
 import { backtestApi } from '@/api/dashboard'
-import { analyzeBacktest } from '@/api/ai'
+import { analyzeBacktest, type StructuredInsight } from '@/api/ai'
 import EquityChart from '@/components/Chart/EquityChart'
 import DrawdownChart from '@/components/Chart/DrawdownChart'
 import MonthHeatmap from '@/components/Chart/MonthHeatmap'
@@ -18,10 +18,13 @@ export default function BacktestResult() {
   const { id } = useParams<{ id: string }>()
   interface BacktestTaskData {
     task_id: string
-    strategy_name: string
+    strategyName: string
+    strategy_name?: string
     status: string
     metrics: BacktestMetrics
-    equity_curve: number[]
+    equityCurve: number[]
+    equity_curve?: number[]
+    benchmarkEquityCurve?: number[]
     benchmark_equity_curve?: number[]
     benchmark?: string
     dates?: string[]
@@ -30,15 +33,30 @@ export default function BacktestResult() {
   }
   const [task, setTask] = useState<BacktestTaskData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [aiInsight, setAiInsight] = useState<string | null>(null)
+  const [aiInsight, setAiInsight] = useState<string | StructuredInsight | null>(null)
   const [insightLoading, setInsightLoading] = useState(false)
 
   useEffect(() => {
     if (!id) return
-    backtestApi.get(id)
-      .then((task: any) => setTask(task))
-      .catch(() => setTask(null))
-      .finally(() => setLoading(false))
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const fetchTask = () => {
+      backtestApi.get(id)
+        .then((task: any) => {
+          setTask(task)
+          // 回测仍在运行，2 秒后轮询
+          if (task?.status === 'running') {
+            timer = setTimeout(fetchTask, 2000)
+          }
+        })
+        .catch(() => {
+          setTask(null)
+        })
+        .finally(() => setLoading(false))
+    }
+
+    fetchTask()
+    return () => { if (timer) clearTimeout(timer) }
   }, [id])
 
   const fetchInsight = async () => {
@@ -107,17 +125,21 @@ export default function BacktestResult() {
       <Skeleton active paragraph={{ rows: 3 }} />
     </div>
   )
-  if (!task) return <Alert message="Backtest task not found" type="error" />
+  if (!task) {
+    const reason = id === 'undefined' || !id ? '回测任务 ID 无效' : '未找到该回测任务'
+    return <Alert message={reason} type="error" />
+  }
 
-  const equityData = (task.equity_curve as number[] ?? [])
+  // Access camelCase keys (snakeToCamel interceptor transforms them)
+  const equityData = (task.equityCurve ?? task.equity_curve ?? []) as number[]
   const metrics = task.metrics as BacktestMetrics ?? {}
+  const benchmarkData = task.benchmarkEquityCurve ?? task.benchmark_equity_curve as number[] | undefined
 
   const BENCHMARK_LABELS: Record<string, string> = {
     hs300: '沪深300',
     zz500: '中证500',
     cyb: '创业板指',
   }
-  const benchmarkData = task.benchmark_equity_curve as number[] | undefined
   const benchmarkLabel = task.benchmark ? BENCHMARK_LABELS[task.benchmark] : undefined
 
   // Generate drawdown data from equity curve
@@ -132,23 +154,30 @@ export default function BacktestResult() {
   // Generate monthly returns
   const monthlyReturns: Record<string, number> = (metrics['Monthly Returns'] as Record<string, number>) ?? {}
 
+  // 百分比指标后端返回小数（如 0.1234 表示 12.34%），展示时乘以 100
+  const pct = (v: unknown): number | string | undefined => typeof v === 'number' ? v * 100 : (v as string | undefined)
+
   const metricItems = [
-    { label: '年化收益', value: metrics['Annualized Return'] ?? '-', suffix: '%', color: (v: number | string) => typeof v === 'number' ? (v >= 0 ? '#10b981' : '#ef4444') : 'var(--color-text-primary)' },
-    { label: '最大回撤', value: metrics['Max Drawdown'] ?? '-', suffix: '%', color: '#ef4444' },
+    { label: '年化收益', value: pct(metrics['Annualized Return']) ?? '-', suffix: '%', color: (v: number | string) => typeof v === 'number' ? (v >= 0 ? '#10b981' : '#ef4444') : 'var(--color-text-primary)' },
+    { label: '最大回撤', value: pct(metrics['Max Drawdown']) ?? '-', suffix: '%', color: '#ef4444' },
     { label: '夏普', value: metrics['Sharpe Ratio'] ?? '-', suffix: '', color: () => 'var(--color-brand-primary)' },
     { label: 'Sortino', value: metrics['Sortino Ratio'] ?? '-', suffix: '', color: () => 'var(--color-brand-primary)' },
     { label: 'Calmar', value: metrics['Calmar Ratio'] ?? '-', suffix: '', color: () => 'var(--color-brand-primary)' },
-    { label: '胜率', value: metrics['Win Rate'] ?? '-', suffix: '%', color: () => '#10b981' },
+    { label: '胜率', value: pct(metrics['Win Rate']) ?? '-', suffix: '%', color: () => '#10b981' },
     { label: '总交易', value: metrics['Total Trades'] ?? '-', suffix: '', color: () => 'var(--color-text-primary)' },
     { label: 'SQN', value: metrics['SQN (System Quality Number)'] ?? '-', suffix: '', color: () => 'var(--color-brand-primary)' },
   ]
 
-  const tradeRows = (task.trades as Trade[] ?? []).map((t) => ({
-    date: t.time,
-    symbol: t.symbol,
-    side: t.direction,
-    quantity: t.size,
-    price: t.price,
+  const tradeRows = ((task.trades ?? task['trades']) as Trade[] ?? []).map((t: any) => ({
+    trade_id: t.trade_id ?? t.tradeId ?? '',
+    date: t.time ?? t.date ?? '',
+    symbol: t.symbol ?? '',
+    side: t.side ?? t.direction ?? '',
+    quantity: t.quantity ?? t.size ?? 0,
+    price: t.price ?? 0,
+    notional: t.notional ?? (t.price && t.quantity ? t.price * t.quantity : undefined),
+    commission: t.commission ?? undefined,
+    slippage: t.slippage ?? undefined,
     pnl: t.pnl,
   }))
 
@@ -159,14 +188,37 @@ export default function BacktestResult() {
       </Link>
 
       <div style={{ display: 'flex', alignItems: 'start', gap: 12, marginBottom: 20 }}>
-        <Title level={4} style={{ margin: 0, flex: 1, fontSize: 16, fontWeight: 600 }}>{task.strategy_name}</Title>
+        <Title level={4} style={{ margin: 0, flex: 1, fontSize: 16, fontWeight: 600 }}>{task.strategyName ?? task.strategy_name}</Title>
         <Dropdown
           menu={{ items: exportMenuItems, onClick: ({ key }) => exportReport(key as 'html' | 'pdf' | 'json') }}
         >
           <Button size="small" icon={<DownloadSimple size={16} />}>导出报表</Button>
         </Dropdown>
-        <Tag color={task.status === 'completed' ? 'green' : 'blue'}>{task.status}</Tag>
+        <Tag color={task.status === 'completed' ? 'green' : task.status === 'running' ? 'blue' : 'red'}>{task.status}</Tag>
       </div>
+
+      {/* 数据诊断信息（无数据时显示） */}
+      {!equityData.length && Object.keys(metrics).length === 0 && (
+        <Alert message="数据诊断" description={
+          <div>
+            <div>status: <strong>{task.status}</strong></div>
+            <div>metrics keys: <strong>{Object.keys(metrics).join(', ') || '(空)'}</strong></div>
+            <div>equity length: <strong>{equityData.length}</strong></div>
+            <div>trades count: <strong>{((task.trades ?? task['trades']) ?? []).length}</strong></div>
+            <div>error: <strong>{(task.error ?? task['error']) || '无'}</strong></div>
+          </div>
+        } type={task.status === 'failed' ? 'error' : 'warning'} style={{ marginBottom: 16 }} />
+      )}
+
+      {/* 错误信息 */}
+      {(task.error ?? task['error']) && (
+        <Alert message="回测失败" description={String(task.error ?? task['error'])} type="error" style={{ marginBottom: 16 }} />
+      )}
+
+  {/* 空结果提示 */}
+  {task.status === 'completed' && !equityData.length && Object.keys(metrics).length === 0 && !((task.trades ?? task['trades'])?.length) && (
+    <Alert message="回测完成但未产生任何交易数据" type="warning" style={{ marginBottom: 16 }} />
+  )}
 
       {/* Metric cards */}
       <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>

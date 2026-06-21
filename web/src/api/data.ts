@@ -3,19 +3,19 @@ import type { DataSourceConfig, CacheStats } from '@/types'
 
 export const dataApi = {
   sources: () =>
-    client.get('/data/sources') as Promise<DataSourceConfig[]>,
+    client.get('/api/data/sources') as Promise<DataSourceConfig[]>,
   updateSource: (data: DataSourceConfig) =>
-    client.post('/data/sources', data) as Promise<{ success: boolean }>,
+    client.post('/api/data/sources', data) as Promise<{ success: boolean }>,
   cacheStats: () =>
-    client.get('/data/cache') as Promise<CacheStats>,
+    client.get('/api/data/cache') as Promise<CacheStats>,
   clearCache: () =>
-    client.delete('/data/cache') as Promise<{ success: boolean }>,
+    client.delete('/api/data/cache') as Promise<{ success: boolean }>,
   fetchKline: (symbol: string, source: string, start: string, end: string) =>
-    client.get(`/data/kline?symbol=${symbol}&source=${source}&start=${start}&end=${end}`) as Promise<{
+    client.get(`/api/data/kline?symbol=${symbol}&source=${source}&start=${start}&end=${end}`) as Promise<{
       symbol: string; start: string; end: string; data: any[]; error?: string;
     }>,
   collect: (data: { symbol: string; source: string; start: string; end: string }) =>
-    client.post('/data/collect', data) as Promise<{ success: boolean }>,
+    client.post('/api/data/collect', data) as Promise<{ success: boolean }>,
   health: () =>
-    client.get('/data/health') as Promise<Record<string, { healthy: boolean }>>,
+    client.get('/api/data/health') as Promise<Record<string, { healthy: boolean }>>,
 }

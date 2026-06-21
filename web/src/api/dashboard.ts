@@ -23,13 +23,13 @@ export interface SignalItem {
 
 export const dashboardApi = {
   metrics: () =>
-    client.get('/dashboard/metrics') as Promise<DashboardMetrics>,
+    client.get('/api/dashboard/metrics') as Promise<DashboardMetrics>,
   signals: () =>
-    client.get('/dashboard/signals') as Promise<SignalItem[]>,
+    client.get('/api/dashboard/signals') as Promise<SignalItem[]>,
   recentBacktests: () =>
-    client.get('/backtest') as Promise<any[]>,
+    client.get('/api/backtest') as Promise<any[]>,
   equityCurve: () =>
-    client.get('/portfolio/equity-curve') as Promise<{ dates: string[]; values: number[] }>,
+    client.get('/api/portfolio/equity-curve') as Promise<{ dates: string[]; values: number[] }>,
 }
 
 // Re-export backtestApi from backtest.ts to avoid duplicate definition

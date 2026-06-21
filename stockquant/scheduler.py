@@ -10,6 +10,13 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Callable, Dict, List, Optional
 
+# 尝试导入 exchange_calendars（软依赖）
+try:
+    import exchange_calendars as xc
+    EXCHANGE_CALENDARS_AVAILABLE = True
+except ImportError:
+    EXCHANGE_CALENDARS_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,14 +33,15 @@ class ScheduledTask:
 
 
 class TradingCalendar:
-    """简易交易日日历（内建 fallback，无需外部数据源）。
+    """交易日日历（支持 exchange_calendars 或 fallback 模式）。
 
-    MVP 阶段：使用中国 A 股常见休市规则近似判断。
-    生产环境应替换为真实节假日数据。
+    使用 exchange_calendars 库获取准确的交易日历。
+    如果 exchange_calendars 不可用，则使用内置的 fallback 日历。
     """
 
-    # 2024-2026 中国 A 股主要节假日（实际日期可能调整）
-    HOLIDAYS = frozenset([
+    # Fallback: 2024-2026 中国 A 股主要节假日（实际日期可能调整）
+    # 仅在 exchange_calendars 不可用时使用
+    FALLBACK_HOLIDAYS = frozenset([
         # 2024
         date(2024, 1, 1), date(2024, 2, 10), date(2024, 2, 11),
         date(2024, 2, 12), date(2024, 2, 13), date(2024, 2, 14),
@@ -69,15 +77,42 @@ class TradingCalendar:
         date(2026, 10, 7),
     ])
 
+    # 市场代码映射到 exchange_calendars 的日历代码
+    MARKET_CALENDAR_MAP = {
+        'CN': 'SSE',  # 中国A股 -> 上海证券交易所
+        'HK': 'HKG',  # 港股 -> 香港交易所
+    }
+
     def __init__(self, market: str = 'CN') -> None:
         self.market = market
+        self._calendar = None
+
+        if EXCHANGE_CALENDARS_AVAILABLE:
+            calendar_code = self.MARKET_CALENDAR_MAP.get(market, market)
+            try:
+                self._calendar = xc.get_calendar(calendar_code)
+                logger.info(f"Using exchange_calendars for market '{market}' (calendar: '{calendar_code}')")
+            except Exception:
+                logger.warning(f"Failed to get calendar '{calendar_code}', using fallback")
+                self._calendar = None
+
+        if self._calendar is None:
+            logger.info(f"Using fallback holiday calendar for market '{market}'")
 
     def is_trading_day(self, d: date) -> bool:
         """判断是否为交易日（排除节假日和周末）"""
-        # 周六(5) / 周日(6)
+        if self._calendar is not None:
+            # 使用 exchange_calendars
+            try:
+                return self._calendar.is_session(d)
+            except Exception:
+                logger.warning(f"Failed to check session for {d}, using fallback")
+                # Fall through to fallback logic
+
+        # Fallback: 使用内置节假日 + 周末判断
         if d.weekday() >= 5:
             return False
-        if d in self.HOLIDAYS:
+        if d in self.FALLBACK_HOLIDAYS:
             return False
         return True
 
@@ -99,9 +134,30 @@ class StockScheduler:
         self._tasks: Dict[str, ScheduledTask] = {}
         self._running = False
         self._thread: Optional[threading.Thread] = None
+        self._db_url: Optional[str] = None  # 数据库 URL（可选）
+
+    def set_db_url(self, db_url: Optional[str]) -> None:
+        """设置数据库 URL（用于任务持久化）。"""
+        self._db_url = db_url
+        # 从数据库恢复已持久化的任务
+        if db_url:
+            self._restore_from_db()
+
+    def _restore_from_db(self) -> None:
+        """从数据库加载已持久化的调度任务。"""
+        try:
+            from stockquant.persistence.repository import list_scheduler_tasks
+            tasks = list_scheduler_tasks(self._db_url)  # type: ignore[possibly-undefined]
+            for t in tasks:
+                if t["name"] not in self._tasks:
+                    logger.info("Restored scheduler task '%s' from database", t["name"])
+                    # 任务的具体 action 函数需要由调用方通过 add_task 重新注册
+                    # 此处仅标记恢复信息，实际注册由 _sync_task_to_db 配合 add_task 完成
+        except Exception:
+            logger.debug("No scheduler tasks to restore from database")
 
     def add_task(self, name: str, cron: str, fn: Callable,
-                 args: tuple = (), kwargs: dict = None) -> None:
+                 args: tuple = (), kwargs: dict = None, action: str = "") -> None:
         """添加定时任务。
 
         Parameters
@@ -117,6 +173,8 @@ class StockScheduler:
             位置参数
         kwargs : dict, optional
             关键字参数
+        action : str, optional
+            动作标识（用于持久化）
         """
         import schedule
 
@@ -149,6 +207,29 @@ class StockScheduler:
             )
             logger.info(f"Added task '{name}': cron={cron} (simplified)")
 
+        # 持久化到数据库
+        self._sync_task_to_db(name, cron, action or name, args)
+
+    def _sync_task_to_db(self, name: str, cron: str, action: str, args: tuple) -> None:
+        """将任务持久化到数据库。"""
+        if not self._db_url:
+            return
+        try:
+            import uuid
+            import json as _json
+            from stockquant.persistence.repository import save_scheduler_task
+            args_json = _json.dumps(list(args), default=str) if args else None
+            save_scheduler_task(
+                self._db_url,
+                str(uuid.uuid4()),
+                name,
+                cron,
+                action,
+                args_json,
+            )
+        except Exception:
+            logger.debug("Failed to persist scheduler task '%s' to database", name)
+
     def remove_task(self, name: str) -> bool:
         """移除定时任务。
 
@@ -164,6 +245,15 @@ class StockScheduler:
         task = self._tasks.pop(name)
         schedule.clear(name)
         logger.info(f"Removed task '{name}'")
+
+        # 从数据库删除
+        if self._db_url:
+            try:
+                from stockquant.persistence.repository import delete_scheduler_task
+                delete_scheduler_task(self._db_url, name)
+            except Exception:
+                pass
+
         return True
 
     def start(self) -> None:

@@ -220,7 +220,7 @@ A 股特殊规则：
                             warnings=parsed.get("warnings", []),
                         )
                     except json.JSONDecodeError:
-                        pass
+                        logger.debug("Failed to parse validation result from LLM: %s", obs[:200])
 
                 # 提取回测结果
                 elif thought.action == "backtest_strategy":
@@ -242,7 +242,7 @@ A 股特殊规则：
                             overfitting_risk=parsed.get("overfitting_risk", "medium"),
                         )
                     except json.JSONDecodeError:
-                        pass
+                        logger.debug("Failed to parse score from LLM: %s", obs[:200])
 
                 # 提取优化建议
                 elif thought.action == "suggest_improvements":
@@ -259,7 +259,7 @@ A 股特殊规则：
                                 for s in parsed
                             ]
                     except json.JSONDecodeError:
-                        pass
+                        logger.debug("Failed to parse improvements from LLM: %s", obs[:200])
 
                 # 提取意图
                 elif thought.action == "parse_strategy_intent":
@@ -275,7 +275,7 @@ A 股特殊规则：
                             description=description,
                         )
                     except json.JSONDecodeError:
-                        pass
+                        logger.debug("Failed to parse intent from LLM: %s", obs[:200])
 
         gen_result.success = bool(gen_result.code)
         return gen_result

@@ -27,6 +27,31 @@ from stockquant.persistence.repository import (
     save_analysis,
     save_backtest,
     save_kline,
+    # New task store functions
+    save_backtest_task,
+    get_backtest_task,
+    list_backtest_tasks,
+    delete_backtest_task,
+    save_collect_task,
+    get_collect_task,
+    list_collect_tasks,
+    delete_collect_task,
+    save_optimize_task,
+    get_optimize_task,
+    list_optimize_tasks,
+    delete_optimize_task,
+    save_comparison_history,
+    get_comparison_history,
+    list_comparison_history,
+    delete_comparison_history,
+    save_pending_order,
+    get_pending_order,
+    list_pending_orders,
+    delete_pending_order,
+    save_order_audit,
+    get_order_audit,
+    list_order_audits,
+    delete_order_audit,
 )
 
 ENGINE_URL = "sqlite:///:memory:"
@@ -80,7 +105,7 @@ class TestSaveAndGetBacktest:
         )
         assert isinstance(result_id, int) and result_id >= 1
 
-        retrieved = get_backtest(ENGINE_URL, result_id)
+        retrieved = get_backtest(ENGINE_URL, result_id=result_id)
         assert retrieved is not None
         assert retrieved["strategy_name"] == "ma_cross"
         assert retrieved["symbol"] == "600519.SH"
@@ -138,6 +163,7 @@ class TestDeleteBacktest:
         """Deleting an existing record returns True; deleting non-existing returns False."""
         rid = save_backtest(
             engine_url=ENGINE_URL,
+            user_id="test_user",
             strategy_name="test_strat",
             symbol="000001.SZ",
             start_date="2024-01-01",
@@ -148,8 +174,8 @@ class TestDeleteBacktest:
             equity_curve=[],
             trades_summary=[],
         )
-        assert delete_backtest(ENGINE_URL, rid) is True
-        assert delete_backtest(ENGINE_URL, rid) is False  # already deleted
+        assert delete_backtest(ENGINE_URL, user_id="test_user", result_id=rid) is True
+        assert delete_backtest(ENGINE_URL, user_id="test_user", result_id=rid) is False  # already deleted
 
     def test_delete_nonexistent(self):
         assert delete_backtest(ENGINE_URL, 99999) is False
@@ -245,7 +271,7 @@ class TestSaveAnalysis:
 class TestNoneResultForMissing:
     def test_get_backtest_missing_id(self):
         """get_backtest(id=999) returns None for non-existing record."""
-        assert get_backtest(ENGINE_URL, 999) is None
+        assert get_backtest(ENGINE_URL, result_id=999) is None
 
     def test_get_kline_missing_symbol(self):
         """get_kline for a symbol that doesn't exist returns empty list."""
@@ -254,3 +280,148 @@ class TestNoneResultForMissing:
     def test_delete_nonexistent_id(self):
         """delete_backtest(id=999) returns False for non-existing record."""
         assert delete_backtest(ENGINE_URL, 999) is False
+
+
+# ── TestBacktestTaskCrud ──────────────────────────────────────────────────
+
+
+class TestBacktestTaskCrud:
+    def test_save_and_get_backtest_task(self):
+        save_backtest_task(ENGINE_URL, user_id="u1", task_id="bt1", status="running", result=json.dumps({"pnl": 100}))
+        task = get_backtest_task(ENGINE_URL, user_id="u1", task_id="bt1")
+        assert task is not None
+        assert task["status"] == "running"
+
+    def test_list_backtest_tasks(self):
+        for i in range(3):
+            save_backtest_task(ENGINE_URL, user_id="u2", task_id=f"bt_u2_{i}", status="completed")
+        tasks = list_backtest_tasks(ENGINE_URL, user_id="u2")
+        assert len(tasks) == 3
+
+    def test_delete_backtest_task(self):
+        save_backtest_task(ENGINE_URL, user_id="u3", task_id="bt_del", status="running")
+        assert delete_backtest_task(ENGINE_URL, user_id="u3", task_id="bt_del") is True
+        assert delete_backtest_task(ENGINE_URL, user_id="u3", task_id="bt_del") is False
+
+
+# ── TestCollectTaskCrud ───────────────────────────────────────────────────
+
+
+class TestCollectTaskCrud:
+    def test_save_and_get_collect_task(self):
+        save_collect_task(ENGINE_URL, user_id="u1", task_id="ct1", status="running", progress=0.5)
+        task = get_collect_task(ENGINE_URL, user_id="u1", task_id="ct1")
+        assert task is not None
+        assert task["status"] == "running"
+        assert task["progress"] == 0.5
+
+    def test_list_collect_tasks(self):
+        for i in range(3):
+            save_collect_task(ENGINE_URL, user_id="u2", task_id=f"ct_u2_{i}", status="completed")
+        tasks = list_collect_tasks(ENGINE_URL, user_id="u2")
+        assert len(tasks) == 3
+
+    def test_delete_collect_task(self):
+        save_collect_task(ENGINE_URL, user_id="u3", task_id="ct_del", status="running")
+        assert delete_collect_task(ENGINE_URL, user_id="u3", task_id="ct_del") is True
+        assert delete_collect_task(ENGINE_URL, user_id="u3", task_id="ct_del") is False
+
+
+# ── TestOptimizeTaskCrud ──────────────────────────────────────────────────
+
+
+class TestOptimizeTaskCrud:
+    def test_save_and_get_optimize_task(self):
+        save_optimize_task(ENGINE_URL, user_id="u1", task_id="ot1", status="running", result=json.dumps({"best": 0.9}))
+        task = get_optimize_task(ENGINE_URL, user_id="u1", task_id="ot1")
+        assert task is not None
+        assert task["status"] == "running"
+
+    def test_list_optimize_tasks(self):
+        for i in range(3):
+            save_optimize_task(ENGINE_URL, user_id="u2", task_id=f"ot_u2_{i}", status="completed")
+        tasks = list_optimize_tasks(ENGINE_URL, user_id="u2")
+        assert len(tasks) == 3
+
+    def test_delete_optimize_task(self):
+        save_optimize_task(ENGINE_URL, user_id="u3", task_id="ot_del", status="running")
+        assert delete_optimize_task(ENGINE_URL, user_id="u3", task_id="ot_del") is True
+        assert delete_optimize_task(ENGINE_URL, user_id="u3", task_id="ot_del") is False
+
+
+# ── TestComparisonHistoryCrud ─────────────────────────────────────────────
+
+
+class TestComparisonHistoryCrud:
+    def test_save_and_get_comparison_history(self):
+        import uuid
+        hid = str(uuid.uuid4())
+        save_comparison_history(ENGINE_URL, user_id="u1", history_id=hid, strategy_ids="s1,s2", result=json.dumps({"win": True}))
+        history = get_comparison_history(ENGINE_URL, user_id="u1", history_id=hid)
+        assert history is not None
+        assert history["strategy_ids"] == "s1,s2"
+
+    def test_list_comparison_history(self):
+        for i in range(3):
+            import uuid
+            save_comparison_history(ENGINE_URL, user_id="u2", history_id=str(uuid.uuid4()), strategy_ids=f"s{i},s{i+1}")
+        histories = list_comparison_history(ENGINE_URL, user_id="u2")
+        assert len(histories) == 3
+
+    def test_delete_comparison_history(self):
+        import uuid
+        hid = str(uuid.uuid4())
+        save_comparison_history(ENGINE_URL, user_id="u3", history_id=hid, strategy_ids="s1,s2")
+        assert delete_comparison_history(ENGINE_URL, user_id="u3", history_id=hid) is True
+        assert delete_comparison_history(ENGINE_URL, user_id="u3", history_id=hid) is False
+
+
+# ── TestPendingOrderCrud ──────────────────────────────────────────────────
+
+
+class TestPendingOrderCrud:
+    def test_save_and_get_pending_order(self):
+        save_pending_order(ENGINE_URL, user_id="u1", order_id="po1", symbol="sh600519", type="buy", price=1800.0, quantity=100, status="pending")
+        order = get_pending_order(ENGINE_URL, user_id="u1", order_id="po1")
+        assert order is not None
+        assert order["symbol"] == "sh600519"
+        assert order["price"] == 1800.0
+
+    def test_list_pending_orders(self):
+        for i in range(3):
+            save_pending_order(ENGINE_URL, user_id="u2", order_id=f"po_u2_{i}", symbol="sh600519", type="buy")
+        orders = list_pending_orders(ENGINE_URL, user_id="u2")
+        assert len(orders) == 3
+
+    def test_delete_pending_order(self):
+        save_pending_order(ENGINE_URL, user_id="u3", order_id="po_del", symbol="sh600519", type="buy")
+        assert delete_pending_order(ENGINE_URL, user_id="u3", order_id="po_del") is True
+        assert delete_pending_order(ENGINE_URL, user_id="u3", order_id="po_del") is False
+
+
+# ── TestOrderAuditCrud ────────────────────────────────────────────────────
+
+
+class TestOrderAuditCrud:
+    def test_save_and_get_order_audit(self):
+        import uuid
+        aid = str(uuid.uuid4())
+        save_order_audit(ENGINE_URL, user_id="u1", audit_id=aid, order_id="ord1", action="SUBMITTED", details=json.dumps({"price": 1800}))
+        audit = get_order_audit(ENGINE_URL, user_id="u1", audit_id=aid)
+        assert audit is not None
+        assert audit["order_id"] == "ord1"
+        assert audit["action"] == "SUBMITTED"
+
+    def test_list_order_audits(self):
+        for i in range(3):
+            import uuid
+            save_order_audit(ENGINE_URL, user_id="u2", audit_id=str(uuid.uuid4()), order_id=f"ord_{i}", action="FILLED")
+        audits = list_order_audits(ENGINE_URL, user_id="u2")
+        assert len(audits) == 3
+
+    def test_delete_order_audit(self):
+        import uuid
+        aid = str(uuid.uuid4())
+        save_order_audit(ENGINE_URL, user_id="u3", audit_id=aid, order_id="ord_del", action="CANCELLED")
+        assert delete_order_audit(ENGINE_URL, user_id="u3", audit_id=aid) is True
+        assert delete_order_audit(ENGINE_URL, user_id="u3", audit_id=aid) is False

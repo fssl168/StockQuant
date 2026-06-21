@@ -13,11 +13,11 @@ describe('Backtest API', () => {
   })
 
   // ---- list ----
-  it('backtestApi.list should call GET /backtest', async () => {
+  it('backtestApi.list should call GET /api/backtest', async () => {
     const mockList = [{ task_id: 't1', status: 'completed' }]
     vi.mocked(client.get).mockResolvedValueOnce(mockList)
     const result = await backtestApi.list()
-    expect(client.get).toHaveBeenCalledWith('/backtest')
+    expect(client.get).toHaveBeenCalledWith('/api/backtest')
     expect(result).toEqual(mockList)
   })
 
@@ -28,11 +28,11 @@ describe('Backtest API', () => {
   })
 
   // ---- get ----
-  it('backtestApi.get should call GET /backtest/:id', async () => {
+  it('backtestApi.get should call GET /api/backtest/:id', async () => {
     const mockTask = { task_id: 'test-1', status: 'completed', strategy_name: 'Dual MA' }
     vi.mocked(client.get).mockResolvedValueOnce(mockTask)
     const result = await backtestApi.get('test-1')
-    expect(client.get).toHaveBeenCalledWith('/backtest/test-1')
+    expect(client.get).toHaveBeenCalledWith('/api/backtest/test-1')
     expect(result).toEqual(mockTask)
   })
 
@@ -42,7 +42,7 @@ describe('Backtest API', () => {
   })
 
   // ---- submit ----
-  it('backtestApi.submit should call POST /backtest with payload', async () => {
+  it('backtestApi.submit should call POST /api/backtest with payload', async () => {
     const mockResponse = { task_id: 'task-1', status: 'pending' }
     vi.mocked(client.post).mockResolvedValueOnce(mockResponse)
     const payload = {
@@ -57,7 +57,7 @@ describe('Backtest API', () => {
       equity_curve: [] as unknown[],
     }
     const result = await backtestApi.submit(payload)
-    expect(client.post).toHaveBeenCalledWith('/backtest', payload)
+    expect(client.post).toHaveBeenCalledWith('/api/backtest', payload)
     expect(result).toEqual(mockResponse)
   })
 

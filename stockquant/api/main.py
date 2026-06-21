@@ -24,6 +24,11 @@ from stockquant.api.routers import backtest, strategy, dashboard, monitor, ai_ch
 from stockquant.api.routers import auth as auth_router
 from stockquant.api.routers import signal as signal_router
 from stockquant.api.routers import scheduler as scheduler_router
+from stockquant.api.routers import audit as audit_router
+from stockquant.api.routers import monitoring as monitoring_router
+from stockquant.api.routers import memory as memory_router
+from stockquant.api.routers import hallucination as hallucination_router
+from stockquant.api.routers import pipeline as pipeline_router
 from stockquant.api.websocket import ws_manager
 from stockquant.config import get_config, reload_config
 
@@ -100,6 +105,15 @@ def create_app() -> FastAPI:
     app.include_router(auth_router.router, prefix="/api", tags=["认证"])
     app.include_router(signal_router.router, prefix="/api", tags=["信号管线"])
     app.include_router(scheduler_router.router, prefix="/api", tags=["调度器"])
+
+    # 注册审计日志和监控端点
+    app.include_router(audit_router.router, prefix="/api", tags=["审计日志"])
+    app.include_router(monitoring_router.router, prefix="", tags=["监控"])
+
+    # 注册 AI 基础设施端点
+    app.include_router(memory_router.router, prefix="/api", tags=["记忆系统"])
+    app.include_router(hallucination_router.router, prefix="/api", tags=["反幻觉系统"])
+    app.include_router(pipeline_router.router, prefix="/api", tags=["AI 信息管线"])
 
     # WebSocket 端点 — 统一路径 /ws/*
     @app.websocket("/ws")
@@ -304,6 +318,39 @@ def create_app() -> FastAPI:
         logger.info("AI Agent Orchestrator 已初始化: %s", orch.registered_agents)
     except Exception as e:
         logger.warning("Orchestrator 初始化失败（非致命）: %s", e)
+
+    # 初始化记忆系统（如果 PostgreSQL 不可用则降级）
+    _memory_system = None
+    try:
+        from stockquant.ai.memory.system import MemorySystem
+        _memory_system = MemorySystem()
+        memory_router.init_memory(_memory_system)
+        logger.info("记忆系统已初始化 (L1=in-memory, L2/L3=%s)", "PostgreSQL" if "pgvector" in str(_memory_system.l2.__class__.__module__) else "fallback")
+    except ImportError as e:
+        logger.warning("记忆系统未安装（非致命）: %s", e)
+    except Exception as e:
+        logger.warning("记忆系统初始化失败（降级为 SQLite）: %s", e)
+
+    # 初始化反幻觉数据库
+    try:
+        from stockquant.ai.hallucination.database import HallucinationDatabase
+        hallucination_db = HallucinationDatabase()
+        hallucination_router.init_database(hallucination_db)
+        logger.info("反幻觉数据库已初始化")
+    except Exception as e:
+        logger.warning("反幻觉数据库初始化失败（非致命）: %s", e)
+
+    # 初始化 AI 信息管线
+    try:
+        from stockquant.ai.pipeline_orchestrator import InformationProcessingPipeline
+        if _memory_system is not None:
+            pipeline = InformationProcessingPipeline(memory=_memory_system)
+        else:
+            pipeline = InformationProcessingPipeline()
+        pipeline_router.init_pipeline(pipeline)
+        logger.info("AI 信息管线已初始化")
+    except Exception as e:
+        logger.warning("AI 信息管线初始化失败（非致命）: %s", e)
 
     # 从 Redis 加载自选股列表
     try:

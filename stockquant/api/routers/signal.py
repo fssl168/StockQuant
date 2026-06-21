@@ -8,7 +8,8 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from stockquant.api.deps import get_current_user, get_required_user
+from stockquant.api.deps import get_current_user, get_required_user, get_trader_user
+from stockquant.api.schemas import AddSignalRequest, UserToken
 
 from stockquant.strategy.signal import SignalManager, Signal, SignalSide, SignalSource
 
@@ -28,7 +29,8 @@ async def list_signals(
     symbol: Optional[str] = None,
     side: Optional[str] = None,
     source: Optional[str] = None,
-):
+    _user: UserToken = Depends(get_required_user),
+) -> Dict[str, Any]:
     """获取当前活跃信号列表，支持按标的/方向/来源过滤"""
     signals = _signal_manager.get_active_signals()
     if symbol:
@@ -41,17 +43,17 @@ async def list_signals(
 
 
 @router.post("", summary="手动添加信号")
-async def add_signal(payload: Dict[str, Any], _user=Depends(get_required_user)):
+async def add_signal(payload: AddSignalRequest, _user: UserToken = Depends(get_required_user)) -> Dict[str, Any]:
     """手动添加交易信号"""
     try:
         signal = Signal(
-            symbol=payload["symbol"],
-            side=SignalSide(payload.get("side", "HOLD").upper()),
-            source=SignalSource(payload.get("source", "AI_DECISION")),
-            confidence=payload.get("confidence", 0.5),
-            reason=payload.get("reason", ""),
-            price=payload.get("price"),
-            quantity=payload.get("quantity"),
+            symbol=payload.symbol,
+            side=SignalSide(payload.side.upper()),
+            source=SignalSource(payload.source),
+            confidence=payload.confidence,
+            reason=payload.reason,
+            price=payload.price,
+            quantity=payload.quantity,
         )
         result = _signal_manager.add_signal(signal)
         return {"success": True, "signal": _signal_to_dict(signal), "action": result}
@@ -60,7 +62,7 @@ async def add_signal(payload: Dict[str, Any], _user=Depends(get_required_user)):
 
 
 @router.delete("/{signal_id}", summary="移除信号")
-async def remove_signal(signal_id: str):
+async def remove_signal(signal_id: str, _user: UserToken = Depends(get_trader_user)) -> Dict[str, Any]:
     """移除指定信号"""
     signals = _signal_manager.get_active_signals()
     target = None
@@ -78,8 +80,8 @@ async def remove_signal(signal_id: str):
 async def signal_audit(
     symbol: Optional[str] = None,
     limit: int = 50,
-    _user=Depends(get_current_user),
-):
+    _user: UserToken = Depends(get_current_user),
+) -> Dict[str, Any]:
     """获取信号审计日志"""
     logs = _signal_manager.get_audit_logs()
     if symbol:
@@ -88,7 +90,7 @@ async def signal_audit(
 
 
 @router.get("/stats", summary="信号统计")
-async def signal_stats(_user=Depends(get_current_user)):
+async def signal_stats(_user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
     """获取信号管线统计信息"""
     signals = _signal_manager.get_active_signals()
     return {
@@ -105,7 +107,7 @@ async def signal_stats(_user=Depends(get_current_user)):
     }
 
 
-def _signal_to_dict(signal: Signal) -> Dict:
+def _signal_to_dict(signal: Signal) -> Dict[str, Any]:
     return {
         "id": str(id(signal)),
         "symbol": signal.symbol,
@@ -120,7 +122,7 @@ def _signal_to_dict(signal: Signal) -> Dict:
     }
 
 
-def _audit_to_dict(log) -> Dict:
+def _audit_to_dict(log: Any) -> Dict[str, Any]:
     return {
         "signal": _signal_to_dict(log.signal) if hasattr(log, "signal") else {},
         "action": log.action if hasattr(log, "action") else "",

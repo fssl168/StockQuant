@@ -169,7 +169,7 @@ export default function Data() {
 
   // Load collection logs from backend
   useEffect(() => {
-    client.get('/data/collect-logs')
+    client.get('/api/data/collect-logs')
       .then((data: any) => {
         const logs = Array.isArray(data) ? data : (data?.data ?? [])
         if (logs.length > 0) setLogData(logs)
@@ -180,7 +180,7 @@ export default function Data() {
   const handleDownload = async (provider: string) => {
     try {
       message.loading({ content: `${provider} 数据下载中...`, key: 'download', duration: 0 })
-      await client.get(`/data/download?provider=${provider}`)
+      await client.get(`/api/data/download?provider=${provider}`)
       message.success({ content: `${provider} 数据下载完成`, key: 'download' })
       fetchSources()
       fetchCacheStats()

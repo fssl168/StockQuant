@@ -20,10 +20,13 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from stockquant.api.deps import get_current_user, get_trader_user
+from stockquant.api.deps import get_current_user, get_admin_user, get_trader_user
+from stockquant.api.schemas import AccountSummaryResponse, PlaceOrderRequest, UserToken
 from stockquant.api.routers.settings import _settings, _decrypt_value
 from stockquant.engine.broker import PaperBroker, LiveBroker
 from stockquant.engine.commission import CommissionInfo
+from stockquant.engine.risk import RiskManager
+from stockquant.ai.risk_agent import RiskAgent
 from stockquant.models.account import Account
 from stockquant.models.bar import BarData
 from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
@@ -56,6 +59,17 @@ _paper_broker = PaperBroker(
 # 佣金模型
 _commission_info = CommissionInfo()
 
+# 风控管理器
+_risk_manager = RiskManager(
+    max_position_pct=0.3,
+    max_buy_amount=500_000.0,
+    max_total_position_pct=0.9,
+    max_daily_loss_pct=0.02,
+    max_drawdown_pct=0.15,
+    max_orders_per_minute=10,
+    global_circuit_breaker_pct=0.05,
+)
+
 # 行情缓存（避免频繁网络请求）
 _price_cache: dict[str, tuple[float, float]] = {}  # symbol -> (price, timestamp)
 _price_cache_timeout = 60  # 缓存有效期 60 秒
@@ -85,21 +99,23 @@ def _get_broker():
             try:
                 from stockquant.execution.brokers.qmt_broker import QMTBroker
                 return QMTBroker(
-                    qmt_path=_settings.get("qmt.path", ""),
-                    account_id=_settings.get("qmt.account", ""),
+                    qmt_path=_settings.get("trading.qmt_path", ""),
+                    account_id=_settings.get("trading.qmt_account", ""),
                 )
             except ImportError:
                 logger.warning("QMTBroker 导入失败，降级为 LiveBroker 骨架")
         elif api == "xtp":
             try:
                 from stockquant.execution.brokers.xtp_broker import XTPBroker
+                xtp_app_id = _settings.get("trading.xtp_app_id", "0")
+                xtp_client_id = _settings.get("trading.xtp_client_id", "0")
                 return XTPBroker(
-                    user=_settings.get("xtp.user", ""),
-                    password=_decrypt_value(_settings.get("xtp.password", "")),
-                    app_id=int(_settings.get("xtp.app_id", "0")),
-                    client_id=int(_settings.get("xtp.client_id", "0")),
-                    server_addr=_settings.get("xtp.server_addr", ""),
-                    software_key=_settings.get("xtp.software_key", ""),
+                    user=_settings.get("trading.xtp_user", ""),
+                    password=_decrypt_value(_settings.get("trading.xtp_password", "")),
+                    app_id=int(xtp_app_id) if xtp_app_id else 0,
+                    client_id=int(xtp_client_id) if xtp_client_id else 0,
+                    server_addr=_settings.get("trading.xtp_server_addr", ""),
+                    software_key=_settings.get("trading.xtp_software_key", ""),
                 )
             except ImportError:
                 logger.warning("XTPBroker 导入失败，降级为 LiveBroker 骨架")
@@ -107,11 +123,11 @@ def _get_broker():
             try:
                 from stockquant.execution.brokers.ctp_broker import CTPBroker
                 return CTPBroker(
-                    user=_settings.get("ctp.user", ""),
-                    password=_decrypt_value(_settings.get("ctp.password", "")),
-                    broker_id=_settings.get("ctp.broker_id", ""),
-                    front_addr=_settings.get("ctp.front_addr", ""),
-                    app_id=_settings.get("ctp.app_id", ""),
+                    user=_settings.get("trading.ctp_user", ""),
+                    password=_decrypt_value(_settings.get("trading.ctp_password", "")),
+                    broker_id=_settings.get("trading.ctp_broker_id", ""),
+                    front_addr=_settings.get("trading.ctp_front_addr", ""),
+                    app_id=_settings.get("trading.ctp_app_id", ""),
                 )
             except ImportError:
                 logger.warning("CTPBroker 导入失败，降级为 LiveBroker 骨架")
@@ -476,36 +492,43 @@ def _apply_trade_to_portfolio(trade):
 # ====================================================================
 
 @router.get("/trading/account", summary="账户信息")
-async def get_account():
+async def get_account() -> Dict[str, Any]:
     """获取账户信息 — 从 Portfolio 模型读取"""
     acc = _portfolio.account
     positions = _portfolio.positions
     market_value = sum(p.market_value for p in positions.values() if p.quantity > 0)
+    total_equity = acc.total_equity
+    today_pnl = acc.unrealized_pnl
     return {
-        "total_equity": round(acc.total_equity, 2),
+        "total_equity": round(total_equity, 2),
+        "cash": round(acc.cash, 2),
+        "frozen_cash": round(acc.cash - acc.available_cash, 2),
+        "market_value": round(market_value, 2),
         "available_cash": round(acc.available_cash, 2),
-        "position_value": round(market_value, 2),
-        "today_pnl": round(acc.unrealized_pnl, 2),
+        "daily_pnl": round(today_pnl, 2),
+        "daily_pnl_pct": round(today_pnl / _initial_cash * 100, 2) if _initial_cash > 0 else 0,
+        "position_value": round(market_value, 2),  # 保留向后兼容
+        "today_pnl": round(today_pnl, 2),          # 保留向后兼容
         "broker_mode": "paper",
     }
 
 
 @router.post("/trading/order", summary="下单")
-async def place_order(payload: dict, _user=Depends(get_trader_user)):
+async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get_admin_user)) -> Dict[str, Any]:
     """提交订单 — 通过 PaperBroker 撮合"""
     # 幂等性检查：如果相同 idempotency_key 已提交，返回之前的订单结果
-    idempotency_key = payload.get("idempotency_key", "")
+    idempotency_key = payload.idempotency_key
     if idempotency_key:
         cached = _check_idempotency(idempotency_key)
         if cached is not None:
             logger.info(f"幂等性命中: key={idempotency_key}")
             return cached
 
-    symbol = payload.get("symbol", "")
-    side = payload.get("side", "BUY")
-    order_type = payload.get("type", "MARKET")
-    price = payload.get("price", 0)
-    quantity = payload.get("quantity", 0)
+    symbol = payload.symbol
+    side = payload.side
+    order_type = payload.type
+    price = payload.price
+    quantity = payload.quantity
 
     if not symbol or quantity <= 0:
         raise HTTPException(status_code=400, detail="股票代码和数量不能为空")
@@ -544,6 +567,7 @@ async def place_order(payload: dict, _user=Depends(get_trader_user)):
     # 记录审计日志
     _orders_audit[order_id] = {
         "order_id": order_id,
+        "id": order_id,  # 前端 rowKey="id" 期望
         "symbol": symbol,
         "side": side.upper(),
         "type": order_type.upper(),
@@ -581,6 +605,42 @@ async def place_order(payload: dict, _user=Depends(get_trader_user)):
             _store_idempotency(idempotency_key, result)
         _persist_trading_state()
         return result
+
+    # 风控检查：在撮合之前拦截不合规订单
+    total_equity = _portfolio.account.total_equity
+    risk_valid, risk_reason = _risk_manager.check(
+        order=order,
+        equity=total_equity,
+        positions=_portfolio.positions,
+        total_equity=total_equity,
+    )
+    if not risk_valid:
+        _orders_audit[order_id]["status"] = "RISK_REJECTED"
+        _orders_audit[order_id]["risk_reason"] = risk_reason
+        _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+
+        # 记录到风控事件表
+        try:
+            from stockquant.api.routers.auth import _get_db_url
+            from stockquant.persistence.repository import save_risk_event
+            db_url = _get_db_url()
+            save_risk_event(
+                engine_url=db_url,
+                user_id="",
+                event_type="ORDER_RISK_REJECTED",
+                severity="WARNING",
+                detail=f"Order {order_id} rejected: {risk_reason}",
+                order_id=order_id,
+            )
+        except Exception:
+            pass
+
+        # 如果触发熔断，自动冻结
+        if "circuit breaker" in risk_reason.lower() or "drawdown" in risk_reason.lower() or "daily loss" in risk_reason.lower():
+            _risk_manager.halt(risk_reason)
+
+        logger.warning(f"订单被风控拒绝: {order_id} {risk_reason}")
+        raise HTTPException(status_code=400, detail=f"风控拦截: {risk_reason}")
 
     # MARKET 订单：直接通过 PaperBroker 撮合
     if order_side == OrderSide.BUY:
@@ -623,7 +683,7 @@ async def place_order(payload: dict, _user=Depends(get_trader_user)):
 
 
 @router.delete("/trading/order/{order_id}", summary="撤单")
-async def cancel_order(order_id: str, _user=Depends(get_trader_user)):
+async def cancel_order(order_id: str, _user: UserToken = Depends(get_trader_user)) -> Dict[str, Any]:
     """撤销订单 — 从 pending limit 订单簿或订单审计中查找"""
     # 优先从 pending limit 订单簿查找
     if order_id in _pending_limit_orders:
@@ -681,8 +741,10 @@ async def get_trades():
     """获取成交记录 — 从 PaperBroker trade_log 读取"""
     result = []
     for trade in _paper_broker.trade_log:
+        ts = datetime.fromtimestamp(trade.timestamp).isoformat() if trade.timestamp else None
         result.append({
-            "trade_id": trade.trade_id,
+            "id": trade.trade_id,          # 前端 rowKey="id" 期望
+            "trade_id": trade.trade_id,    # 保留：向后兼容
             "order_id": trade.order_id,
             "symbol": trade.symbol,
             "side": trade.side,
@@ -690,14 +752,14 @@ async def get_trades():
             "quantity": trade.quantity,
             "amount": round(trade.price * trade.quantity, 2),
             "commission": trade.commission,
-            "filled_at": datetime.fromtimestamp(trade.timestamp).isoformat()
-                         if trade.timestamp else None,
+            "timestamp": ts,               # 前端 dataIndex="timestamp" 期望
+            "filled_at": ts,               # 保留：向后兼容
         })
     return sorted(result, key=lambda t: t.get("filled_at", "") or "", reverse=True)
 
 
 @router.get("/trading/orders", summary="订单列表")
-async def get_orders(_user=Depends(get_current_user)):
+async def get_orders(_user: UserToken = Depends(get_current_user)) -> List[Dict[str, Any]]:
     """获取订单列表 — 合并审计日志 + pending limit 订单"""
     result = list(_orders_audit.values())
     # 添加 pending limit 订单
@@ -706,6 +768,7 @@ async def get_orders(_user=Depends(get_current_user)):
             now = datetime.now().isoformat()
             _orders_audit[order_id] = {
                 "order_id": order_id,
+                "id": order_id,  # 前端 rowKey="id" 期望
                 "symbol": order.symbol,
                 "side": order.side.value,
                 "type": order.order_type.value,
@@ -716,4 +779,111 @@ async def get_orders(_user=Depends(get_current_user)):
                 "updated_at": now,
             }
             result.append(_orders_audit[order_id])
+    # 为已有订单补充 id 字段（向后兼容）
+    for order in result:
+        if "id" not in order:
+            order["id"] = order.get("order_id", "")
     return result
+
+
+@router.get("/trading/account-status", summary="账户连接状态")
+async def get_account_status(_user: UserToken = Depends(get_current_user)) -> AccountSummaryResponse:
+    """获取当前券商配置下的账户连接状态。
+
+    测试当前券商配置（trading.broker + trading.api）下的连接状态，
+    返回余额和持仓摘要。如果券商 SDK 未连接，显示模拟模式。
+    """
+    broker = _get_broker()
+    broker_type = getattr(broker, "api", "paper")
+    broker_name = broker_type.upper() if broker_type != "paper" else "PAPER"
+
+    if getattr(broker, "connected", False):
+        balance = broker.get_balance()
+        positions = broker.get_positions()
+        return {
+            "connected": True,
+            "broker_type": broker_type,
+            "broker_name": broker_name,
+            "balance": balance,
+            "positions": positions,
+        }
+    else:
+        # 判断是否为 live broker 但未连接
+        broker_mode = _settings.get("trading.broker", "paper")
+        is_live_config = broker_mode == "live"
+        message = (
+            "Broker 未连接，当前为模拟模式"
+            if not is_live_config
+            else "Broker 未连接（配置为实盘但 SDK 不可用或参数不正确）"
+        )
+        return {
+            "connected": False,
+            "broker_type": broker_type,
+            "broker_name": broker_name,
+            "message": message,
+            "balance": broker.get_balance() if hasattr(broker, "get_balance") else {"live": False, "api": broker_type, "cash": 0, "frozen": 0, "equity": 0},
+        }
+
+
+# ====================================================================
+# 风控端点
+# ====================================================================
+
+@router.get("/trading/risk/status", summary="风控状态")
+async def get_risk_status(_user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
+    """获取当前风控状态和历史事件。"""
+    from stockquant.api.routers.auth import _get_db_url
+    from stockquant.persistence.repository import list_risk_events
+
+    db_url = _get_db_url()
+    events = list_risk_events(db_url, user_id="", limit=20)
+    return {
+        "halted": _risk_manager.is_halted,
+        "halt_reason": _risk_manager._halt_reason if _risk_manager._halted else "",
+        "config": {
+            "max_position_pct": _risk_manager._max_position_pct,
+            "max_buy_amount": _risk_manager._max_buy_amount,
+            "max_total_position_pct": _risk_manager._max_total_position_pct,
+            "max_daily_loss_pct": _risk_manager._max_daily_loss_pct,
+            "max_drawdown_pct": _risk_manager._max_drawdown_pct,
+            "max_orders_per_minute": _risk_manager._max_orders_per_minute,
+            "global_circuit_breaker_pct": _risk_manager._global_circuit_breaker_pct,
+        },
+        "recent_events": events,
+    }
+
+
+@router.post("/trading/risk/resume", summary="恢复交易")
+async def resume_trading(_user: UserToken = Depends(get_admin_user)) -> Dict[str, Any]:
+    """恢复被熔断的交易。"""
+    _risk_manager.resume()
+
+    # 记录到风控事件表
+    try:
+        from stockquant.api.routers.auth import _get_db_url
+        from stockquant.persistence.repository import save_risk_event
+        db_url = _get_db_url()
+        save_risk_event(
+            engine_url=db_url,
+            user_id="",
+            event_type="TRADE_RESUMED",
+            severity="INFO",
+            detail="Trading resumed by admin",
+        )
+    except Exception:
+        pass
+
+    logger.info("Trading resumed by admin")
+    return {"success": True, "message": "交易已恢复"}
+
+@router.get("/trading/risk/report", summary="风控报告")
+async def get_risk_report_endpoint(_user: UserToken = Depends(get_trader_user)) -> Dict[str, Any]:
+    """获取动态风控报告 — 参数调整历史 + 异常检测 + 黑天鹅状态"""
+    try:
+        risk_agent = RiskAgent()
+        report = risk_agent.get_risk_report()
+        return report
+    except ImportError as e:
+        raise HTTPException(status_code=501, detail=f"风控模块不可用: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取风控报告失败: {str(e)}")

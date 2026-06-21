@@ -6,7 +6,8 @@ from stockquant.ai.indicator_agent import IndicatorAgent, MarketState
 from stockquant.ai.risk_agent import RiskAgent, DynamicRiskParams, MarketEnvironment
 from stockquant.ai.json_utils import robust_json_parse
 from stockquant.ai.news_searcher import NewsSearcher, NewsItem
-from stockquant.ai.strategy_agent import StrategyAgent
+# StrategyAgent 延迟导入以避免循环导入
+# from stockquant.ai.strategy_agent import StrategyAgent
 from stockquant.ai.decision_agent import DecisionAgent
 from stockquant.ai.chat_agent import ChatAgent, Conversation
 from stockquant.ai.chat_memory import ChatMemory
@@ -39,7 +40,7 @@ __all__ = [
     "robust_json_parse",
     "NewsSearcher",
     "NewsItem",
-    "StrategyAgent",
+    # "StrategyAgent",  # 延迟导入以避免循环导入
     "DecisionAgent",
     "ChatAgent",
     "Conversation",

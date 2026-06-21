@@ -459,6 +459,12 @@ class DecisionAgent:
                 },
                 final_action=final_action,
                 user_confirmed=log.user_confirmed,
+                llm_model=self._react.model if hasattr(self._react, "model") else None,
+                llm_prompt=advice._raw_prompt if hasattr(advice, "_raw_prompt") else None,
+                llm_response=advice._raw_response if hasattr(advice, "_raw_response") else None,
+                llm_reasoning_content=advice._reasoning_content if hasattr(advice, "_reasoning_content") else None,
+                llm_tokens_used=advice._tokens_used if hasattr(advice, "_tokens_used") else None,
+                llm_cost=advice._cost if hasattr(advice, "_cost") else None,
             )
         except Exception:
             logger.debug("Audit log persistence failed (non-fatal)")

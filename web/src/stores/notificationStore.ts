@@ -30,17 +30,17 @@ export const useNotificationStore = create<NotificationState>((set) => ({
     set((st) => ({
       notifications: st.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)),
     }))
-    client.put(`/notifications/${id}/read`).catch(() => {})
+    client.put(`/api/notifications/${id}/read`).catch(() => {})
   },
   deleteNotification: (id: string) => {
     set((st) => ({
       notifications: st.notifications.filter((n) => n.id !== id),
     }))
-    client.delete(`/notifications/${id}`).catch(() => {})
+    client.delete(`/api/notifications/${id}`).catch(() => {})
   },
   fetchFromBackend: async () => {
     try {
-      const data = await client.get('/notifications') as any
+      const data = await client.get('/api/notifications') as any
       if (Array.isArray(data)) {
         set({ notifications: data })
       }

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -14,9 +15,12 @@ from stockquant.ai.monitor_agent import MonitorAgent, MonitorSignal
 from stockquant.ai.news_searcher import NewsSearcher
 from stockquant.ai.signal_fusion import SignalFusion, SourceSignal, SignalDirection
 from stockquant.api.deps import get_current_user, get_required_user
+from stockquant.api.schemas import UserToken
+from stockquant.api.routers.settings import build_data_feed
 from stockquant.api.websocket import ws_manager
 from stockquant.data import DataFetcherManager
 from stockquant.persistence.redis_client import get_watchlist as get_watchlist_redis, add_to_watchlist as add_to_watchlist_redis, remove_from_watchlist as remove_from_watchlist_redis
+from stockquant.persistence.persistent_store import MonitorAlertStore
 
 router = APIRouter(prefix="/monitor", tags=["monitor"])
 
@@ -26,10 +30,17 @@ logger = logging.getLogger("stockquant.ai")
 # ── 全局监控状态（使用 Redis 持久化） ──
 
 _watchlist: list[str] = []
-_alerts: list[MonitorSignal] = []
+_alerts: MonitorAlertStore = MonitorAlertStore()
 _agent: Optional[MonitorAgent] = None
 _agent_lock = threading.Lock()
 _signal_fusion = SignalFusion()
+
+def set_alert_storage(alert_store: MonitorAlertStore | None):
+    """告警存储注入（由 main.py 调用）"""
+    global _alerts
+    if alert_store is not None:
+        _alerts = alert_store
+
 
 def _load_watchlist_from_redis():
     """从 Redis 加载自选股列表"""
@@ -47,13 +58,31 @@ def _get_agent() -> MonitorAgent:
     if _agent is None:
         with _agent_lock:
             if _agent is None:
+                # 创建数据源管理器并注册多个数据源（按优先级降序）
+                fetcher_manager = DataFetcherManager()
+                feed = build_data_feed(symbols=[], timeframe="1d", start_date="", end_date="")
+                fetcher_manager.register_fetcher(
+                    feed,
+                    priority=1,
+                    health_check=lambda: True  # BaoStock 需要登录，成功登录后返回 True
+                )
+                # AkShare 作为 fallback
+                from stockquant.data.providers import AkShareFeed
+                fetcher_manager.register_fetcher(
+                    AkShareFeed(symbols=[], timeframe="1d"),
+                    priority=0,
+                    health_check=lambda: True
+                )
+
                 _agent = MonitorAgent(
-                    fetcher_manager=DataFetcherManager(),
+                    fetcher_manager=fetcher_manager,
                     news_searcher=NewsSearcher(),
                     threshold=0.5,
                 )
                 # 注入 WebSocket 管理器用于实时监控推送
                 _agent.set_websocket_manager(ws_manager)
+                # 注入数据库 URL 用于告警持久化
+                _agent.set_db_url(os.environ.get("DATABASE_URL", "sqlite:///./stockquant.db"))
     return _agent
 
 
@@ -110,7 +139,7 @@ def remove_from_watchlist(symbols: list[str]) -> list[str]:
 
 
 @router.get("/alerts", response_model=List[Dict[str, Any]])
-def get_alerts(limit: int = 50, _user=Depends(get_current_user)) -> List[Dict[str, Any]]:
+def get_alerts(limit: int = 50, _user: UserToken = Depends(get_current_user)) -> List[Dict[str, Any]]:
     """获取告警记录"""
     agent = _get_agent()
     return [_signal_to_dict(a) for a in agent.get_alerts(limit)]
@@ -156,7 +185,7 @@ def post_market_summary() -> str:
 
 
 @router.get("/status")
-def get_status(_user=Depends(get_current_user)) -> Dict[str, Any]:
+def get_status(_user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
     """获取监控状态"""
     try:
         agent = _get_agent()
@@ -173,7 +202,7 @@ def get_status(_user=Depends(get_current_user)) -> Dict[str, Any]:
 
 
 @router.post("/start-monitoring")
-def start_monitoring(body: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+def start_monitoring(body: Optional[Dict[str, Any]] = None, _user: UserToken = Depends(get_required_user)) -> Dict[str, str]:
     """启动实时扫描"""
     try:
         agent = _get_agent()

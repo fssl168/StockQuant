@@ -81,6 +81,57 @@ class BaoStockFeed(DataFeed):
         self._fetch_all()
         self._started = True
 
+    def fetch(self, symbol: str, timeframe: str = "1d",
+              start: str = "", end: str = "", days: int = 0) -> None:
+        """按需加载单个标的的数据"""
+        if symbol in self._dataframes and not self._dataframes[symbol].empty:
+            return  # 已加载，直接返回
+        # 计算日期范围
+        from datetime import timedelta
+        if days > 0:
+            end = datetime.now().strftime("%Y-%m-%d")
+            start = (datetime.now() - timedelta(days=days + 30)).strftime("%Y-%m-%d")
+        elif not start:
+            start = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+        elif not end:
+            end = datetime.now().strftime("%Y-%m-%d")
+        
+        # 转换 symbol 格式：sh600519 -> sh.600519
+        if len(symbol) == 8 and symbol[:2] in ("sh", "sz"):
+            bs_symbol = f"{symbol[:2]}.{symbol[2:]}"
+        else:
+            bs_symbol = symbol
+        
+        try:
+            import baostock as bs
+            bs.login()
+            rs = bs.query_history_k_data_plus(
+                bs_symbol,
+                "date,code,open,high,low,close,volume,amount,turn,pctChg",
+                start_date=start, end_date=end,
+                frequency="d", adjustflag="3"
+            )
+            data_list = []
+            while (rs.error_code == '0') and rs.next():
+                data_list.append(rs.get_row_data())
+            bs.logout()
+            
+            if data_list:
+                import pandas as pd
+                df = pd.DataFrame(data_list, columns=[
+                    "date", "code", "open", "high", "low", "close", "volume", "amount", "turn", "pctChg"
+                ])
+                df["close"] = pd.to_numeric(df["close"], errors="coerce")
+                df["open"] = pd.to_numeric(df["open"], errors="coerce")
+                df["high"] = pd.to_numeric(df["high"], errors="coerce")
+                df["low"] = pd.to_numeric(df["low"], errors="coerce")
+                df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
+                df["pctChg"] = pd.to_numeric(df["pctChg"], errors="coerce")
+                self._dataframes[symbol] = df
+                logger.info(f"BaoStockFeed: fetched {len(df)} rows for {symbol}")
+        except Exception as e:
+            logger.warning(f"BaoStockFeed: failed to fetch {symbol}: {e}")
+
     def stop(self):
         self._started = False
 
@@ -124,9 +175,14 @@ class BaoStockFeed(DataFeed):
         if cached is not None:
             return cached
 
+        # 转换 symbol 格式：sh600519 -> sh.600519
+        bs_symbol = symbol
+        if len(symbol) == 8 and symbol[:2] in ("sh", "sz"):
+            bs_symbol = f"{symbol[:2]}.{symbol[2:]}"
+
         fields = "date,open,high,low,close,volume,amount"
         query = bs.query_history_k_data_plus(
-            symbol,
+            bs_symbol,
             fields,
             start_date=self._start,
             end_date=self._end,

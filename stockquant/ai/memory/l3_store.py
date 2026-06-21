@@ -31,9 +31,11 @@ class L3Store:
         self,
         db_url: Optional[str] = None,
         embedding_dim: int = 1536,
+        user_id: str = "test_user",
     ) -> None:
         self._db_url = db_url or _default_db_url()
         self._embedding_dim = embedding_dim
+        self._user_id = user_id
         self._backend = "memory"  # 默认降级为内存
         self._engine = None
         self._session_factory = None
@@ -55,7 +57,7 @@ class L3Store:
             elif url.startswith("postgresql+psycopg2://"):
                 url = url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
 
-            self._engine = create_async_engine(url, echo=False, pool_size=5, max_overflow=10)
+            self._engine = create_async_engine(url, echo=False, pool_size=5)
             self._session_factory = sessionmaker(
                 self._engine, class_=AsyncSession, expire_on_commit=False,
             )
@@ -83,12 +85,14 @@ class L3Store:
             import asyncio
             asyncio.get_event_loop().run_until_complete(self._ensure_pgvector())
         except Exception as exc:
-            logger.info("pgvector 检测失败: %s，将使用关键词检索", exc)
-            self._has_pgvector = False
+            logger.warning("PostgreSQL 表创建失败: %s，L3 降级为内存存储", exc)
+            raise
 
     async def _ensure_pgvector(self) -> None:
-        """确保 pgvector 扩展已安装，并创建表结构"""
-        from stockquant.persistence.models import Base
+        """确保 pgvector 扩展已安装，并创建表结构和默认用户"""
+        import asyncio
+        from stockquant.persistence.models import Base, UserModel
+        from sqlalchemy import select
 
         async with self._engine.begin() as conn:
             # 尝试创建 pgvector 扩展
@@ -102,13 +106,37 @@ class L3Store:
                 logger.warning("pgvector 扩展不可用: %s，向量检索将降级为关键词匹配", exc)
                 self._has_pgvector = False
 
-            # 创建表（如果不存在）
-            await conn.run_sync(Base.metadata.create_all)
+        # 创建表（如果不存在）
+        async with self._engine.begin() as conn:
+            try:
+                await conn.run_sync(Base.metadata.create_all)
+            except Exception:
+                # 表已存在或索引冲突，视为 PostgreSQL 后端不可靠，重抛让 _init_backend 降级
+                raise
+
+        # 确保默认用户存在
+        try:
+            async with self._session_factory() as session:
+                user = await session.execute(select(UserModel).where(UserModel.id == self._user_id))
+                if user.scalar_one_or_none() is None:
+                    session.add(UserModel(
+                        id=self._user_id,
+                        username="test_user",
+                        hashed_password="not_used",
+                        roles='["user"]',
+                        disabled=0,
+                    ))
+                    await session.commit()
+        except Exception as exc:
+            logger.warning("L3 默认用户创建失败: %s，降级为内存存储", exc)
+            raise
 
     # ── 同步包装器 ──────────────────────────────────────────────────────
 
     def write(self, item: Dict[str, Any]) -> str:
         """写入一条 L3 记忆（同步）"""
+        if self._backend == "memory":
+            return self._write_memory(item)
         try:
             loop = __import__("asyncio").get_event_loop()
             if loop.is_running():
@@ -123,6 +151,8 @@ class L3Store:
 
     def search(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
         """语义检索（同步）"""
+        if self._backend == "memory":
+            return self._search_memory(query, top_k)
         try:
             loop = __import__("asyncio").get_event_loop()
             if loop.is_running():
@@ -136,6 +166,8 @@ class L3Store:
 
     def count(self) -> int:
         """返回当前条目总数"""
+        if self._backend == "memory":
+            return len(self._entries)
         try:
             loop = __import__("asyncio").get_event_loop()
             if loop.is_running():
@@ -149,6 +181,10 @@ class L3Store:
 
     def delete(self, item_id: str) -> bool:
         """删除指定条目"""
+        if self._backend == "memory":
+            before = len(self._entries)
+            self._entries = [e for e in self._entries if e.get("id") != item_id]
+            return len(self._entries) < before
         try:
             loop = __import__("asyncio").get_event_loop()
             if loop.is_running():
@@ -160,8 +196,34 @@ class L3Store:
             loop = __import__("asyncio").new_event_loop()
             return loop.run_until_complete(self._delete_async(item_id))
 
+    def clear_all(self) -> int:
+        """清空所有条目（用于测试）"""
+        if self._backend == "memory":
+            n = len(self._entries)
+            self._entries.clear()
+            return n
+        try:
+            loop = __import__("asyncio").get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    return pool.submit(self._clear_all_sync).result()
+            return loop.run_until_complete(self._clear_all_async())
+        except RuntimeError:
+            loop = __import__("asyncio").new_event_loop()
+            return loop.run_until_complete(self._clear_all_async())
+
+    def _clear_all_sync(self) -> int:
+        loop = __import__("asyncio").new_event_loop()
+        try:
+            return loop.run_until_complete(self._clear_all_async())
+        finally:
+            loop.close()
+
     def get_all(self, limit: int = 1000) -> List[Dict[str, Any]]:
         """获取所有条目（用于遗忘机制）"""
+        if self._backend == "memory":
+            return self._entries[:limit]
         try:
             loop = __import__("asyncio").get_event_loop()
             if loop.is_running():
@@ -242,8 +304,11 @@ class L3Store:
             if not isinstance(metadata, str):
                 metadata = json.dumps(metadata, ensure_ascii=False)
 
+            user_id = item.get("user_id") or self._user_id
+
             if row:
                 row.symbol = item.get("symbol", "")
+                row.user_id = user_id
                 row.content = item.get("content", "")
                 row.summary = item.get("summary", "")
                 row.metadata_json = metadata
@@ -252,6 +317,7 @@ class L3Store:
             else:
                 row = L3Memory(
                     id=item_id,
+                    user_id=user_id,
                     symbol=item.get("symbol", ""),
                     content=item.get("content", ""),
                     summary=item.get("summary", ""),
@@ -394,11 +460,25 @@ class L3Store:
             result = await session.execute(stmt)
             return [self._row_to_dict(row) for row in result.scalars().all()]
 
+    async def _clear_all_async(self) -> int:
+        """异步清空所有条目"""
+        from stockquant.persistence.models import L3Memory
+        from sqlalchemy import delete as sa_delete
+
+        async with self._session_factory() as session:
+            result = await session.execute(sa_delete(L3Memory))
+            await session.commit()
+            return result.rowcount
+
     # ── 内存降级方法 ────────────────────────────────────────────────────
 
     def _write_memory(self, item: Dict[str, Any]) -> str:
         item_id = item.get("id", f"l3_{datetime.now().strftime('%Y%m%d%H%M%S')}_{id(item)}")
-        self._entries.append({**item, "id": item_id})
+        entry = {**item, "id": item_id}
+        # Ensure user_id is present (required by L3Memory model)
+        if "user_id" not in entry or not entry["user_id"]:
+            entry["user_id"] = self._user_id
+        self._entries.append(entry)
         return item_id
 
     def _search_memory(self, query: str, top_k: int) -> List[Dict[str, Any]]:

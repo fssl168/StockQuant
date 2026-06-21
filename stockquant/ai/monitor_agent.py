@@ -130,6 +130,7 @@ class MonitorAgent:
         self._scan_thread: Optional[threading.Thread] = None
         self._on_alert_callbacks: List[Callable[[MonitorSignal], None]] = []
         self._scan_count = 0  # 已执行扫描次数
+        self._db_url: Optional[str] = None  # 数据库 URL（可选）
 
     @property
     def threshold(self) -> float:
@@ -255,9 +256,30 @@ class MonitorAgent:
         for sig in signals:
             if sig.confidence >= self._threshold:
                 self._alerts.append(sig)
+                self._persist_alert(sig)
                 self._on_high_confidence_signal(sig)
 
         return signals
+
+    def _persist_alert(self, signal: MonitorSignal) -> None:
+        """将高置信度告警写入数据库。"""
+        if not self._db_url:
+            return
+        try:
+            import uuid
+            from stockquant.persistence.repository import save_monitor_alert
+            save_monitor_alert(
+                self._db_url,
+                str(uuid.uuid4()),
+                signal.symbol,
+                signal.direction,
+                signal.reason,
+                signal.confidence,
+                signal.signal_type,
+                signal.is_portfolio_hold,
+            )
+        except Exception:
+            logger.debug("Failed to persist monitor alert for %s", signal.symbol)
 
     def _on_high_confidence_signal(self, signal: MonitorSignal) -> None:
         """高置信度信号回调：通知推送 + WS 广播"""
@@ -410,18 +432,31 @@ class MonitorAgent:
         return result
 
     def _build_global_market_summary(self) -> dict:
-        """构建隔夜全球市场概览（基于新闻搜索降级）。"""
+        """构建隔夜全球市场概览。"""
         summary: dict = {
-            "us_markets": "数据暂不可用",
-            "europe_markets": "数据暂不可用",
-            "asia_markets": "数据暂不可用",
-            "commentary": "",
+            "status": "ok",
+            "reason": None,
+            "us_markets": None,
+            "europe_markets": None,
+            "asia_markets": None,
+            "commentary": None,
         }
+
+        try:
+            # 方式 1：通过 AkShare 获取全球指数行情
+            return self._try_akshare_global_markets(summary)
+        except ImportError:
+            logger.debug("AkShare not available for global markets")
+        except Exception:
+            logger.debug("Global market via AkShare failed, falling back to news search")
+
+        # 方式 2：通过新闻搜索降级
         if not self._news_searcher:
+            summary["status"] = "ok"
+            summary["commentary"] = "全球市场数据暂不可用，请配置新闻搜索源"
             return summary
 
         try:
-            # 通过新闻搜索获取全球市场信息
             for keyword, key in [("美股", "us_markets"), ("欧洲股市", "europe_markets"), ("亚太股市", "asia_markets")]:
                 items = self._news_searcher.search(keyword, days=1)
                 if items:
@@ -429,9 +464,46 @@ class MonitorAgent:
                     summary[key] = top.title if hasattr(top, "title") else str(top)
                     if hasattr(top, "sentiment"):
                         summary[key] += f" (情绪: {top.sentiment:.2f})"
+            summary["status"] = "ok"
+            summary["commentary"] = "通过新闻搜索获取"
         except Exception:
             logger.debug("Global market summary via news search failed")
         return summary
+
+    def _try_akshare_global_markets(self, summary: dict) -> dict:
+        """尝试通过 AkShare 获取全球市场指数数据。"""
+        try:
+            import akshare as ak
+            # 获取主要全球指数
+            df = ak.stock_zh_index_spot_em()
+            if df is None or df.empty:
+                return summary
+
+            index_map = {
+                "us_markets": ["纳斯达克", "道琼斯", "标普500"],
+                "europe_markets": ["英国富时", "德国DAX", "法国CAC"],
+                "asia_markets": ["日经225", "恒生", "恒生科技"],
+            }
+            for key, keywords in index_map.items():
+                matches = []
+                for kw in keywords:
+                    rows = df[df["名称"].str.contains(kw, na=False)]
+                    if not rows.empty:
+                        row = rows.iloc[0]
+                        try:
+                            pct = float(row.get("涨跌幅", 0))
+                        except (ValueError, TypeError):
+                            pct = 0.0
+                        matches.append(f"{row['名称']} {pct:+.2f}%")
+                if matches:
+                    summary[key] = " | ".join(matches)
+            summary["status"] = "ok"
+            summary["reason"] = None
+            return summary
+        except ImportError:
+            raise
+        except Exception:
+            raise
 
     def _fetch_news_items(self, symbol: str, days: int = 1) -> list[dict]:
         """获取标的新闻条目（返回 list[dict]）。"""
@@ -629,37 +701,81 @@ class MonitorAgent:
     def _build_market_indices_summary(self) -> dict:
         """构建大盘指数表现（上证/深证/创业板）。"""
         indices: dict = {
-            "SSE": {"name": "上证指数", "change_pct": None, "commentary": "数据暂不可用"},
-            "SZSE": {"name": "深证成指", "change_pct": None, "commentary": "数据暂不可用"},
-            "ChiNext": {"name": "创业板指", "change_pct": None, "commentary": "数据暂不可用"},
+            "status": "ok",
+            "reason": None,
+            "SSE": {"name": "上证指数", "change_pct": None, "commentary": None},
+            "SZSE": {"name": "深证成指", "change_pct": None, "commentary": None},
+            "ChiNext": {"name": "创业板指", "change_pct": None, "commentary": None},
         }
-        if not self._fetcher_manager:
-            return indices
 
-        index_map = {
-            "SSE": "sh000001",
-            "SZSE": "sz399001",
-            "ChiNext": "sz399006",
-        }
-        for key, code in index_map.items():
+        # 方式 1：通过 fetcher_manager
+        if self._fetcher_manager:
+            index_map = {
+                "SSE": "sh000001",
+                "SZSE": "sz399001",
+                "ChiNext": "sz399006",
+            }
+            for key, code in index_map.items():
+                try:
+                    df = self._fetcher_manager.fetch(code, days=5)
+                    if df is not None and len(df) >= 2:
+                        close_arr = df["close"]
+                        closes = close_arr.values if hasattr(close_arr, "values") else np.asarray(close_arr)
+                        pct = (closes[-1] - closes[-2]) / closes[-2] * 100
+                        indices[key]["change_pct"] = round(float(pct), 2)
+                        indices[key]["commentary"] = self._pct_commentary(pct)
+                except Exception:
+                    continue
+
+        # 方式 2：通过 AkShare 降级获取
+        if all(v["change_pct"] is None for v in indices.values() if isinstance(v, dict) and "change_pct" in v):
             try:
-                df = self._fetcher_manager.fetch(code, days=5)
-                if df is not None and len(df) >= 2:
-                    close_arr = df["close"]
-                    closes = close_arr.values if hasattr(close_arr, "values") else np.asarray(close_arr)
-                    pct = (closes[-1] - closes[-2]) / closes[-2] * 100
-                    indices[key]["change_pct"] = round(float(pct), 2)
-                    if pct > 1.0:
-                        indices[key]["commentary"] = "强势上涨"
-                    elif pct > 0:
-                        indices[key]["commentary"] = "小幅上涨"
-                    elif pct > -1.0:
-                        indices[key]["commentary"] = "小幅下跌"
-                    else:
-                        indices[key]["commentary"] = "明显下跌"
+                self._try_akshare_indices(indices)
+            except ImportError:
+                logger.debug("AkShare not available for market indices")
             except Exception:
-                continue
+                logger.debug("Market indices via AkShare failed")
+
         return indices
+
+    @staticmethod
+    def _pct_commentary(pct: float) -> str:
+        """百分比涨跌幅 → 简短评语"""
+        if pct > 1.0:
+            return "强势上涨"
+        elif pct > 0:
+            return "小幅上涨"
+        elif pct > -1.0:
+            return "小幅下跌"
+        else:
+            return "明显下跌"
+
+    @staticmethod
+    def _try_akshare_indices(indices: dict) -> None:
+        """通过 AkShare 获取 A 股三大指数。"""
+        try:
+            import akshare as ak
+            df = ak.stock_zh_index_spot_em()
+            if df is None or df.empty:
+                return
+
+            index_map = {
+                "SSE": "上证",
+                "SZSE": "深证",
+                "ChiNext": "创业板",
+            }
+            for key, kw in index_map.items():
+                rows = df[df["名称"].str.contains(kw, na=False)]
+                if not rows.empty:
+                    row = rows.iloc[0]
+                    try:
+                        pct = float(row.get("涨跌幅", 0))
+                    except (ValueError, TypeError):
+                        pct = 0.0
+                    indices[key]["change_pct"] = round(pct, 2)
+                    indices[key]["commentary"] = MonitorAgent._pct_commentary(pct)
+        except Exception:
+            raise
 
     def _compute_stock_performance(self, symbol: str) -> Optional[dict]:
         """计算个股表现。"""
@@ -1313,6 +1429,10 @@ class MonitorAgent:
     def set_websocket_manager(self, ws_manager: Any) -> None:
         """设置 WebSocket 管理器（用于 WS 实时监控推送）。"""
         self._ws_manager = ws_manager
+
+    def set_db_url(self, db_url: Optional[str]) -> None:
+        """设置数据库 URL（用于告警持久化）。"""
+        self._db_url = db_url
 
     # ── 辅助方法 ──
 

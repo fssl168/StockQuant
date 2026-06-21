@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Table, Button, Input, Card, Row, Col, Typography, Tag, Space, Switch, InputNumber, Modal, message, Segmented } from 'antd'
+import { Table, Button, Input, Card, Row, Col, Typography, Tag, Space, Switch, InputNumber, Modal, message } from 'antd'
 import { Plus, Play, Stop, Trash, Sparkle, ChartBar } from '@phosphor-icons/react'
 import { useMarketStore } from '@/stores/marketStore'
 import { monitorApi } from '@/api/monitor'
@@ -70,7 +70,7 @@ export default function Monitor() {
 
   // F026: 加载动态风控数据
   useEffect(() => {
-    client.get('/monitor/risk-control')
+    client.get('/api/monitor/risk-control')
       .then((res: any) => {
         const data = res.data ?? res
         if (data.environment) {
@@ -180,8 +180,7 @@ export default function Monitor() {
 
   const handleRemove = (symbol: string) => {
     removeSymbol(symbol)
-    const remaining = symbols.filter((s) => s !== symbol)
-    monitorApi.updateWatchlist(remaining).catch((e: any) => console.warn('[Monitor] 更新自选股失败:', e?.message))
+    monitorApi.removeFromWatchlist([symbol]).catch((e: any) => console.warn('[Monitor] 删除自选股失败:', e?.message))
   }
 
   // Task 2.5: 获取收盘总结
@@ -235,7 +234,7 @@ export default function Monitor() {
   // Signal confirm
   const handleConfirmSignal = async (signalId: string) => {
     try {
-      await client.put(`/monitor/signal/${signalId}/confirm`)
+      await client.put(`/api/monitor/signal/${signalId}/confirm`)
       message.success('信号已确认')
       // Remove confirmed signal from notifications
       useNotificationStore.getState().deleteNotification(signalId)

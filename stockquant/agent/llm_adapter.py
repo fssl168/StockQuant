@@ -199,6 +199,8 @@ class LLMAdapter:
         self._fallback_models = fallback_models or []
         self._base_url = base_url
         self._litellm: Any = None
+        # 本地分类模型管理器（LocalModelManager），懒加载
+        self._local_model_manager: Any = None
         logger.info("LLMAdapter 初始化: model=%s, base_url=%s, api_key=%s",
                      model, base_url, ("****" if self._api_key else "None"))
 
@@ -272,6 +274,7 @@ class LLMAdapter:
             or model.startswith("local/")
             or model.startswith("ollama/")
             or model == "local_rule_engine"
+            or model == "local_classifier"
         ):
             return model
 
@@ -390,6 +393,10 @@ class LLMAdapter:
         if used_model == "local_rule_engine":
             return self._call_local_rule_engine(messages)
 
+        # 本地分类模型路径（情感分析 / 简单分类，< 200ms，NFR008）
+        if used_model == "local_classifier":
+            return self._call_local_classifier(messages)
+
         # 本地 LLM 路径（HuggingFace transformers / Ollama）
         if used_model.startswith("local/") or used_model.startswith("ollama/"):
             return self._call_local_llm(messages, used_model, **kwargs)
@@ -437,6 +444,108 @@ class LLMAdapter:
             base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
         )
         return adapter.call(messages, **kwargs)
+
+    def _get_local_model_manager(self) -> Any:
+        """懒加载本地分类模型管理器（LocalModelManager）。
+
+        Returns
+        -------
+        LocalModelManager 或 None
+            可用时返回实例；不可用时返回 None。
+        """
+        if self._local_model_manager is None:
+            try:
+                from stockquant.ai.local_model import LocalModelManager
+                self._local_model_manager = LocalModelManager()
+            except ImportError:
+                logger.warning("LocalModelManager 不可用，本地分类降级")
+                # 用 False 标记「已尝试加载但不可用」，避免重复 import
+                self._local_model_manager = False
+        return (
+            self._local_model_manager
+            if self._local_model_manager is not False
+            else None
+        )
+
+    def _call_local_classifier(self, messages: list[dict]) -> LLMResponse:
+        """调用本地分类模型（LocalModelManager）进行情感分析 / 简单分类。
+
+        适用于 < 200ms 延迟的轻量决策场景（NFR008）。
+        从 messages 中提取文本进行分类，返回标准化 LLMResponse。
+        """
+        mgr = self._get_local_model_manager()
+        if mgr is None or not mgr.is_available():
+            return LLMResponse(
+                content="本地分类模型不可用（transformers 未安装）",
+                model="local_classifier",
+                finish_reason="stop",
+            )
+
+        # 从 messages 中拼接待分类文本
+        text = "\n".join(
+            m.get("content", "") for m in messages if m.get("content")
+        )
+        result = mgr.classify(text)
+        if result is None:
+            return LLMResponse(
+                content="本地分类模型推理失败",
+                model="local_classifier",
+                finish_reason="stop",
+            )
+
+        content = (
+            f"分类结果: {result['label']} "
+            f"(置信度: {result['score']:.4f})"
+        )
+        return LLMResponse(
+            content=content,
+            usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            model="local_classifier",
+            finish_reason="stop",
+        )
+
+    def select_model_for_frequency(
+        self,
+        frequency_per_min: float,
+        task_type: str = "general",
+    ) -> str:
+        """根据请求频率 / 复杂度选择本地或远程模型。
+
+        路由策略（满足 NFR008 Tick 级延迟要求）：
+
+        - **高频**（>= 30 次/分）**且** 轻量任务（情感分析 / 简单分类）
+          → 本地分类模型 ``local_classifier``（< 200ms）
+        - **其他情况**（低频 或 复杂任务）
+          → 远程 LLM（``self._model``）
+
+        Parameters
+        ----------
+        frequency_per_min : float
+            请求频率（次/分钟）。
+        task_type : str
+            任务类型，轻量任务包括：
+            ``"sentiment"``（情感分析）、``"classification"``（简单分类）、
+            ``"classify"``；其余视为复杂任务（``"general"`` / ``"reasoning"`` 等）。
+
+        Returns
+        -------
+        str
+            模型路由标识：``"local_classifier"`` 或 ``self._model``。
+        """
+        # 轻量任务集合 — 适合本地分类模型快速处理
+        lightweight_tasks = {"sentiment", "classification", "classify"}
+        # 高频阈值（次/分钟）—— 超过此值且为轻量任务则走本地模型
+        high_freq_threshold = 30.0
+
+        if task_type in lightweight_tasks and frequency_per_min >= high_freq_threshold:
+            logger.info(
+                "路由决策: 高频(%.1f/min) + 轻量任务(%s) → 本地分类模型",
+                frequency_per_min, task_type,
+            )
+            return "local_classifier"
+
+        # 默认走远程 LLM
+        return self._model
 
     def _call_local_rule_engine(self, messages: list[dict]) -> LLMResponse:
         """本地规则引擎调用 — 基于 MA/MACD/RSI/BOLL 的快速信号判断

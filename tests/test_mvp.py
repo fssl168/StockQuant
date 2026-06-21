@@ -237,9 +237,9 @@ class TestMetrics(unittest.TestCase):
             initial_cash=1_000_000,
         )
         self.assertIn("Max Drawdown", metrics)
-        # Drawdown is formatted as string like "32.14%"
-        dd_str = metrics["Max Drawdown"]
-        self.assertIn("%", dd_str)
+        # Max Drawdown is a float (e.g., 0.3214 = 32.14%)
+        dd_val = metrics["Max Drawdown"]
+        self.assertGreater(dd_val, 0)
 
     def test_total_return(self):
         from stockquant.engine.metrics import BacktestMetrics

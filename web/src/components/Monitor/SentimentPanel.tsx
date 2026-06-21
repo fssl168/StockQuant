@@ -31,7 +31,7 @@ export default function SentimentPanel({ symbol, height = 300 }: SentimentPanelP
     }
     setLoading(true)
     setError('')
-    client.get(`/ai/sentiment?symbol=${symbol}`)
+    client.get(`/api/ai/sentiment?symbol=${symbol}`)
       .then((res: any) => setData(res))
       .catch(() => setError('获取情绪数据失败'))
       .finally(() => setLoading(false))

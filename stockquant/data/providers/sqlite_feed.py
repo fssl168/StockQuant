@@ -97,10 +97,10 @@ class SQLiteFeed(DataFeed):
         return df
 
     def start(self):
-        pass
+        """数据已在 _load() 中加载，无需异步启动。"""
 
     def stop(self):
-        pass
+        """数据库连接在 _load() 后已关闭，无需主动关闭。"""
 
     def __len__(self) -> int:
         return len(self._df)

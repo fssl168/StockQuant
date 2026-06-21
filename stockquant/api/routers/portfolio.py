@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from stockquant.api.deps import get_current_user
-
+from stockquant.api.routers.settings import build_data_feed
 from stockquant.engine.commission import CommissionInfo
 
 logger = logging.getLogger("stockquant.api.portfolio")
@@ -47,8 +47,7 @@ def _get_trading_state():
 def _get_latest_price(symbol: str) -> float | None:
     """获取标的最新收盘价"""
     try:
-        from stockquant.data.providers.baostock_feed import BaoStockFeed
-        feed = BaoStockFeed(symbols=[symbol], timeframe="1d")
+        feed = build_data_feed(symbols=[symbol], timeframe="1d", start_date="", end_date="")
         feed.start()
         df = feed.get_dataframe()
         feed.stop()
@@ -62,11 +61,10 @@ def _get_latest_price(symbol: str) -> float | None:
 def _get_kline_prices(symbol: str, days: int = 60) -> list[tuple[str, float]]:
     """获取历史 K 线收盘价，返回 [(date, close), ...]"""
     try:
-        from stockquant.data.providers.baostock_feed import BaoStockFeed
         end = datetime.now().strftime("%Y-%m-%d")
         start_dt = datetime.now() - timedelta(days=days + 30)  # 多取一些确保交易日足够
         start = start_dt.strftime("%Y-%m-%d")
-        feed = BaoStockFeed(symbols=[symbol], timeframe="1d")
+        feed = build_data_feed(symbols=[symbol], timeframe="1d", start_date=start, end_date=end)
         feed.start()
         df = feed.get_dataframe(start_date=start, end_date=end)
         feed.stop()
@@ -87,8 +85,7 @@ def _get_kline_prices(symbol: str, days: int = 60) -> list[tuple[str, float]]:
 def _compute_equity_curve_from_snapshots(days: int = 30) -> tuple[list[str], list[float]]:
     """从权益快照表获取历史权益曲线"""
     try:
-        from stockquant.persistence.models import EquitySnapshot
-        from stockquant.persistence.database import get_engine
+        from stockquant.persistence.models import EquitySnapshot, get_engine
         from sqlalchemy import create_engine as _create_engine, select
 
         engine = get_engine()
@@ -448,6 +445,64 @@ async def get_stock_equity_curve(symbol: str, _user=Depends(get_current_user)):
     return {"symbol": symbol, "dates": dates, "values": values}
 
 
+def save_daily_snapshot() -> dict:
+    """同步保存每日权益快照（供调度器调用，非 API 端点）。
+
+    将当前账户权益状态持久化到 equity_snapshots 表，
+    用于历史权益曲线展示和回溯分析。
+    """
+    try:
+        from stockquant.persistence.models import EquitySnapshot, get_engine
+        from sqlalchemy.orm import Session
+
+        _portfolio, _paper_broker = _get_trading_state()
+        acc = _portfolio.account
+        positions = {s: p for s, p in _portfolio.positions.items() if p.quantity > 0}
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        snapshot_id = f"snap_{today}_{id(acc)}"
+
+        engine = get_engine()
+        if engine is None:
+            logger.warning("数据库不可用，跳过权益快照")
+            return {"status": "skipped", "reason": "database unavailable"}
+
+        market_value = sum(p.market_value for p in positions.values())
+
+        with Session(engine) as session:
+            existing = session.query(EquitySnapshot).filter(
+                EquitySnapshot.date == today
+            ).first()
+            if existing:
+                existing.equity = round(acc.total_equity, 2)
+                existing.cash = round(acc.available_cash, 2)
+                existing.market_value = round(market_value, 2)
+                existing.positions_count = len(positions)
+            else:
+                snapshot = EquitySnapshot(
+                    id=snapshot_id,
+                    date=today,
+                    equity=round(acc.total_equity, 2),
+                    cash=round(acc.available_cash, 2),
+                    market_value=round(market_value, 2),
+                    positions_count=len(positions),
+                )
+                session.add(snapshot)
+            session.commit()
+
+        logger.info(f"权益快照已保存: {today} equity={acc.total_equity:.2f}")
+        return {
+            "status": "ok",
+            "date": today,
+            "equity": round(acc.total_equity, 2),
+            "cash": round(acc.available_cash, 2),
+            "positions_count": len(positions),
+        }
+    except Exception as e:
+        logger.error(f"保存权益快照失败: {e}")
+        return {"status": "error", "reason": str(e)}
+
+
 @router.post("/portfolio/snapshot", summary="保存权益快照")
 async def save_equity_snapshot(_user=Depends(get_current_user)):
     """手动触发权益快照保存。
@@ -456,8 +511,7 @@ async def save_equity_snapshot(_user=Depends(get_current_user)):
     用于历史权益曲线展示和回溯分析。
     """
     try:
-        from stockquant.persistence.models import EquitySnapshot
-        from stockquant.persistence.database import get_engine
+        from stockquant.persistence.models import EquitySnapshot, get_engine
         from sqlalchemy.orm import Session
 
         _portfolio, _paper_broker = _get_trading_state()

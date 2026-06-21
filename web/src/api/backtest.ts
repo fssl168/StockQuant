@@ -20,8 +20,8 @@ export interface BacktestTask {
 }
 
 export const backtestApi = {
-  list: () => client.get('/backtest') as Promise<BacktestTask[]>,
-  get: (id: string) => client.get(`/backtest/${id}`) as Promise<BacktestTask>,
+  list: () => client.get('/api/backtest') as Promise<BacktestTask[]>,
+  get: (id: string) => client.get(`/api/backtest/${id}`) as Promise<BacktestTask>,
   submit: (data: Omit<BacktestTask, 'task_id' | 'status' | 'created_at' | 'updated_at' | 'metrics' | 'trades' | 'error'>) =>
-    client.post('/backtest', data) as Promise<{ task_id: string; status: string }>,
+    client.post('/api/backtest', data) as Promise<{ task_id: string; status: string }>,
 }

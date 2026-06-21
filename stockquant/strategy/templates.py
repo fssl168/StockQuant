@@ -29,6 +29,7 @@ class DualMACrossoverStrategy(BaseStrategy):
         self._last_cross = None
         # 价格历史累积
         self._price_history = {}
+        self._trade_count = 0
 
     def on_bar(self, bars):
         for symbol, bar in bars.items():
@@ -48,6 +49,11 @@ class DualMACrossoverStrategy(BaseStrategy):
             fast_ind = self.EMA(closes, fast_p)
             slow_ind = self.EMA(closes, slow_p)
 
+            # Debug print
+            if len(closes) == slow_p or len(closes) % 50 == 0:
+                print(f"DEBUG strategy: symbol={symbol}, closes={len(closes)}, "
+                      f"fast[-1]={fast_ind[-1]:.2f}, slow[-1]={slow_ind[-1]:.2f}")
+
             # 金叉
             if fast_ind[-1] > slow_ind[-1] and fast_ind[-2] <= slow_ind[-2]:
                 if self._last_cross != "golden":
@@ -57,6 +63,8 @@ class DualMACrossoverStrategy(BaseStrategy):
                     )
                     if qty > 0:
                         self.order_market(bar, qty)
+                        self._trade_count += 1
+                        print(f"DEBUG: Order placed (trade #{self._trade_count}), qty={qty}")
                         self.log(f"GOLDEN CROSS: BUY {symbol}")
 
             # 死叉
@@ -64,7 +72,13 @@ class DualMACrossoverStrategy(BaseStrategy):
                 if self._last_cross != "death":
                     self._last_cross = "death"
                     self.close_all()
+                    self._trade_count += 1
+                    print(f"DEBUG: Close all placed (trade #{self._trade_count})")
                     self.log(f"DEATH CROSS: SELL ALL")
+
+    def on_finish(self):
+        """回测结束时打印交易计数"""
+        print(f"DEBUG on_finish: total trades attempted={self._trade_count}")
 
 
 # ========================================================================

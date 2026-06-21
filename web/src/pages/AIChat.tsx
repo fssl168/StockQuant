@@ -144,7 +144,7 @@ export default function AIChat() {
       </div>
 
       {/* Right: Chat area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {/* Mode selector */}
         <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--color-border-default)' }}>
           <Segmented

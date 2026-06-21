@@ -62,7 +62,8 @@ class AnnouncementCollector(BaseCollector):
     ) -> List[RawInfoItem]:
         """从 AlphaFeed 采集公告"""
         try:
-            # AlphaFeed 暂无独立公告 API，未来版本可扩展
+            # AlphaFeed 暂无独立 API，保留接口供未来扩展。
+            # Returns: [] — AlphaFeed SDK 尚未集成
             return []
         except Exception as exc:
             logger.warning("AlphaFeed 公告采集失败: %s", exc)

@@ -13,10 +13,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
-from stockquant.api.deps import get_current_user, get_required_user
+from stockquant.api.deps import get_current_user, get_required_user, get_trader_user
+from stockquant.api.schemas import UserToken
 from stockquant.api.websocket import ws_manager
 from stockquant.api.routers.settings import _settings, _decrypt_value
 from stockquant.persistence.models import Notification, init_db, get_engine
+from stockquant.persistence.persistent_store import NotificationStore
 
 logger = logging.getLogger("stockquant.api.notification")
 
@@ -37,18 +39,21 @@ def _get_session_local() -> sessionmaker:
 
 # ── 内存存储 ──
 
-_notifications: list[dict] = []
+_notifications: NotificationStore = []  # type: ignore[assignment]
+_notification_store: NotificationStore | None = None
 
 
-def set_storage(storage: dict):
+def set_storage(storage: NotificationStore | None):
     """存储引用注入（由 main.py 调用，保持与其他路由一致）"""
-    global _notifications
-    _notifications = storage.get("notifications", _notifications)
+    global _notifications, _notification_store
+    if storage is not None:
+        _notifications = storage
+        _notification_store = storage
 
 
 # ── 辅助函数 ──
 
-def _get_webhook_urls() -> dict:
+def _get_webhook_urls() -> Dict[str, str]:
     """从 _settings 获取 Webhook 配置"""
     return {
         "wechat_webhook": _settings.get("notification.wechat_webhook", ""),
@@ -56,7 +61,7 @@ def _get_webhook_urls() -> dict:
     }
 
 
-def _get_smtp_config() -> dict:
+def _get_smtp_config() -> Dict[str, str]:
     """从 _settings 获取 SMTP 配置"""
     return {
         "smtp_host": _settings.get("notification.email_smtp", ""),
@@ -64,7 +69,7 @@ def _get_smtp_config() -> dict:
     }
 
 
-def _persist_notification(data: dict) -> None:
+def _persist_notification(data: Dict[str, Any]) -> None:
     """将通知持久化到 SQLite"""
     try:
         with _get_session_local()() as session:
@@ -106,7 +111,7 @@ def _load_notifications_from_db(limit: int = 500) -> List[Dict[str, Any]]:
         return []
 
 
-def add_notification(data: dict) -> dict:
+def add_notification(data: Dict[str, Any]) -> Dict[str, Any]:
     """添加一条通知，自动补全 id / time，并推送 WebSocket + 持久化。"""
     notification = {
         "id": data.get("id") or str(uuid.uuid4()),
@@ -218,8 +223,8 @@ def add_notification(data: dict) -> dict:
 @router.get("/notifications", summary="通知列表")
 async def get_notifications(
     type: str | None = Query(None, description="按类型过滤: signal / alert / info"),
-    _user=Depends(get_current_user),
-):
+    _user: UserToken = Depends(get_current_user),
+) -> List[Dict[str, Any]]:
     """获取通知列表，支持 ?type= 过滤，最新优先。"""
     # 从 SQLite 读取
     result = _load_notifications_from_db()
@@ -239,7 +244,7 @@ async def get_notifications(
 
 
 @router.put("/notifications/{notification_id}/read", summary="标记已读")
-async def mark_as_read(notification_id: str, _user=Depends(get_required_user)):
+async def mark_as_read(notification_id: str, _user: UserToken = Depends(get_trader_user)) -> Dict[str, Any]:
     """标记通知为已读。"""
     for n in _notifications:
         if n["id"] == notification_id:
@@ -252,13 +257,13 @@ async def mark_as_read(notification_id: str, _user=Depends(get_required_user)):
                         db_item.is_read = 1
                         session.commit()
             except Exception:
-                pass
+                logger.debug("DB sync failed for mark_as_read: %s", notification_id)
             return n
     raise HTTPException(status_code=404, detail=f"通知 {notification_id} 不存在")
 
 
 @router.delete("/notifications/{notification_id}", summary="删除通知")
-async def delete_notification(notification_id: str, _user=Depends(get_required_user)):
+async def delete_notification(notification_id: str, _user: UserToken = Depends(get_trader_user)) -> Dict[str, Any]:
     """删除指定通知。"""
     for i, n in enumerate(_notifications):
         if n["id"] == notification_id:
@@ -271,6 +276,6 @@ async def delete_notification(notification_id: str, _user=Depends(get_required_u
                         session.delete(db_item)
                         session.commit()
             except Exception:
-                pass
+                logger.debug("DB sync failed for delete_notification: %s", notification_id)
             return {"success": True, "id": notification_id}
     raise HTTPException(status_code=404, detail=f"通知 {notification_id} 不存在")

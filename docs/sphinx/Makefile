@@ -1,4 +1,3 @@
-# Minimal makefile for Sphinx documentation
 SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = .
@@ -12,5 +11,3 @@ html:
 
 clean:
 	rm -rf "$(BUILDDIR)"
-
-.PHONY: help html clean

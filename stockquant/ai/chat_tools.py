@@ -81,12 +81,23 @@ def generate_chart_json(
         closes = df["close"].values
         n = len(closes)
 
+        # 获取日期列
+        dates = []
+        if isinstance(df.index, pd.DatetimeIndex):
+            dates = [d.strftime("%Y-%m-%d") for d in df.index]
+        elif "date" in df.columns:
+            dates = [str(d) for d in df["date"]]
+        elif "timestamp" in df.columns:
+            dates = [str(d) for d in df["timestamp"]]
+        else:
+            dates = [""] * n
+
         data_points = []
         for i in range(n):
             data_points.append({
                 "index": i,
                 "value": float(closes[i]),
-                "date": i,  # placeholder
+                "date": dates[i] if i < len(dates) else str(i),
             })
 
         # 添加 EMA 线

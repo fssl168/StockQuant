@@ -21,13 +21,13 @@ export interface SignalStats {
 
 export const signalApi = {
   list: (params?: { symbol?: string; side?: string; source?: string }) =>
-    client.get('/signals', { params }),
+    client.get('/api/signals', { params }),
   add: (data: { symbol: string; side: string; source?: string; confidence?: number; reason?: string; price?: number; quantity?: number }) =>
-    client.post('/signals', data),
+    client.post('/api/signals', data),
   remove: (id: string) =>
-    client.delete(`/signals/${id}`),
+    client.delete(`/api/signals/${id}`),
   audit: (params?: { symbol?: string; limit?: number }) =>
-    client.get('/signals/audit', { params }),
+    client.get('/api/signals/audit', { params }),
   stats: () =>
-    client.get('/signals/stats'),
+    client.get('/api/signals/stats'),
 }

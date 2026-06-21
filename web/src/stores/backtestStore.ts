@@ -1,11 +1,17 @@
 import { create } from 'zustand'
 import { backtestApi, type BacktestTask } from '@/api/backtest'
 
+interface BacktestSubmitResult {
+  task_id: string
+  status: string
+  created_at?: string
+}
+
 interface BacktestState {
   tasks: BacktestTask[]
   loading: boolean
   fetchTasks: () => Promise<void>
-  submitTask: (data: Partial<BacktestTask>) => Promise<void>
+  submitTask: (data: Partial<BacktestTask>) => Promise<BacktestSubmitResult>
 }
 
 export const useBacktestStore = create<BacktestState>((set, get) => ({
@@ -24,10 +30,12 @@ export const useBacktestStore = create<BacktestState>((set, get) => ({
   submitTask: async (data) => {
     set({ loading: true })
     try {
-      await backtestApi.submit(data as any)
+      const result = await backtestApi.submit(data as any) as BacktestSubmitResult
       await get().fetchTasks()
-    } catch {
+      return result
+    } catch (e) {
       set({ loading: false })
+      throw e
     }
   },
 }))

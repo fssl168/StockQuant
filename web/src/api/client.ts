@@ -9,10 +9,16 @@ function snakeToCamel(obj: unknown): unknown {
   }
   if (obj !== null && typeof obj === 'object' && obj.constructor === Object) {
     return Object.fromEntries(
-      Object.entries(obj as Record<string, unknown>).map(([key, value]) => [
-        key.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
-        snakeToCamel(value),
-      ]),
+      Object.entries(obj as Record<string, unknown>).map(([key, value]) => {
+        // Skip conversion for ID fields that should remain as-is for backend matching
+        if (key === 'task_id' || key.endsWith('_id') || key === 'id') {
+          return [key, snakeToCamel(value)]
+        }
+        return [
+          key.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
+          snakeToCamel(value),
+        ]
+      }),
     )
   }
   return obj
@@ -29,7 +35,7 @@ function getToken(): string | null {
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
-  timeout: 30000,
+  timeout: 60000,
   headers: { 'Content-Type': 'application/json' },
 })
 

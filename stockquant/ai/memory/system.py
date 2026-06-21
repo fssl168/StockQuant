@@ -29,11 +29,12 @@ class MemorySystem:
         self,
         working_max_size: int = 200,
         db_url: str | None = None,
+        user_id: str = "test_user",
     ) -> None:
         url = db_url or _default_db_url()
         self.l1 = WorkingMemory(max_size=working_max_size)
-        self.l2 = L2Store(db_url=url)
-        self.l3 = L3Store(db_url=url)
+        self.l2 = L2Store(db_url=url, user_id=user_id)
+        self.l3 = L3Store(db_url=url, user_id=user_id)
 
     # ── L1 接口 ──
     def add_working(self, entry: Dict[str, Any]) -> None:
@@ -51,6 +52,7 @@ class MemorySystem:
     # ── L2 接口 ──
     def add_short_term(self, symbol: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         return self.l2.write({
+            "user_id": self.l2._user_id,
             "symbol": symbol,
             "content": content,
             "metadata": metadata or {},
@@ -69,7 +71,9 @@ class MemorySystem:
 
     # ── L3 接口 ──
     def add_long_term(self, insight: Dict[str, Any]) -> str:
-        return self.l3.write(insight)
+        item = dict(insight)
+        item.setdefault("user_id", self.l3._user_id)
+        return self.l3.write(item)
 
     def search_long_term(
         self,
@@ -84,3 +88,9 @@ class MemorySystem:
         if min_confidence > 0:
             results = [r for r in results if r.get("confidence", 0) >= min_confidence]
         return results[:limit]
+
+    # ── 清理（测试用） ──
+    def clear_all(self) -> None:
+        """清空 L2 和 L3 所有条目（用于测试隔离）"""
+        self.l2.clear_all()
+        self.l3.clear_all()

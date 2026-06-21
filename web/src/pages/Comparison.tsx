@@ -149,7 +149,7 @@ export default function Comparison() {
     setLoading(true)
     setChartLoading(true)
     try {
-      const res = await client.post('/comparison', { strategy_ids: selectedIds }) as any
+      const res = await client.post('/api/comparison', { strategy_ids: selectedIds }) as any
       // 拦截器返回裸数据，直接传给 setState
       setComparisonData(res)
     } catch (e) {
@@ -178,7 +178,7 @@ export default function Comparison() {
     if (selectedIds.length < 2) return
     setOptimizeLoading(true)
     try {
-      const res = await client.post('/comparison/optimize', { strategy_ids: selectedIds }) as any
+      const res = await client.post('/api/comparison/optimize', { strategy_ids: selectedIds }) as any
       setOptimizeResult(res)
     } catch (e) {
       console.error('组合优化请求失败:', e)
@@ -191,7 +191,7 @@ export default function Comparison() {
     if (!lifecycleStrategyId) return
     setLifecycleLoading(true)
     try {
-      const res = await client.get(`/comparison/lifecycle/${lifecycleStrategyId}`) as any
+      const res = await client.get(`/api/comparison/lifecycle/${lifecycleStrategyId}`) as any
       setLifecycleResult(res)
     } catch (e) {
       console.error('生命周期建议请求失败:', e)
@@ -299,7 +299,7 @@ export default function Comparison() {
           columns={[
             {
               title: '策略名称',
-              dataIndex: 'strategy_name',
+              dataIndex: 'strategyName',
               key: 'name',
               render: (name: string) => <Text strong>{name}</Text>,
             },

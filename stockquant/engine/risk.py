@@ -30,6 +30,8 @@ class RiskManager:
         max_drawdown_pct: float = 0.15,
         max_orders_per_minute: int = 10,
         global_circuit_breaker_pct: float = 0.05,
+        margin_call_threshold: float = 0.5,
+        leverage: float = 1.0,
     ):
         self._max_position_pct = max_position_pct
         self._max_buy_amount = max_buy_amount
@@ -38,6 +40,8 @@ class RiskManager:
         self._max_drawdown_pct = max_drawdown_pct
         self._max_orders_per_minute = max_orders_per_minute
         self._global_circuit_breaker_pct = global_circuit_breaker_pct
+        self._margin_call_threshold = margin_call_threshold
+        self._leverage = leverage
 
         self._order_timestamps: List[float] = []
         self._peak_equity: float = 0.0
@@ -168,6 +172,46 @@ class RiskManager:
             self.halt(f"Global circuit breaker: drop {drop:.2%} >= {self._global_circuit_breaker_pct:.2%}")
             return False, "Global circuit breaker triggered"
         return True, ""
+
+    # Margin risk methods
+
+    def check_margin_call(self, equity, leverage, margin_used=0.0):
+        """Check if margin call is triggered.
+
+        Returns True if margin call should be triggered.
+        """
+        if equity <= 0:
+            return False
+        margin_ratio = margin_used / equity
+        margin_call_threshold = 1.0 / leverage * 0.8 if leverage > 1 else 1.0
+        return margin_ratio > margin_call_threshold
+
+    def check_margin(self, position_value, available_cash, leverage=1.0, total_equity=0.0):
+        """Check if margin is sufficient.
+
+        Returns (is_valid, reason)
+        """
+        if leverage <= 1.0:
+            if position_value > available_cash:
+                return False, f"Margin insufficient: need {position_value:.0f}, available {available_cash:.0f}"
+            return True, ""
+
+        margin_required = position_value / leverage
+        if margin_required > available_cash:
+            return False, f"Margin insufficient: need {margin_required:.0f} (with {leverage}x leverage), available {available_cash:.0f}"
+
+        if total_equity > 0:
+            margin_ratio = (margin_required / total_equity) * leverage
+            if margin_ratio > self._margin_call_threshold:
+                self.halt(f"Margin call: ratio {margin_ratio:.2%} > threshold {self._margin_call_threshold:.2%}")
+                return False, f"Margin call: margin ratio {margin_ratio:.2%} exceeds threshold {self._margin_call_threshold:.2%}"
+
+        return True, ""
+
+    def deduct_margin_interest(self, margin_used, daily_rate):
+        """Calculate daily margin interest. Returns the interest amount."""
+        interest = margin_used * daily_rate
+        return interest
 
     def halt(self, reason: str):
         self._halted = True

@@ -61,10 +61,10 @@ class ParquetFeed(DataFeed):
         return df
 
     def start(self):
-        pass
+        """预加载数据到内存，无需异步启动。"""
 
     def stop(self):
-        pass
+        """预加载数据在内存中，无需主动关闭连接。"""
 
     def __len__(self) -> int:
         return len(self._df)

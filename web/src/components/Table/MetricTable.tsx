@@ -10,11 +10,11 @@ interface MetricTableProps {
 const METRIC_GROUPS = [
   {
     label: '收益指标',
-    keys: ['Annualized Return', '累计收益率', 'Alpha', 'Beta'],
+    keys: ['Annualized Return', '累计收益率', 'Alpha', 'Beta', '超额收益率'],
   },
   {
     label: '风险指标',
-    keys: ['Max Drawdown', 'Max Drawdown Duration', 'Avg Drawdown', 'VaR (95%)', 'CVaR (95%)', 'Volatility (Annual)'],
+    keys: ['Max Drawdown', 'Max Drawdown Duration', 'Avg Drawdown', 'Avg Drawdown Recovery', 'VaR (95%)', 'CVaR (95%)', 'Volatility (Annual)', 'Daily Volatility', 'Weekly Volatility'],
   },
   {
     label: '风险调整收益',
@@ -22,11 +22,11 @@ const METRIC_GROUPS = [
   },
   {
     label: '交易统计',
-    keys: ['Total Trades', 'Win Rate', 'Profit Factor', 'Avg Win', 'Avg Loss', 'Longest Win Streak', 'Longest Loss Streak', 'SQN (System Quality Number)'],
+    keys: ['Total Trades', 'Win Rate', 'Profit Factor', 'Avg Win', 'Avg Loss', 'Longest Win Streak', 'Longest Loss Streak', 'Avg Trade Return', 'SQN (System Quality Number)', 'Kelly %'],
   },
   {
     label: '费用',
-    keys: ['Total Commission', 'Total Slippage', 'Avg Trade Return'],
+    keys: ['Total Commission', 'Total Slippage'],
   },
 ]
 
@@ -36,19 +36,29 @@ function formatMetric(key: string, value: unknown): React.ReactNode {
   const num = typeof value === 'number' ? value : parseFloat(String(value))
   if (isNaN(num)) return <Text>{String(value)}</Text>
 
-  const isPct = ['Annualized Return', '累计收益率', 'Win Rate', 'VaR (95%)', 'CVaR (95%)'].includes(key)
+  const isPct = [
+    'Annualized Return', '累计收益率', 'Win Rate', 'VaR (95%)', 'CVaR (95%)',
+    'Max Drawdown', 'Avg Drawdown', 'Avg Drawdown Recovery', 'Daily Volatility',
+    'Weekly Volatility', 'Volatility (Annual)', 'Total Return', 'Kelly %',
+    '超额收益率', 'Avg Trade Return',
+  ].includes(key)
+  // 百分比指标后端返回小数（如 0.1234 表示 12.34%），需乘以 100
+  const displayNum = isPct ? num * 100 : num
   const suffix = isPct ? '%' : ''
 
   const colorMap: Record<string, string> = {
-    'Annualized Return': num >= 0 ? '#10b981' : '#ef4444',
-    'Win Rate': num >= 50 ? '#10b981' : '#f59e0b',
+    'Annualized Return': displayNum >= 0 ? '#10b981' : '#ef4444',
+    '累计收益率': displayNum >= 0 ? '#10b981' : '#ef4444',
+    '超额收益率': displayNum >= 0 ? '#10b981' : '#ef4444',
+    'Win Rate': displayNum >= 50 ? '#10b981' : '#f59e0b',
     'Max Drawdown': '#ef4444',
-    'Sharpe Ratio': num >= 1 ? '#10b981' : num >= 0 ? '#f59e0b' : '#ef4444',
+    'Sharpe Ratio': displayNum >= 1 ? '#10b981' : displayNum >= 0 ? '#f59e0b' : '#ef4444',
+    'Kelly %': displayNum > 0 ? '#10b981' : '#ef4444',
   }
 
   return (
     <Text style={{ color: colorMap[key] || 'var(--color-text-primary)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-      {num.toFixed(2)}{suffix}
+      {displayNum.toFixed(2)}{suffix}
     </Text>
   )
 }

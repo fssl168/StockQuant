@@ -175,6 +175,7 @@ export type OrderStatus = 'PENDING' | 'SUBMITTED' | 'PARTIAL_FILLED' | 'FILLED' 
 
 export interface Order {
   id: string
+  order_id?: string
   symbol: string
   side: OrderSide
   type: OrderType
@@ -199,6 +200,7 @@ export interface AccountInfo {
 
 export interface TradeRecord {
   id: string
+  trade_id?: string
   orderId: string
   symbol: string
   side: OrderSide

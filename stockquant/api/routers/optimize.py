@@ -10,21 +10,23 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from fastapi import APIRouter, HTTPException
 
 from stockquant.api.websocket import ws_manager
+from stockquant.api.routers.settings import build_data_feed
+from stockquant.persistence.persistent_store import OptimizeTaskStore
 
 logger = logging.getLogger("stockquant.api.optimize")
 
 router = APIRouter()
 
 # 存储引用（由 main.py 注入）
-_optimize_tasks: dict = {}
+_optimize_tasks: OptimizeTaskStore = {}  # type: ignore[assignment]
 
 
-def set_storage(storage: dict):
+def set_storage(storage: OptimizeTaskStore):
     global _optimize_tasks
     _optimize_tasks = storage
 
@@ -75,7 +77,7 @@ def _build_slippage(slippage_type: str, slippage_value: Optional[float] = None):
     return None
 
 
-def _serialize_optimize_result(result: dict) -> dict:
+def _serialize_optimize_result(result: Dict[str, Any]) -> Dict[str, Any]:
     """序列化单条优化结果"""
     metrics = result.get("metrics", {})
     # 确保所有指标值可序列化
@@ -99,7 +101,6 @@ def _run_optimize_sync(task_id: str, payload: dict) -> None:
     from stockquant.engine.broker import BacktestBroker
     from stockquant.engine.commission import CommissionInfo
     from stockquant.engine.risk import RiskManager
-    from stockquant.data.providers.baostock_feed import BaoStockFeed
 
     try:
         # 1. 提取参数
@@ -132,13 +133,8 @@ def _run_optimize_sync(task_id: str, payload: dict) -> None:
         if strategy_cls is None:
             raise ValueError(f"未知策略: {strategy_name}")
 
-        # 3. 构造数据源
-        feed = BaoStockFeed(
-            symbols=symbols,
-            timeframe=timeframe,
-            start=start_date,
-            end=end_date,
-        )
+        # 3. 构造数据源（根据配置动态选择）
+        feed = build_data_feed(symbols, timeframe, start_date, end_date)
 
         # 4. 构造 Cerebro
         commission = CommissionInfo(commission_rate=commission_rate)
@@ -227,7 +223,7 @@ async def _run_optimize(task_id: str, payload: dict) -> None:
 # ====================================================================
 
 @router.post("/backtest/optimize", summary="提交参数优化任务")
-async def submit_optimize(payload: dict):
+async def submit_optimize(payload: dict) -> Dict[str, Any]:
     """提交参数优化任务，异步执行 Cerebro.optstrategy()"""
     task_id = f"OPT-{uuid.uuid4().hex[:8].upper()}"
     now = datetime.now().isoformat()

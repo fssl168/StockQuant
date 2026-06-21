@@ -69,6 +69,32 @@ class AkShareFeed(DataFeed):
         self._fetch_all()
         self._started = True
 
+    def fetch(self, symbol: str, timeframe: str = "1d",
+              start: str = "", end: str = "", days: int = 0) -> None:
+        """按需加载单个标的的数据"""
+        if symbol in self._dataframes and not self._dataframes[symbol].empty:
+            return  # 已加载，直接返回
+        from datetime import timedelta
+        if days > 0:
+            end_date = datetime.now().strftime("%Y%m%d")
+            start_date = (datetime.now() - timedelta(days=days + 30)).strftime("%Y%m%d")
+        elif not start:
+            start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
+        else:
+            start_date = start.replace("-", "")
+        end_date = end.replace("-", "") if end else datetime.now().strftime("%Y%m%d")
+
+        try:
+            import akshare as ak
+            # 转换 symbol 格式：sh600519 -> 600519
+            sym = symbol[2:] if len(symbol) == 8 and symbol[:2] in ("sh", "sz") else symbol
+            df = ak.stock_zh_a_hist(symbol=sym, period="daily", start_date=start_date, end_date=end_date, adjust="qfq")
+            if df is not None and not df.empty:
+                self._dataframes[symbol] = df
+                logger.info(f"AkShareFeed: fetched {len(df)} rows for {symbol}")
+        except Exception as e:
+            logger.warning(f"AkShareFeed: failed to fetch {symbol}: {e}")
+
     def stop(self):
         self._started = False
 

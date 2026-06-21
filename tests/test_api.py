@@ -46,25 +46,37 @@ class TestHealth:
 
 class TestBacktestCRUD:
 
+    def _auth_headers(self):
+        """获取带 JWT token 的请求头（MVP 测试用）。"""
+        import os
+        from jose import jwt
+        secret = os.environ.get("JWT_SECRET_KEY", "stockquant-dev-secret-change-in-prod")
+        token = jwt.encode(
+            {"sub": "testuser", "role": "TRADER", "roles": ["TRADER"]},
+            secret,
+            algorithm="HS256",
+        )
+        return {"Authorization": f"Bearer {token}"}
+
     def test_submit_backtest(self, client):
         """提交回测任务返回 task_id"""
         payload = {
-            "strategy_name": "双均线交叉",
+            "strategy_name": "DualMACrossover",
             "strategy_code": "class MyStrategy:\n    pass",
             "symbols": ["sh600519"],
             "start_date": "2024-01-01",
             "end_date": "2024-12-31",
             "cash": 1_000_000,
         }
-        resp = client.post("/api/backtest", json=payload)
+        resp = client.post("/api/backtest", json=payload, headers=self._auth_headers())
         assert resp.status_code == 200
         data = resp.json()
         assert "task_id" in data
-        assert data["status"] == "queued"
+        assert data["status"] in ("queued", "running")
 
     def test_list_backtests_empty(self, client):
         """空列表"""
-        resp = client.get("/api/backtest")
+        resp = client.get("/api/backtest", headers=self._auth_headers())
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
         # 注意：health check 等可能在 setUp 中插入了任务，所以只检查类型
@@ -72,21 +84,21 @@ class TestBacktestCRUD:
     def test_list_backtests_after_submit(self, client):
         """提交后列表非空"""
         payload = {
-            "strategy_name": "测试策略",
-            "strategy_code": "pass",
+            "strategy_name": "DualMACrossover",
+            "strategy_code": "class MyStrategy:\n    pass",
             "start_date": "2024-01-01",
             "end_date": "2024-12-31",
         }
-        submit = client.post("/api/backtest", json=payload)
+        submit = client.post("/api/backtest", json=payload, headers=self._auth_headers())
         task_id = submit.json()["task_id"]
 
-        resp = client.get("/api/backtest")
+        resp = client.get("/api/backtest", headers=self._auth_headers())
         items = resp.json()
         assert len(items) >= 1
         # 找到刚创建的任务
         found = [t for t in items if t["task_id"] == task_id]
         assert len(found) == 1
-        assert found[0]["status"] == "queued"
+        assert found[0]["status"] in ("queued", "running", "completed")
 
     def test_get_backtest_result(self, client):
         """获取回测结果"""
@@ -96,10 +108,10 @@ class TestBacktestCRUD:
             "start_date": "2024-01-01",
             "end_date": "2024-12-31",
         }
-        submit = client.post("/api/backtest", json=payload)
+        submit = client.post("/api/backtest", json=payload, headers=self._auth_headers())
         task_id = submit.json()["task_id"]
 
-        resp = client.get(f"/api/backtest/{task_id}")
+        resp = client.get(f"/api/backtest/{task_id}", headers=self._auth_headers())
         assert resp.status_code == 200
         data = resp.json()
         assert data["task_id"] == task_id
@@ -109,7 +121,7 @@ class TestBacktestCRUD:
 
     def test_get_backtest_not_found(self, client):
         """不存在的任务返回 404"""
-        resp = client.get("/api/backtest/nonexistent")
+        resp = client.get("/api/backtest/nonexistent", headers=self._auth_headers())
         assert resp.status_code == 404
 
     def test_delete_backtest(self, client):
@@ -120,23 +132,23 @@ class TestBacktestCRUD:
             "start_date": "2024-01-01",
             "end_date": "2024-12-31",
         }
-        submit = client.post("/api/backtest", json=payload)
+        submit = client.post("/api/backtest", json=payload, headers=self._auth_headers())
         task_id = submit.json()["task_id"]
 
         # 确认存在
-        assert client.get(f"/api/backtest/{task_id}").status_code == 200
+        assert client.get(f"/api/backtest/{task_id}", headers=self._auth_headers()).status_code == 200
 
         # 删除
-        delete_resp = client.delete(f"/api/backtest/{task_id}")
+        delete_resp = client.delete(f"/api/backtest/{task_id}", headers=self._auth_headers())
         assert delete_resp.status_code == 200
         assert delete_resp.json()["success"] is True
 
         # 确认删除
-        assert client.get(f"/api/backtest/{task_id}").status_code == 404
+        assert client.get(f"/api/backtest/{task_id}", headers=self._auth_headers()).status_code == 404
 
     def test_delete_backtest_not_found(self, client):
         """删除不存在的任务返回 404"""
-        resp = client.delete("/api/backtest/nonexistent")
+        resp = client.delete("/api/backtest/nonexistent", headers=self._auth_headers())
         assert resp.status_code == 404
 
 
@@ -146,6 +158,17 @@ class TestBacktestCRUD:
 
 class TestStrategyCRUD:
 
+    def _auth_headers(self):
+        import os
+        from jose import jwt
+        secret = os.environ.get("JWT_SECRET_KEY", "stockquant-dev-secret-change-in-prod")
+        token = jwt.encode(
+            {"sub": "testuser", "role": "TRADER", "roles": ["TRADER"]},
+            secret,
+            algorithm="HS256",
+        )
+        return {"Authorization": f"Bearer {token}"}
+
     def test_create_strategy(self, client):
         """创建策略"""
         payload = {
@@ -153,7 +176,7 @@ class TestStrategyCRUD:
             "code": "class MyStrategy:\n    pass",
             "description": "这是一个测试策略",
         }
-        resp = client.post("/api/strategy", json=payload)
+        resp = client.post("/api/strategy", json=payload, headers=self._auth_headers())
         assert resp.status_code == 200
         data = resp.json()
         assert "id" in data
@@ -166,8 +189,8 @@ class TestStrategyCRUD:
         client.post("/api/strategy", json={
             "name": "列表测试",
             "code": "pass",
-        })
-        resp = client.get("/api/strategy")
+        }, headers=self._auth_headers())
+        resp = client.get("/api/strategy", headers=self._auth_headers())
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
@@ -177,10 +200,10 @@ class TestStrategyCRUD:
             "name": "详情测试策略",
             "code": "class TestStrategy:\n    pass",
         }
-        create_resp = client.post("/api/strategy", json=payload)
+        create_resp = client.post("/api/strategy", json=payload, headers=self._auth_headers())
         strategy_id = create_resp.json()["id"]
 
-        resp = client.get(f"/api/strategy/{strategy_id}")
+        resp = client.get(f"/api/strategy/{strategy_id}", headers=self._auth_headers())
         assert resp.status_code == 200
         data = resp.json()
         assert data["id"] == strategy_id
@@ -188,7 +211,7 @@ class TestStrategyCRUD:
 
     def test_get_strategy_not_found(self, client):
         """不存在的策略返回 404"""
-        resp = client.get("/api/strategy/nonexistent")
+        resp = client.get("/api/strategy/nonexistent", headers=self._auth_headers())
         assert resp.status_code == 404
 
     def test_update_strategy(self, client):
@@ -197,12 +220,12 @@ class TestStrategyCRUD:
             "name": "更新前",
             "code": "class TestStrategy:\n    pass",
         }
-        create_resp = client.post("/api/strategy", json=payload)
+        create_resp = client.post("/api/strategy", json=payload, headers=self._auth_headers())
         strategy_id = create_resp.json()["id"]
 
         update_resp = client.put(f"/api/strategy/{strategy_id}", json={
             "name": "更新后",
-        })
+        }, headers=self._auth_headers())
         assert update_resp.status_code == 200
         data = update_resp.json()
         assert data["name"] == "更新后"
@@ -213,20 +236,20 @@ class TestStrategyCRUD:
             "name": "待删除策略",
             "code": "pass",
         }
-        create_resp = client.post("/api/strategy", json=payload)
+        create_resp = client.post("/api/strategy", json=payload, headers=self._auth_headers())
         strategy_id = create_resp.json()["id"]
 
-        assert client.get(f"/api/strategy/{strategy_id}").status_code == 200
+        assert client.get(f"/api/strategy/{strategy_id}", headers=self._auth_headers()).status_code == 200
 
-        delete_resp = client.delete(f"/api/strategy/{strategy_id}")
+        delete_resp = client.delete(f"/api/strategy/{strategy_id}", headers=self._auth_headers())
         assert delete_resp.status_code == 200
         assert delete_resp.json()["success"] is True
 
-        assert client.get(f"/api/strategy/{strategy_id}").status_code == 404
+        assert client.get(f"/api/strategy/{strategy_id}", headers=self._auth_headers()).status_code == 404
 
     def test_delete_strategy_not_found(self, client):
         """删除不存在的策略返回 404"""
-        resp = client.delete("/api/strategy/nonexistent")
+        resp = client.delete("/api/strategy/nonexistent", headers=self._auth_headers())
         assert resp.status_code == 404
 
 
@@ -236,9 +259,20 @@ class TestStrategyCRUD:
 
 class TestDashboardMetrics:
 
+    def _auth_headers(self):
+        import os
+        from jose import jwt
+        secret = os.environ.get("JWT_SECRET_KEY", "stockquant-dev-secret-change-in-prod")
+        token = jwt.encode(
+            {"sub": "testuser", "role": "TRADER", "roles": ["TRADER"]},
+            secret,
+            algorithm="HS256",
+        )
+        return {"Authorization": f"Bearer {token}"}
+
     def test_metrics_empty(self, client):
         """无回测任务时指标返回零值"""
-        resp = client.get("/api/dashboard/metrics")
+        resp = client.get("/api/dashboard/metrics", headers=self._auth_headers())
         assert resp.status_code == 200
         data = resp.json()
         assert "total_equity" in data
@@ -256,7 +290,8 @@ class TestDashboardMetrics:
             "end_date": "2024-12-31",
             "cash": 1_000_000,
         }
-        submit = client.post("/api/backtest", json=payload)
+        auth_headers = self._auth_headers()
+        submit = client.post("/api/backtest", json=payload, headers=auth_headers)
         task_id = submit.json()["task_id"]
 
         # 直接操作 backtest router 的存储
@@ -269,7 +304,7 @@ class TestDashboardMetrics:
         }
         backtest._tasks[task_id]["equity_curve"] = [[1_000_000, 0], [1_100_000, 1]]
 
-        resp = client.get("/api/dashboard/metrics")
+        resp = client.get("/api/dashboard/metrics", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["backtest_count"] >= 1

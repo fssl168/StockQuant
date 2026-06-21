@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Table, Button, Input, Card, Typography, Space, Modal, Tooltip, message, Select, InputNumber } from 'antd'
+import { Table, Button, Input, Card, Typography, Space, Modal, Tooltip, message, Select, InputNumber, Popconfirm } from 'antd'
 import { Plus, Code, Trash, Sparkle } from '@phosphor-icons/react'
 import client from '@/api/client'
 import { useStrategyStore } from '@/stores/strategyStore'
@@ -213,7 +213,7 @@ export default function Strategy() {
     if (!aiDescription.trim()) return
     setAiGenerating(true)
     try {
-      const res = await client.post('/ai/strategy/generate', { description: aiDescription })
+      const res = await client.post('/api/ai/strategy/generate', { description: aiDescription })
       const body = (res as any).data ?? res
       if (body.code) {
         setEditorCode(body.code)
@@ -229,6 +229,25 @@ export default function Strategy() {
       message.error(errMsg)
     } finally {
       setAiGenerating(false)
+    }
+  }
+
+  const handleEdit = async (r: any) => {
+    const strategyId = r.id ?? r['id']
+    // DB 中已有策略的 code 可能为 null，必须通过 API 获取详情
+    try {
+      const { strategyApi } = await import('@/api/strategy')
+      const detail = await strategyApi.get(strategyId)
+      setEditorCode(detail.code ?? '')
+      setStrategyName(detail.name ?? r.name ?? r['name'] ?? '')
+      setCurrentStrategyId(detail.id ?? strategyId ?? null)
+      setPreviewCode(null)
+    } catch {
+      // API 失败则使用缓存数据
+      setEditorCode(r.code ?? r['code'] ?? '')
+      setStrategyName(r.name ?? r['name'] ?? '')
+      setCurrentStrategyId(strategyId ?? null)
+      setPreviewCode(null)
     }
   }
 
@@ -369,21 +388,38 @@ export default function Strategy() {
             loading={loading}
             columns={[
               { title: '名称', dataIndex: 'name', key: 'name', width: 100, ellipsis: true, render: (s: string) => (
-                <a onClick={() => { setEditorCode(strategies.find((st) => st.name === s)?.code ?? ''); setStrategyName(s); setCurrentStrategyId(strategies.find((st) => st.name === s)?.id ?? null); setPreviewCode(null) }}>
+                <a onClick={() => { setEditorCode(strategies.find((st) => st.name === s || st?.name === s)?.code ?? ''); setStrategyName(s); setCurrentStrategyId(strategies.find((st) => st.name === s || st?.name === s)?.id ?? null); setPreviewCode(null) }}>
                   <Text strong style={{ fontSize: 12 }}>{s}</Text>
                 </a>
               ) },
-              { title: '时间', dataIndex: 'created_at', key: 'time', width: 80, render: (d: string) => d ? new Date(d).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) : '-' },
-              { title: '', key: 'action', width: 60, render: (_: any, r: any) => (
-                <Space size={4}>
-                  <Tooltip title="编辑">
-                    <Button size="small" type="text" icon={<Code size={13} />} onClick={() => { setEditorCode(r.code); setStrategyName(r.name); setCurrentStrategyId(r.id); setPreviewCode(null) }} />
-                  </Tooltip>
-                  <Tooltip title="删除">
-                    <Button size="small" type="text" danger icon={<Trash size={13} />} onClick={() => deleteStrategy(r.id)} />
-                  </Tooltip>
-                </Space>
-              )},
+              {
+                title: '时间',
+                key: 'time',
+                width: 80,
+                render: (_: any, r: any) => {
+                  // snakeToCamel 将 created_at → createdAt，双兼容取值
+                  const dateStr = r.created_at ?? r.createdAt
+                  if (!dateStr) return '-'
+                  try { return new Date(dateStr).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) } catch { return '-' }
+                },
+              },
+              {
+                title: '',
+                key: 'action',
+                width: 60,
+                render: (_: any, r: any) => (
+                  <Space size={4}>
+                    <Tooltip title="编辑">
+                      <Button size="small" type="text" icon={<Code size={13} />} onClick={() => handleEdit(r)} />
+                    </Tooltip>
+                    <Tooltip title="删除">
+                      <Popconfirm title="确定删除此策略？" onConfirm={() => deleteStrategy(r.id ?? r['id'])}>
+                        <Button size="small" type="text" danger icon={<Trash size={13} />} />
+                      </Popconfirm>
+                    </Tooltip>
+                  </Space>
+                ),
+              },
             ]}
           />
         </Card>

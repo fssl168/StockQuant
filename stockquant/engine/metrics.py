@@ -61,40 +61,40 @@ class BacktestMetrics:
 
         return {
             # === 收益类 (3) ===
-            "Total Return": f"{total_return:.2%}",
-            "Annualized Return": f"{ann_return:.2%}",
-            "Excess Return (vs Benchmark)": f"{(ann_return - risk_free_rate):.2%}" if not beta else f"{alpha:.2%} (Alpha)",
+            "Total Return": round(total_return, 6),
+            "Annualized Return": round(ann_return, 6),
+            "Excess Return (vs Benchmark)": round(ann_return - risk_free_rate, 6) if not beta else round(alpha, 6),
             # === 风险类 (5) ===
-            "Max Drawdown": f"{max_dd:.2%}",
-            "Max Drawdown Duration": f"{max_dd_duration} bars",
-            "Avg Drawdown": f"{avg_dd:.2%}",
-            "Avg Drawdown Recovery": f"{dd_recovery} bars" if dd_recovery > 0 else "N/A",
-            "Daily Volatility": f"{daily_vol:.2%}",
+            "Max Drawdown": round(max_dd, 6),
+            "Max Drawdown Duration": max_dd_duration,
+            "Avg Drawdown": round(avg_dd, 6),
+            "Avg Drawdown Recovery": dd_recovery if dd_recovery > 0 else None,
+            "Daily Volatility": round(daily_vol, 6),
             # === 风险调整后收益 (6) ===
-            "Sharpe Ratio": f"{sharpe:.4f}",
-            "Sortino Ratio": f"{sortino:.4f}",
-            "Calmar Ratio": f"{calmar:.4f}",
-            "Omega Ratio": f"{omega:.4f}",
-            "Information Ratio": f"{info_ratio:.4f}" if info_ratio is not None else "N/A",
-            "Treynor Ratio": f"{(ann_return - risk_free_rate) / beta:.4f}" if beta and beta != 0 else "N/A",
+            "Sharpe Ratio": round(sharpe, 4),
+            "Sortino Ratio": round(sortino, 4),
+            "Calmar Ratio": round(calmar, 4),
+            "Omega Ratio": round(omega, 4),
+            "Information Ratio": round(info_ratio, 4) if info_ratio is not None else None,
+            "Treynor Ratio": round((ann_return - risk_free_rate) / beta, 4) if beta and beta != 0 else None,
             # === 交易统计 (7) ===
             "Total Trades": win_loss.get("total_pairs", 0),
             "Total Wins": win_loss.get("wins", 0),
             "Total Losses": win_loss.get("losses", 0),
-            "Win Rate": win_loss.get("win_rate", "N/A"),
-            "Profit Factor": win_loss.get("profit_factor", "N/A"),
-            "Avg Win": f"{win_loss.get('avg_win', 0):.2f}",
-            "Avg Loss": f"{win_loss.get('avg_loss', 0):.2f}",
+            "Win Rate": win_loss.get("win_rate", None),
+            "Profit Factor": win_loss.get("profit_factor", None),
+            "Avg Win": round(win_loss.get('avg_win', 0), 2),
+            "Avg Loss": round(win_loss.get('avg_loss', 0), 2),
             "Max Consecutive Wins": win_loss.get("max_consec_wins", 0),
             "Max Consecutive Losses": win_loss.get("max_consec_losses", 0),
             # === 其他 (6) ===
-            "SQN (System Quality Number)": f"{sqn:.4f}" if sqn else "N/A",
-            "Kelly %": f"{kelly:.2%}" if kelly else "N/A",
-            "VaR (95%)": f"{var_95:.2%}",
-            "CVaR (95%)": f"{cvar_95:.2%}",
-            "Beta": f"{beta:.4f}" if beta is not None else "N/A",
-            "Alpha": f"{alpha:.4f}" if alpha is not None else "N/A",
-            **{f"Month {m}": f"{v:.2%}" for m, v in monthly_returns.items()},
+            "SQN (System Quality Number)": round(sqn, 4) if sqn else None,
+            "Kelly %": round(kelly, 6) if kelly else None,
+            "VaR (95%)": round(var_95, 6),
+            "CVaR (95%)": round(cvar_95, 6),
+            "Beta": round(beta, 4) if beta is not None else None,
+            "Alpha": round(alpha, 4) if alpha is not None else None,
+            "Monthly Returns": {k: round(v, 6) for k, v in monthly_returns.items()},
         }
 
     @staticmethod
@@ -120,7 +120,6 @@ class BacktestMetrics:
         avg_dd_sum = 0
         dd_count = 0
         dd_recovery_count = 0
-        recovery_done = set()
 
         for i, eq in enumerate(equities):
             if eq > peak:
@@ -132,9 +131,10 @@ class BacktestMetrics:
             if dd > 0.001:  # 微小回撤忽略
                 avg_dd_sum += dd
                 dd_count += 1
-            else:
-                if dd_count > 0:
-                    recovery_done.add(dd_count)
+            elif dd_count > 0:
+                # 从回撤恢复到 >= 0.001 以下 — 计为一次 recovery
+                dd_recovery_count += 1
+                dd_count = 0
 
         avg_dd = avg_dd_sum / dd_count if dd_count > 0 else 0.0
 
@@ -250,18 +250,18 @@ class BacktestMetrics:
     @staticmethod
     def _win_loss_stats(paired_pnls):
         if not paired_pnls:
-            return {"total_pairs": 0, "wins": 0, "losses": 0, "win_rate": "N/A",
-                    "profit_factor": "N/A", "avg_win": 0, "avg_loss": 0,
+            return {"total_pairs": 0, "wins": 0, "losses": 0, "win_rate": None,
+                    "profit_factor": None, "avg_win": 0, "avg_loss": 0,
                     "max_consec_wins": 0, "max_consec_losses": 0}
 
         wins = [p for p in paired_pnls if p > 0]
         losses = [p for p in paired_pnls if p < 0]
         total = len(paired_pnls)
-        win_rate = f"{len(wins) / total:.1%}" if total > 0 else "N/A"
+        win_rate = len(wins) / total if total > 0 else None
 
         gross_profit = sum(wins) if wins else 0
         gross_loss = abs(sum(losses)) if losses else 1
-        pf = f"{gross_profit / gross_loss:.2f}" if gross_loss > 0 else "N/A"
+        pf = gross_profit / gross_loss if gross_loss > 0 else None
 
         avg_win = sum(wins) / len(wins) if wins else 0
         avg_loss = sum(losses) / len(losses) if losses else 0
@@ -351,9 +351,11 @@ class BacktestMetrics:
         win_rate = wins / total if total > 0 else 0
         loss_avg = sum(p for p in paired_pnls if p < 0) / max(1, sum(1 for p in paired_pnls if p < 0))
         win_avg = sum(p for p in paired_pnls if p > 0) / max(1, sum(1 for p in paired_pnls if p > 0))
-        if loss_avg == 0:
+        if loss_avg == 0 or win_avg == 0:
             return 0.0
         win_loss_ratio = abs(win_avg / loss_avg)
+        if win_loss_ratio == 0:
+            return 0.0
         kelly = win_rate - (1 - win_rate) / win_loss_ratio
         return max(0, kelly * 0.5)  # 半凯利
 

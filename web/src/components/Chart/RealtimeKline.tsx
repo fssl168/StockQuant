@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ReactECharts from 'echarts-for-react'
 
 interface KlineItem {
@@ -15,6 +15,8 @@ interface RealtimeKlineProps {
   data: KlineItem[]
   height?: number
   indicators?: string[]
+  /** 可选：外部实时价格（如 WebSocket 行情推送）。传入时优先使用，跳过内部模拟 */
+  livePrice?: number
 }
 
 function computeMA(closes: number[], period: number): (number | null)[] {
@@ -32,15 +34,60 @@ const MA_COLORS: Record<string, string> = {
   MA20: '#f56c6c',
 }
 
+// 模拟 Tick：每 2 秒更新一次，在最新收盘价 ±0.5% 范围内随机波动
+const TICK_INTERVAL_MS = 2000
+const TICK_JITTER_RATIO = 0.005
+
 export default function RealtimeKline({
   symbol,
   data,
   height = 400,
   indicators = ['MA5', 'MA10', 'MA20'],
+  livePrice,
 }: RealtimeKlineProps) {
+  const [simPrice, setSimPrice] = useState<number | null>(null)
+
+  // 基准收盘价：取日线最后一根的 close
+  const baseClose = useMemo(() => {
+    if (!data || data.length === 0) return null
+    return data[data.length - 1].close
+  }, [data])
+
+  // 模拟 Tick 价格抖动：每 2 秒在基准收盘价 ±0.5% 范围内随机波动
+  useEffect(() => {
+    if (baseClose == null) return
+    setSimPrice(baseClose)
+    const timer = setInterval(() => {
+      setSimPrice(() => {
+        const range = baseClose * TICK_JITTER_RATIO
+        const jitter = (Math.random() * 2 - 1) * range
+        return Number((baseClose + jitter).toFixed(2))
+      })
+    }, TICK_INTERVAL_MS)
+    return () => clearInterval(timer)
+  }, [baseClose])
+
+  // 实时价格：外部 livePrice 优先（兼容 WebSocket 推送），否则使用内部模拟
+  const tickPrice = livePrice ?? simPrice
+
+  // 基于原始日线 + tickPrice 计算用于渲染的数据（仅更新最后一根 K 线）
+  const displayData = useMemo<KlineItem[]>(() => {
+    if (!data || data.length === 0) return []
+    if (tickPrice == null) return data
+    const last = data[data.length - 1]
+    const updated: KlineItem = {
+      ...last,
+      close: tickPrice,
+      high: Math.max(last.high, tickPrice),
+      low: Math.min(last.low, tickPrice),
+    }
+    return [...data.slice(0, -1), updated]
+  }, [data, tickPrice])
+
+  // MA 基于展示数据（含实时价格），随 tick 动态更新
   const maData = useMemo(() => {
-    if (!data || data.length === 0) return {}
-    const closes = data.map((d) => d.close)
+    if (displayData.length === 0) return {}
+    const closes = displayData.map((d) => d.close)
     const result: Record<string, (number | null)[]> = {}
     for (const ind of indicators) {
       const period = parseInt(ind.replace('MA', ''), 10)
@@ -49,14 +96,14 @@ export default function RealtimeKline({
       }
     }
     return result
-  }, [data, indicators])
+  }, [displayData, indicators])
 
   if (!data || data.length === 0) return null
 
-  const dates = data.map((d) => d.date)
-  const ohlc = data.map((d) => [d.open, d.close, d.low, d.high])
-  const upVolumes = data.map((d) => (d.close >= d.open ? d.volume : 0))
-  const downVolumes = data.map((d) => (d.close < d.open ? d.volume : 0))
+  const dates = displayData.map((d) => d.date)
+  const ohlc = displayData.map((d) => [d.open, d.close, d.low, d.high])
+  const upVolumes = displayData.map((d) => (d.close >= d.open ? d.volume : 0))
+  const downVolumes = displayData.map((d) => (d.close < d.open ? d.volume : 0))
 
   const maSeries = indicators
     .filter((ind) => maData[ind])
@@ -73,6 +120,10 @@ export default function RealtimeKline({
 
   const option = {
     backgroundColor: 'transparent',
+    animation: true,
+    animationDuration: 600,
+    animationDurationUpdate: 600,
+    animationEasingUpdate: 'cubicOut',
     legend: {
       show: true,
       top: 0,
@@ -191,6 +242,9 @@ export default function RealtimeKline({
           borderColor: '#ef5350',
           borderColor0: '#26a69a',
         },
+        // 实时更新动画：tick 到来时平滑过渡
+        animationDurationUpdate: 500,
+        animationEasingUpdate: 'linear',
       },
       ...maSeries,
       {
@@ -219,6 +273,7 @@ export default function RealtimeKline({
   return (
     <ReactECharts
       option={option}
+      notMerge={false}
       style={{ height, width: '100%' }}
       opts={{ renderer: 'canvas' }}
     />

@@ -76,7 +76,11 @@ class BaseStrategy(ABC):
         pass
 
     def on_tick(self, tick: Any):
-        """Tick 数据触发（预留）"""
+        """Tick 数据触发 — 实盘/模拟盘中每个 Tick 事件调用。
+
+        默认实现为空，策略可重写以响应 Tick 级事件。
+        Tick 数据包含: symbol, price, volume, bid_price, ask_price, timestamp。
+        """
         pass
 
     def on_order(self, order: Order):
@@ -264,6 +268,9 @@ class BaseStrategy(ABC):
         trade = self._cerebro.broker.place_order(order, bar) if self._cerebro.broker else None
 
         if trade:
+            # 记录成交到 Cerebro（用于回测报告）
+            self._cerebro._trades.append(trade)
+
             # 更新持仓
             is_today = True  # 简化：所有成交都标记为当日
             self._cerebro.update_position_fill(order.symbol, order.quantity, trade.price, is_today)
@@ -275,6 +282,8 @@ class BaseStrategy(ABC):
             # 回调
             self.on_trade(trade)
             self.log(f"Filled: {order.side.value} {order.quantity} {order.symbol} @ {trade.price:.2f}")
+        else:
+            print(f"DEBUG _submit_order: trade={trade}, order.side={order.side}, order.qty={order.quantity}, order.price={order.price}, bar.close={bar.close}")
 
         self.on_order(order)
 

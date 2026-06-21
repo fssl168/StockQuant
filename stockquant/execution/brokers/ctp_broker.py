@@ -23,6 +23,7 @@ from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
 from stockquant.models.bar import BarData
 from stockquant.models.trade import TradeData
 from stockquant.engine.broker import Broker, OrderAuditLog
+from stockquant.execution.brokers.mock_sdk import MockCtpApi
 
 logger = logging.getLogger("stockquant.execution.ctp")
 
@@ -41,9 +42,7 @@ except ImportError:
 
 
 class CTPBroker(Broker):
-    """CTP 券商 Broker — 期货交易前置系统
-
-    通过 CTP SDK 连接期货公司交易前置，支持期货/期权实盘交易。
+    """CTP 券商 Broker — 期货交易前置系统，通过 CTP SDK 连接期货公司交易前置，支持期货/期权实盘交易。
 
     注意：CTP 面向期货交易，下单数量单位为「手」而非「股」，
     且不同合约的每手数量不同（如 IF 每手 300，rb 每手 10）。
@@ -54,9 +53,12 @@ class CTPBroker(Broker):
         broker_id: 期货公司 BrokerID
         front_addr: 交易前置地址 (tcp://ip:port)
         app_id: AppID（部分期货公司需要）
+        _mock_api: 测试用 mock SDK
 
     如 CTP SDK 未安装，所有操作将降级为模拟模式并输出警告日志。
     """
+
+    api = "ctp"
 
     # CTP 常量
     THOST_FTDC_D_Buy = "2"
@@ -75,13 +77,14 @@ class CTPBroker(Broker):
         broker_id: str = "",
         front_addr: str = "",
         app_id: str = "",
+        _mock_api: Any = None,  # 测试用：注入 Mock SDK
     ):
         self._user = user
         self._password = password
         self._broker_id = broker_id
         self._front_addr = front_addr
         self._app_id = app_id
-        self._ctp_api = None
+        self._ctp_api = _mock_api  # 测试用 mock SDK（可替换真实 SDK）
         self._spi = None
         self._request_id = 0
         self._connected = False
@@ -96,7 +99,15 @@ class CTPBroker(Broker):
         self._front_connected_event = threading.Event()
         self._login_event = threading.Event()
 
-        if CTP_AVAILABLE and user and front_addr:
+        if self._ctp_api is not None and user and front_addr:
+            # Mock SDK 模式：模拟连接
+            self._connected = True
+            self._logged_in = True
+            # 注册 SPI 以支持查询回调
+            self._spi = _CTPTraderSpi(self)
+            self._ctp_api.RegisterSpi(self._spi)
+            logger.info("CTP Broker 使用 Mock SDK，连接成功")
+        elif CTP_AVAILABLE and user and front_addr:
             self.connect()
 
     def _next_request_id(self) -> int:
@@ -109,6 +120,9 @@ class CTPBroker(Broker):
         Returns:
             True 连接成功，False 连接失败或 SDK 不可用
         """
+        if self._ctp_api is not None:
+            # Mock SDK 模式，已在 __init__ 中处理
+            return True
         if not CTP_AVAILABLE:
             logger.warning("CTP SDK 未安装，无法连接 CTP 前置，降级为模拟模式")
             self._connected = False
@@ -234,7 +248,11 @@ class CTPBroker(Broker):
 
         try:
             # 构建 CTP 报单请求
-            req = _ctp_api.CThostFtdcInputOrderField()
+            if self._connected and self._ctp_api:
+                req = self._ctp_api.CThostFtdcInputOrderField()
+            else:
+                # 降级为模拟模式
+                raise RuntimeError("CTP not connected")
             req.BrokerID = self._broker_id
             req.InvestorID = self._user
             req.InstrumentID = order.symbol
@@ -268,7 +286,8 @@ class CTPBroker(Broker):
             req.ForceCloseReason = "0"  # THOST_FTDC_FCC_NotForceClose
 
             # 提交报单
-            ret = self._ctp_api.ReqOrderInsert(req, self._next_request_id())
+            if self._connected and self._ctp_api:
+                ret = self._ctp_api.ReqOrderInsert(req, self._next_request_id())
 
             if ret == 0:
                 # 报单请求已发送
@@ -330,7 +349,7 @@ class CTPBroker(Broker):
         """
         if self.connected and self._ctp_api:
             try:
-                req = _ctp_api.CThostFtdcQryInvestorPositionField()
+                req = self._ctp_api.CThostFtdcQryInvestorPositionField()
                 req.BrokerID = self._broker_id
                 req.InvestorID = self._user
                 self._ctp_api.ReqQryInvestorPosition(req, self._next_request_id())
@@ -351,7 +370,7 @@ class CTPBroker(Broker):
         """
         if self.connected and self._ctp_api:
             try:
-                req = _ctp_api.CThostFtdcQryTradingAccountField()
+                req = self._ctp_api.CThostFtdcQryTradingAccountField()
                 req.BrokerID = self._broker_id
                 req.InvestorID = self._user
                 self._ctp_api.ReqQryTradingAccount(req, self._next_request_id())

@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import redis
 from typing import List, Optional
+
+logger = logging.getLogger("stockquant.persistence")
 
 _client: Optional[redis.Redis] = None
 
@@ -36,7 +39,7 @@ def add_to_watchlist(symbols: List[str]) -> None:
             if symbol not in get_watchlist():
                 client.rpush("watchlist", symbol)
     except Exception:
-        pass
+        logger.debug("Redis: failed to add to watchlist: %s", symbols)
 
 
 def remove_from_watchlist(symbols: List[str]) -> None:
@@ -46,4 +49,4 @@ def remove_from_watchlist(symbols: List[str]) -> None:
         for symbol in symbols:
             client.lrem("watchlist", 0, symbol)
     except Exception:
-        pass
+        logger.debug("Redis: failed to remove from watchlist: %s", symbols)

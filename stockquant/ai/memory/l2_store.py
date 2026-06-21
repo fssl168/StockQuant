@@ -25,8 +25,9 @@ class L2Store:
     PostgreSQL 不可用时自动降级为内存存储。
     """
 
-    def __init__(self, db_url: Optional[str] = None) -> None:
+    def __init__(self, db_url: Optional[str] = None, user_id: str = "test_user") -> None:
         self._db_url = db_url or _default_db_url()
+        self._user_id = user_id
         self._backend = "memory"  # 默认降级为内存
         self._engine = None
         self._session_factory = None
@@ -47,13 +48,25 @@ class L2Store:
             elif url.startswith("postgresql+psycopg2://"):
                 url = url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
 
-            self._engine = create_async_engine(url, echo=False, pool_size=5, max_overflow=10)
+            self._engine = create_async_engine(url, echo=False, pool_size=5)
             self._session_factory = sessionmaker(
                 self._engine, class_=AsyncSession, expire_on_commit=False,
             )
 
-            # 创建表
-            self._ensure_tables()
+            # 创建表并创建默认用户
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        pool.submit(lambda: asyncio.run(self._ensure_tables_and_default_user())).result()
+                else:
+                    loop.run_until_complete(self._ensure_tables_and_default_user())
+            except RuntimeError:
+                asyncio.run(self._ensure_tables_and_default_user())
+            except Exception:
+                raise
             self._backend = "postgresql"
             logger.info("L2 使用 PostgreSQL 后端 (url=%s)", url.split("@")[-1] if "@" in url else url)
             return
@@ -66,28 +79,25 @@ class L2Store:
         self._session_factory = None
         self._backend = "memory"
 
-    def _ensure_tables(self) -> None:
-        """确保表结构已创建"""
-        try:
-            import asyncio
-            from stockquant.persistence.models import Base
+    async def _ensure_tables_and_default_user(self) -> None:
+        """确保表结构已创建，并创建默认测试用户"""
+        from stockquant.persistence.models import Base, UserModel
+        from sqlalchemy import select
 
-            async def _create():
-                async with self._engine.begin() as conn:
-                    await conn.run_sync(Base.metadata.create_all)
-
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        pool.submit(lambda: asyncio.run(_create())).result()
-                else:
-                    loop.run_until_complete(_create())
-            except RuntimeError:
-                asyncio.run(_create())
-        except Exception as exc:
-            logger.warning("L2 表创建失败: %s", exc)
+        async with self._engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        # 确保默认用户存在
+        async with self._session_factory() as session:
+            user = await session.execute(select(UserModel).where(UserModel.id == self._user_id))
+            if user.scalar_one_or_none() is None:
+                session.add(UserModel(
+                    id=self._user_id,
+                    username="test_user",
+                    hashed_password="not_used",
+                    roles='["user"]',
+                    disabled=0,
+                ))
+                await session.commit()
 
     # ── 同步包装器 ──────────────────────────────────────────────────────
 
@@ -241,6 +251,33 @@ class L2Store:
         except Exception:
             return False
 
+    def clear_all(self) -> int:
+        """清空所有条目（用于测试）"""
+        if self._backend == "memory":
+            n = len(self._entries)
+            self._entries.clear()
+            return n
+        try:
+            import asyncio
+            async def _clear():
+                from stockquant.persistence.models import L2Memory
+                from sqlalchemy import delete as sa_delete
+                async with self._session_factory() as session:
+                    result = await session.execute(sa_delete(L2Memory))
+                    await session.commit()
+                    return result.rowcount
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        return pool.submit(lambda: asyncio.run(_clear())).result()
+                return loop.run_until_complete(_clear())
+            except RuntimeError:
+                return asyncio.run(_clear())
+        except Exception:
+            return 0
+
     # ── 同步降级方法 ────────────────────────────────────────────────────
 
     def _write_sync(self, item: Dict[str, Any]) -> str:
@@ -268,8 +305,11 @@ class L2Store:
             if not isinstance(metadata, str):
                 metadata = json.dumps(metadata, ensure_ascii=False)
 
+            user_id = item.get("user_id") or self._user_id
+
             if row:
                 row.symbol = item.get("symbol", "")
+                row.user_id = user_id
                 row.content = item.get("content", "")
                 row.metadata_json = metadata
                 row.timestamp = item.get("timestamp", datetime.now().isoformat())
@@ -278,6 +318,7 @@ class L2Store:
             else:
                 row = L2Memory(
                     id=item_id,
+                    user_id=user_id,
                     symbol=item.get("symbol", ""),
                     content=item.get("content", ""),
                     metadata_json=metadata,
@@ -315,7 +356,11 @@ class L2Store:
 
     def _write_memory(self, item: Dict[str, Any]) -> str:
         item_id = item.get("id", f"l2_{datetime.now().strftime('%Y%m%d%H%M%S')}_{id(item)}")
-        self._entries.append({**item, "id": item_id})
+        entry = {**item, "id": item_id}
+        # Ensure user_id is present (required by L2Memory model)
+        if "user_id" not in entry or not entry["user_id"]:
+            entry["user_id"] = self._user_id
+        self._entries.append(entry)
         return item_id
 
     def _search_memory(self, query: str, top_k: int) -> List[Dict[str, Any]]:
@@ -326,7 +371,16 @@ class L2Store:
     # ── 检索算法 ────────────────────────────────────────────────────────
 
     def _tfidf_search(self, query: str, items: List[Dict[str, Any]], top_k: int) -> List[Dict[str, Any]]:
-        """TF-IDF 语义检索"""
+        """Embedding 向量检索（优先）→ TF-IDF（降级）"""
+        # 优先尝试 Embedding 向量搜索
+        try:
+            return self._embedding_search(query, items, top_k)
+        except ImportError:
+            pass
+        except Exception as exc:
+            logger.debug("Embedding 检索失败，降级为 TF-IDF: %s", exc)
+
+        # TF-IDF 降级
         from sklearn.feature_extraction.text import TfidfVectorizer
         from sklearn.metrics.pairwise import cosine_similarity
 
@@ -341,6 +395,36 @@ class L2Store:
         similarities = cosine_similarity(query_vec, doc_vecs).flatten()
 
         scored = list(zip(items, similarities))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [item for item, score in scored[:top_k]]
+
+    def _embedding_search(self, query: str, items: List[Dict[str, Any]], top_k: int) -> List[Dict[str, Any]]:
+        """sentence-transformers Embedding 向量检索（语义匹配）
+
+        使用 all-MiniLM-L6-v2 轻量模型，支持中英文语义匹配。
+        无 sentence-transformers 时抛 ImportError 触发降级。
+        """
+        from sentence_transformers import SentenceTransformer
+        import numpy as np
+
+        # 懒加载模型（单例缓存）
+        if not hasattr(self, "_st_model"):
+            self._st_model = SentenceTransformer("all-MiniLM-L6-v2")
+            logger.info("L2 Embedding 模型加载完成: all-MiniLM-L6-v2")
+
+        model = self._st_model
+
+        # 编码查询和文档
+        contents = [item["content"] for item in items]
+        doc_embeddings = model.encode(contents, convert_to_numpy=True, show_progress_bar=False)
+        query_embedding = model.encode([query], convert_to_numpy=True, show_progress_bar=False)
+
+        # 余弦相似度
+        similarities = np.dot(doc_embeddings, query_embedding[0]) / (
+            np.linalg.norm(doc_embeddings, axis=1) * np.linalg.norm(query_embedding[0]) + 1e-8
+        )
+
+        scored = list(zip(items, similarities.tolist()))
         scored.sort(key=lambda x: x[1], reverse=True)
         return [item for item, score in scored[:top_k]]
 

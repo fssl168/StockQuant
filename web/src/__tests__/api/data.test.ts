@@ -13,11 +13,11 @@ describe('Data API', () => {
   })
 
   // ---- sources ----
-  it('dataApi.sources should call GET /data/sources', async () => {
+  it('dataApi.sources should call GET /api/data/sources', async () => {
     const mockSources = [{ provider: 'tushare', enabled: true }]
     vi.mocked(client.get).mockResolvedValueOnce(mockSources)
     const result = await dataApi.sources()
-    expect(client.get).toHaveBeenCalledWith('/data/sources')
+    expect(client.get).toHaveBeenCalledWith('/api/data/sources')
     expect(result).toEqual(mockSources)
   })
 
@@ -28,28 +28,28 @@ describe('Data API', () => {
   })
 
   // ---- updateSource ----
-  it('dataApi.updateSource should call POST /data/sources with config', async () => {
+  it('dataApi.updateSource should call POST /api/data/sources with config', async () => {
     const mockConfig = { provider: 'tushare', enabled: true, tushare_token: 'xxx' }
     vi.mocked(client.post).mockResolvedValueOnce({ success: true })
     const result = await dataApi.updateSource(mockConfig)
-    expect(client.post).toHaveBeenCalledWith('/data/sources', mockConfig)
+    expect(client.post).toHaveBeenCalledWith('/api/data/sources', mockConfig)
     expect(result).toEqual({ success: true })
   })
 
   // ---- cacheStats ----
-  it('dataApi.cacheStats should call GET /data/cache', async () => {
+  it('dataApi.cacheStats should call GET /api/data/cache', async () => {
     const mockStats = { sizeMb: 128.5, hitRate: 0.85, lastUpdate: '2024-01-01', symbolCount: 50 }
     vi.mocked(client.get).mockResolvedValueOnce(mockStats)
     const result = await dataApi.cacheStats()
-    expect(client.get).toHaveBeenCalledWith('/data/cache')
+    expect(client.get).toHaveBeenCalledWith('/api/data/cache')
     expect(result).toEqual(mockStats)
   })
 
   // ---- clearCache ----
-  it('dataApi.clearCache should call DELETE /data/cache', async () => {
+  it('dataApi.clearCache should call DELETE /api/data/cache', async () => {
     vi.mocked(client.delete).mockResolvedValueOnce({ success: true })
     const result = await dataApi.clearCache()
-    expect(client.delete).toHaveBeenCalledWith('/data/cache')
+    expect(client.delete).toHaveBeenCalledWith('/api/data/cache')
     expect(result).toEqual({ success: true })
   })
 
@@ -59,11 +59,11 @@ describe('Data API', () => {
   })
 
   // ---- fetchKline ----
-  it('dataApi.fetchKline should call GET /data/kline with query params', async () => {
+  it('dataApi.fetchKline should call GET /api/data/kline with query params', async () => {
     const mockKline = [{ date: '2024-01-01', open: 100, close: 105 }]
     vi.mocked(client.get).mockResolvedValueOnce(mockKline)
     const result = await dataApi.fetchKline('sh600519', 'tushare', '2024-01-01', '2024-12-31')
-    expect(client.get).toHaveBeenCalledWith('/data/kline?symbol=sh600519&source=tushare&start=2024-01-01&end=2024-12-31')
+    expect(client.get).toHaveBeenCalledWith('/api/data/kline?symbol=sh600519&source=tushare&start=2024-01-01&end=2024-12-31')
     expect(result).toEqual(mockKline)
   })
 

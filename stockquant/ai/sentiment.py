@@ -74,9 +74,10 @@ class SentimentAnalyzer:
         "持续": 1.3, "连续": 1.3, "反复": 1.2, "不断": 1.3,
     }
 
-    # ── HuggingFace 模型配置（备选链：中文专用 → 多语言）──
-    _HF_MODEL_NAME = "uer/roberta-base-finetuned-jd-binary-chinese"  # 中文情感专用
-    _HF_FALLBACK_MODEL = "lxyuan/distilbert-base-multilingual-cased-sentiments-student"  # 多语言备选
+    # ── HuggingFace 模型配置（备选链：金融专用 → 中文专用 → 多语言）──
+    _HF_MODEL_NAME = "ProsusAI/finbert-tone"  # 金融领域专用 FinBERT
+    _HF_FALLBACK_MODEL = "uer/roberta-base-finetuned-jd-binary-chinese"  # 中文情感专用
+    _HF_FALLBACK_MODEL_2 = "lxyuan/distilbert-base-multilingual-cased-sentiments-student"  # 多语言备选
     _hf_pipeline = None
     _hf_model_loaded: Optional[str] = None
 
@@ -94,11 +95,12 @@ class SentimentAnalyzer:
         """尝试加载 HuggingFace 模型（带备选链）
 
         依次尝试:
-        1. 中文专用模型 (uer/roberta-base-finetuned-jd-binary-chinese)
-        2. 多语言备选模型 (lxyuan/distilbert-base-multilingual-cased-sentiments-student)
-        3. 全部失败则降级为关键词规则
+        1. 金融领域专用 FinBERT (ProsusAI/finbert-tone) — 英文金融文本最佳
+        2. 中文专用模型 (uer/roberta-base-finetuned-jd-binary-chinese)
+        3. 多语言备选模型 (lxyuan/distilbert-base-multilingual-cased-sentiments-student)
+        4. 全部失败则降级为关键词规则
         """
-        candidates = [self._HF_MODEL_NAME, self._HF_FALLBACK_MODEL]
+        candidates = [self._HF_MODEL_NAME, self._HF_FALLBACK_MODEL, self._HF_FALLBACK_MODEL_2]
         for model_name in candidates:
             try:
                 from transformers import pipeline

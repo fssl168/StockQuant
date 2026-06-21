@@ -71,7 +71,7 @@ class DataFetcherManager:
         health_check : callable | None
             自定义健康检查函数，返回 True 表示健康
         """
-        name = getattr(fetcher, "symbol", id(fetcher))
+        name = getattr(fetcher, "symbol", None) or getattr(fetcher, "name", None) or f"{fetcher.__class__.__name__}_{id(fetcher)}"
         self._fetchers[name] = fetcher
         self._statuses[name] = FetcherStatus(
             name=name,
@@ -83,7 +83,7 @@ class DataFetcherManager:
         logger.debug(f"DataFetcherManager: registered fetcher '{name}' (priority={priority})")
 
     def fetch(self, symbol: str, timeframe: str = "1d",
-              start: str = "", end: str = "") -> pd.DataFrame:
+              start: str = "", end: str = "", days: int = 0) -> pd.DataFrame:
         """自动选择健康数据源并拉取数据。
 
         按优先级排序，从最高优先级开始尝试，失败后自动切换到下一个。
@@ -98,6 +98,8 @@ class DataFetcherManager:
             开始日期
         end : str
             结束日期
+        days : int
+            获取最近 N 天的数据（如果指定，会覆盖 start 参数）
 
         Returns
         -------
@@ -115,16 +117,19 @@ class DataFetcherManager:
         last_error = ""
         for feed in healthy:
             name = getattr(feed, "symbol", id(feed))
+            # 尝试调用 feed 的 fetch 方法按需加载数据（如果 feed 支持）
             try:
-                result = feed.get_dataframe()
+                if hasattr(feed, 'fetch') and callable(getattr(feed, 'fetch')):
+                    feed.fetch(symbol, timeframe, start, end, days)
+                result = feed.get_dataframe(symbol) if hasattr(feed, 'get_dataframe') else feed.get_dataframe()
                 if result is not None and not result.empty:
-                    logger.debug(f"DataFetcherManager: fetched {len(result)} rows from '{name}'")
+                    logger.debug(f"DataFetcherManager: fetched {len(result)} rows from '{name}' for {symbol}")
                     self.mark_healthy(name)
                     return result
-                logger.warning(f"DataFetcherManager: '{name}' returned empty data")
+                logger.warning(f"DataFetcherManager: '{name}' returned empty data for {symbol}")
             except Exception as e:
                 last_error = str(e)
-                logger.warning(f"DataFetcherManager: fetcher '{name}' failed: {e}")
+                logger.warning(f"DataFetcherManager: fetcher '{name}' failed for {symbol}: {e}")
                 self.mark_unhealthy(name, error=last_error)
 
         raise ValueError(f"All fetchers failed. Last error: {last_error}")

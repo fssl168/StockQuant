@@ -181,7 +181,7 @@ class YamlStrategyLoader:
             # Risk config
             self._yaml_risk = risk_cfg
 
-            # Position sizing (placeholder for MVP)
+            # Position sizing configuration
             self._yaml_position_method = config.get("position", {}).get("method", "FixedFraction")
             self._yaml_position_params = config.get("position", {}).get("params", {})
 

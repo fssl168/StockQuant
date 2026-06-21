@@ -13,10 +13,14 @@ import {
   ArrowSquareOut,
   CurrencyCircleDollar,
   SlidersHorizontal,
+  Brain,
+  ShieldCheck,
+  Funnel,
 } from '@phosphor-icons/react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useNotificationStore } from '@/stores/notificationStore'
+import { useAuthStore } from '@/stores/authStore'
 
 const { Header, Sider, Content } = Layout
 
@@ -32,6 +36,9 @@ const menuItems = [
   { key: '/comparison', icon: <ChartBar size={20} weight="fill" />, label: '对比' },
   { key: '/portfolio', icon: <TrendUp size={20} weight="fill" />, label: '组合' },
   { key: '/ai-chat', icon: <ChatCenteredText size={20} weight="fill" />, label: 'AI 对话' },
+  { key: '/memory', icon: <Brain size={20} weight="fill" />, label: '记忆系统' },
+  { key: '/hallucination', icon: <ShieldCheck size={20} weight="fill" />, label: '反幻觉' },
+  { key: '/ai-pipeline', icon: <Funnel size={20} weight="fill" />, label: 'AI 管线' },
   { key: '/settings', icon: <Gear size={20} weight="fill" />, label: '设置' },
 ]
 
@@ -42,6 +49,9 @@ interface Props {
 export default function AppLayout({ children }: Props) {
   const navigate = useNavigate()
   const location = useLocation()
+  const { user } = useAuthStore()
+  const userRoles = (user?.roles ?? '').toString().split(',').map(r => r.trim()) || []
+  const isAdmin = userRoles.includes('ADMIN')
   const [time, setTime] = useState(new Date())
   const [apiLatency, setApiLatency] = useState<number | null>(null)
   const [backendAvailable, setBackendAvailable] = useState(false)
@@ -84,7 +94,7 @@ export default function AppLayout({ children }: Props) {
     return () => clearInterval(interval)
   }, [])
 
-  const visibleItems = menuItems.filter((m) => !m.hidden)
+  const visibleItems = menuItems.filter((m) => !m.hidden && (!m.meta?.role || isAdmin))
 
   const siderStyle: React.CSSProperties = {
     overflow: 'auto',

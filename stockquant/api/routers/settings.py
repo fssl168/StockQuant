@@ -15,6 +15,10 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from stockquant.api.schemas import (
+    SettingsSaveRequest,
+    UserToken,
+)
 from stockquant.api.deps import get_admin_user, get_current_user
 
 logger = logging.getLogger("stockquant.api.settings")
@@ -29,7 +33,7 @@ _SETTINGS_DIR = Path.home() / ".stockquant"
 _SETTINGS_FILE = _SETTINGS_DIR / "settings.json"
 
 
-def _load_settings_from_file() -> dict:
+def _load_settings_from_file() -> Dict[str, Any]:
     """从 JSON 文件加载配置覆盖"""
     if _SETTINGS_FILE.exists():
         try:
@@ -93,13 +97,21 @@ try:
         return _fernet.encrypt(value.encode()).decode()
 
     def _decrypt_value(value: str) -> str:
-        """解密敏感值，失败时返回原始值（兼容旧明文数据）"""
+        """解密敏感值，失败时返回原始值（兼容旧明文数据）。
+
+        安全性说明：Fernet 解密失败（InvalidToken 或其他异常）时返回
+        原始输入值，这意味着：
+        1. 如果加密 key 不同（例如迁移到另一台机器），旧加密数据会作为
+           密文原样返回。这是符合预期的行为——不同环境的加密 key 不同，
+           数据不兼容是安全的（不会错误解密错误的密文）。
+        2. 如果值是明文（从未加密），直接原样返回，无需前缀检测。
+        """
         if not value:
             return ""
         try:
             return _fernet.decrypt(value.encode()).decode()
         except Exception:
-            return value
+            return value  # Plaintext or different key — return as-is (safe)
 
     def _mask_value(value: str) -> str:
         """掩码处理，保留前后各4位"""
@@ -135,6 +147,7 @@ except ImportError:
 _ENV_VAR_MAP: Dict[str, str] = {
     # === 交易配置 ===
     "trading.broker": "TRADING_BROKER",
+    "trading.api": "TRADING_API",
     "trading.admin_token": "TRADING_ADMIN_TOKEN",
     "trading.qmt_path": "QMT_PATH",
     "trading.qmt_account": "QMT_ACCOUNT",
@@ -142,9 +155,14 @@ _ENV_VAR_MAP: Dict[str, str] = {
     "trading.xtp_user": "XTP_USER",
     "trading.xtp_password": "XTP_PASSWORD",
     "trading.xtp_app_id": "XTP_APP_ID",
+    "trading.xtp_client_id": "XTP_CLIENT_ID",
+    "trading.xtp_server_addr": "XTP_SERVER_ADDR",
+    "trading.xtp_software_key": "XTP_SOFTWARE_KEY",
     "trading.ctp_user": "CTP_USER",
     "trading.ctp_password": "CTP_PASSWORD",
     "trading.ctp_broker_id": "CTP_BROKER_ID",
+    "trading.ctp_front_addr": "CTP_FRONT_ADDR",
+    "trading.ctp_app_id": "CTP_APP_ID",
     "trading.auto_confirm": "",  # 无对应环境变量
     
     # === 数据源配置 ===
@@ -281,6 +299,7 @@ _ENV_VAR_MAP: Dict[str, str] = {
 _SCHEMA: Dict[str, type] = {
     # === 交易配置 ===
     "trading.broker": str,
+    "trading.api": str,
     "trading.admin_token": str,
     "trading.qmt_path": str,
     "trading.qmt_account": str,
@@ -288,9 +307,14 @@ _SCHEMA: Dict[str, type] = {
     "trading.xtp_user": str,
     "trading.xtp_password": str,
     "trading.xtp_app_id": str,
+    "trading.xtp_client_id": str,
+    "trading.xtp_server_addr": str,
+    "trading.xtp_software_key": str,
     "trading.ctp_user": str,
     "trading.ctp_password": str,
     "trading.ctp_broker_id": str,
+    "trading.ctp_front_addr": str,
+    "trading.ctp_app_id": str,
     "trading.auto_confirm": bool,
     
     # === 数据源配置 ===
@@ -435,6 +459,7 @@ def _build_default_settings() -> Dict[str, Any]:
     
     # === 交易配置 ===
     defaults["trading.broker"] = os.environ.get("TRADING_BROKER", "paper")
+    defaults["trading.api"] = os.environ.get("TRADING_API", "qmt")
     defaults["trading.admin_token"] = os.environ.get("TRADING_ADMIN_TOKEN", "")
     defaults["trading.qmt_path"] = os.environ.get("QMT_PATH", "")
     defaults["trading.qmt_account"] = os.environ.get("QMT_ACCOUNT", "")
@@ -442,9 +467,14 @@ def _build_default_settings() -> Dict[str, Any]:
     defaults["trading.xtp_user"] = os.environ.get("XTP_USER", "")
     defaults["trading.xtp_password"] = os.environ.get("XTP_PASSWORD", "")
     defaults["trading.xtp_app_id"] = os.environ.get("XTP_APP_ID", "")
+    defaults["trading.xtp_client_id"] = os.environ.get("XTP_CLIENT_ID", "")
+    defaults["trading.xtp_server_addr"] = os.environ.get("XTP_SERVER_ADDR", "")
+    defaults["trading.xtp_software_key"] = os.environ.get("XTP_SOFTWARE_KEY", "")
     defaults["trading.ctp_user"] = os.environ.get("CTP_USER", "")
     defaults["trading.ctp_password"] = os.environ.get("CTP_PASSWORD", "")
     defaults["trading.ctp_broker_id"] = os.environ.get("CTP_BROKER_ID", "")
+    defaults["trading.ctp_front_addr"] = os.environ.get("CTP_FRONT_ADDR", "")
+    defaults["trading.ctp_app_id"] = os.environ.get("CTP_APP_ID", "")
     defaults["trading.auto_confirm"] = False
     
     # === 数据源配置 ===
@@ -637,9 +667,9 @@ async def get_settings():
 
 
 @router.post("/settings/save", response_model=dict, summary="保存配置")
-async def save_settings(payload: dict, _user=Depends(get_admin_user)):
+async def save_settings(payload: SettingsSaveRequest, _user: UserToken = Depends(get_admin_user)) -> Dict[str, Any]:
     """批量保存配置 — 持久化到 JSON 文件，敏感值自动加密"""
-    updates = payload.get("settings", {})
+    updates = payload.settings
     if not isinstance(updates, dict):
         raise HTTPException(status_code=400, detail="settings 必须是字典")
 
@@ -656,7 +686,7 @@ async def save_settings(payload: dict, _user=Depends(get_admin_user)):
 
 
 @router.delete("/settings/{key:path}", response_model=dict, summary="恢复配置默认值")
-async def reset_setting(key: str, _user=Depends(get_admin_user)):
+async def reset_setting(key: str, _user: UserToken = Depends(get_admin_user)) -> Dict[str, Any]:
     """恢复单个配置项为 .env 值（优先）或代码默认值"""
     if key not in _DEFAULT_SETTINGS:
         raise HTTPException(status_code=404, detail=f"配置项 {key} 不存在")
@@ -680,7 +710,7 @@ async def reset_setting(key: str, _user=Depends(get_admin_user)):
 
 
 @router.get("/settings/sources", response_model=dict, summary="获取所有可配置项")
-async def get_settings_sources(_user=Depends(get_current_user)):
+async def get_settings_sources(_user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
     """获取所有可配置项及其默认值和来源"""
     defaults = _build_default_settings()
     return {
@@ -701,7 +731,7 @@ async def get_whitelist():
 
 
 @router.get("/settings/health", summary="配置健康状态")
-async def get_settings_health(_user=Depends(get_current_user)):
+async def get_settings_health(_user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
     """获取配置健康状态"""
     overridden_keys = set(_settings.keys()) - set(_DEFAULT_SETTINGS.keys())
     env_sourced = []
@@ -719,3 +749,63 @@ async def get_settings_health(_user=Depends(get_current_user)):
         "settings_file_exists": _SETTINGS_FILE.exists(),
         "encryption_available": _encryption_available,
     }
+
+
+def build_data_feed(symbols: list[str], timeframe: str, start_date: str, end_date: str):
+    """根据 data_provider.source 配置动态创建数据源。
+
+    如果配置的数据源是 alphafeed 但返回 0 条数据（在 cerebro.run 后检查），
+    回测逻辑会自动降级到 BaoStock。
+    """
+    source = _settings.get("data_provider.source", "alphafeed")
+
+    if source == "baostock":
+        from stockquant.data.providers.baostock_feed import BaoStockFeed
+        return BaoStockFeed(
+            symbols=symbols,
+            timeframe=timeframe,
+            start=start_date,
+            end=end_date,
+        )
+
+    # 默认 alphafeed
+    from stockquant.data.providers.alphafeed_feed import AlphaFeedFeed
+    api_key = _settings.get("data_provider.alphafeed_key", "")
+    return AlphaFeedFeed(
+        symbols=symbols,
+        timeframe=timeframe,
+        start=start_date,
+        end=end_date,
+        api_key=api_key or None,
+    )
+
+
+def build_data_feed_with_fallback(symbols: list[str], timeframe: str, start_date: str, end_date: str):
+    """创建数据源，如果主数据源配置为 alphafeed 且无法返回数据，降级到 BaoStock。
+
+    注意：需要在 feed.start() 之后调用此函数来检查数据量。
+    如果 feed.start() 后仍有 0 数据，返回 BaoStockFeed。
+    """
+    source = _settings.get("data_provider.source", "alphafeed")
+
+    if source == "baostock":
+        from stockquant.data.providers.baostock_feed import BaoStockFeed
+        return BaoStockFeed(
+            symbols=symbols,
+            timeframe=timeframe,
+            start=start_date,
+            end=end_date,
+        )
+
+    # 尝试 alphafeed
+    from stockquant.data.providers.alphafeed_feed import AlphaFeedFeed
+    api_key = _settings.get("data_provider.alphafeed_key", "")
+    feed = AlphaFeedFeed(
+        symbols=symbols,
+        timeframe=timeframe,
+        start=start_date,
+        end=end_date,
+        api_key=api_key or None,
+    )
+
+    return feed

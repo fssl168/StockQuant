@@ -18,7 +18,7 @@ describe('Dashboard API', () => {
   })
 
   // ---- metrics ----
-  it('dashboardApi.metrics should call GET /dashboard/metrics', async () => {
+  it('dashboardApi.metrics should call GET /api/dashboard/metrics', async () => {
     const mockData = {
       total_assets: 1234567,
       today_pnl: 12345,
@@ -31,7 +31,7 @@ describe('Dashboard API', () => {
     }
     vi.mocked(client.get).mockResolvedValueOnce(mockData)
     const result = await dashboardApi.metrics()
-    expect(client.get).toHaveBeenCalledWith('/dashboard/metrics')
+    expect(client.get).toHaveBeenCalledWith('/api/dashboard/metrics')
     expect(result).toEqual(mockData)
   })
 
@@ -41,13 +41,13 @@ describe('Dashboard API', () => {
   })
 
   // ---- signals ----
-  it('dashboardApi.signals should call GET /dashboard/signals', async () => {
+  it('dashboardApi.signals should call GET /api/dashboard/signals', async () => {
     const mockSignals = [
       { id: '1', symbol: 'sh600519', type: 'BUY', confidence: 0.9, source: 'ai', reason: 'test', timestamp: '2024-01-01' },
     ]
     vi.mocked(client.get).mockResolvedValueOnce(mockSignals)
     const result = await dashboardApi.signals()
-    expect(client.get).toHaveBeenCalledWith('/dashboard/signals')
+    expect(client.get).toHaveBeenCalledWith('/api/dashboard/signals')
     expect(result).toEqual(mockSignals)
   })
 
@@ -58,10 +58,10 @@ describe('Dashboard API', () => {
   })
 
   // ---- recentBacktests ----
-  it('dashboardApi.recentBacktests should call GET /backtest?limit=20', async () => {
+  it('dashboardApi.recentBacktests should call GET /api/backtest', async () => {
     vi.mocked(client.get).mockResolvedValueOnce([])
     await dashboardApi.recentBacktests()
-    expect(client.get).toHaveBeenCalledWith('/backtest?limit=20')
+    expect(client.get).toHaveBeenCalledWith('/api/backtest')
   })
 
   it('dashboardApi.recentBacktests should return backtest list', async () => {

@@ -29,7 +29,7 @@ def _is_indicator_func(func) -> bool:
     return getattr(func, "_is_indicator", False)
 
 
-def apply_indicators(nput_data: List[float], func: Callable) -> IndicatorProxy:
+def apply_indicators(input_data: List[float], func: Callable) -> IndicatorProxy:
     """
     将装饰器函数应用到数据上。
 

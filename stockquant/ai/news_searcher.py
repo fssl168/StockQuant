@@ -131,7 +131,7 @@ class NewsSearcher:
                           max_results: int) -> List[NewsItem]:
         """聚合搜索（使用 requests 抓取财经网站 RSS/页面）。
 
-        MVP 阶段：尝试从主流财经网站获取数据，失败时返回模拟数据。
+        尝试从主流财经网站获取数据，失败时返回空列表。
         """
         items: List[NewsItem] = []
 
@@ -148,10 +148,9 @@ class NewsSearcher:
             except Exception:
                 pass
 
-        # Fallback: mock data for MVP
+        # Fallback: no data available
         if not items:
-            logger.debug("NewsSearcher: using mock data for aggregate search")
-            items = self._mock_news(query)
+            logger.debug("NewsSearcher: no news data available from any source")
 
         # Apply sentiment analysis
         for item in items:
@@ -313,33 +312,6 @@ class NewsSearcher:
                 published_at=self._parse_time(row.get("date", "")) or datetime.now(),
             ))
         return items
-
-    def _mock_news(self, query: str) -> List[NewsItem]:
-        """MVP 占位新闻数据"""
-        now = datetime.now()
-        return [
-            NewsItem(
-                title=f"{query} 最新市场动态分析",
-                source="StockQuant News",
-                url="https://example.com/news/1",
-                summary="市场分析师对该标的近期走势进行分析，认为短期存在波动但中长期趋势向好。",
-                published_at=now - timedelta(hours=2),
-            ),
-            NewsItem(
-                title=f"{query} 行业政策解读",
-                source="StockQuant News",
-                url="https://example.com/news/2",
-                summary="近期相关政策对行业影响有限，公司基本面保持稳定。",
-                published_at=now - timedelta(hours=12),
-            ),
-            NewsItem(
-                title=f"{query} 技术面分析：支撑位测试",
-                source="StockQuant News",
-                url="https://example.com/news/3",
-                summary="股价在关键支撑位附近震荡，成交量有所放大，关注后续方向选择。",
-                published_at=now - timedelta(days=1),
-            ),
-        ]
 
     @staticmethod
     def _parse_time(time_str: str) -> Optional[datetime]:

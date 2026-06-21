@@ -1,0 +1,108 @@
+﻿# StockQuant PostgreSQL 主从流复制配置
+# 使用方式: docker-compose -f docker-compose.yml -f docker-compose.replication.yml up -d
+# 
+# 包含:
+#   - postgres-primary: 主库 (读写)
+#   - postgres-replica: 从库 (只读)
+#   - haproxy: 读写分离代理
+#
+# 环境变量:
+#   PG_REPLICATION_USER: 复制用户 (默认 replicator)
+#   PG_REPLICATION_PASSWORD: 复制密码 (默认 replicator123)
+#   PG_PRIMARY_PORT: 主库端口 (默认 5432)
+#   PG_REPLICA_PORT: 从库端口 (默认 5433)
+
+version: '3.8'
+
+services:
+  # PostgreSQL 主库
+  postgres-primary:
+    image: pgvector/pgvector:pg16
+    container_name: stockquant-postgres-primary
+    ports:
+      - "${PG_PRIMARY_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: stockquant
+      POSTGRES_USER: stockquant
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stockquant_secret}
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_REPLICATION_USER: ${PG_REPLICATION_USER:-replicator}
+      POSTGRES_REPLICATION_PASSWORD: ${PG_REPLICATION_PASSWORD:-replicator123}
+    volumes:
+      - pg_primary_data:/var/lib/postgresql/data
+      - ./postgres/scripts:/docker-entrypoint-initdb.d
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
+      - -c
+      - hot_standby=on
+      - -c
+      - hot_standby_feedback=on
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stockquant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - stockquant-network
+
+  # PostgreSQL 从库
+  postgres-replica:
+    image: pgvector/pgvector:pg16
+    container_name: stockquant-postgres-replica
+    ports:
+      - "${PG_REPLICA_PORT:-5433}:5432"
+    environment:
+      POSTGRES_DB: stockquant
+      POSTGRES_USER: stockquant
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stockquant_secret}
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_REPLICATION_USER: ${PG_REPLICATION_USER:-replicator}
+      POSTGRES_REPLICATION_PASSWORD: ${PG_REPLICATION_PASSWORD:-replicator123}
+    volumes:
+      - pg_replica_data:/var/lib/postgresql/data
+    command:
+      - postgres
+      - -c
+      - hot_standby=on
+      - -c
+      - hot_standby_feedback=on
+      - -c
+      - primary_conninfo=host=postgres-primary port=5432 user=${PG_REPLICATION_USER:-replicator} password=${PG_REPLICATION_PASSWORD:-replicator123} application_name=replica
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stockquant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - stockquant-network
+
+  # HAProxy 读写分离代理
+  haproxy:
+    image: haproxy:2.8
+    container_name: stockquant-haproxy
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - postgres-primary
+      - postgres-replica
+    networks:
+      - stockquant-network
+
+networks:
+  stockquant-network:
+    driver: bridge
+
+volumes:
+  pg_primary_data:
+  pg_replica_data:

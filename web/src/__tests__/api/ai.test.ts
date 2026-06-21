@@ -13,11 +13,11 @@ describe('AI API', () => {
   })
 
   // ---- chat ----
-  it('aiApi.chat should call POST /chat with conversation_id and message', async () => {
+  it('aiApi.chat should call POST /api/ai/chat with conversation_id and message', async () => {
     const mockReply = { reply: 'Hello! How can I help?' }
     vi.mocked(client.post).mockResolvedValueOnce(mockReply)
     const result = await aiApi.chat('conv-1', 'hello')
-    expect(client.post).toHaveBeenCalledWith('/chat', { conversation_id: 'conv-1', message: 'hello' })
+    expect(client.post).toHaveBeenCalledWith('/api/ai/chat', { conversation_id: 'conv-1', message: 'hello' })
     expect(result).toEqual(mockReply)
   })
 
@@ -27,11 +27,11 @@ describe('AI API', () => {
   })
 
   // ---- conversations ----
-  it('aiApi.conversations should call GET /chat/conversations', async () => {
+  it('aiApi.conversations should call GET /api/ai/conversations', async () => {
     const mockConvs = ['conv-1', 'conv-2']
     vi.mocked(client.get).mockResolvedValueOnce(mockConvs)
     const result = await aiApi.conversations()
-    expect(client.get).toHaveBeenCalledWith('/chat/conversations')
+    expect(client.get).toHaveBeenCalledWith('/api/ai/conversations')
     expect(result).toEqual(mockConvs)
   })
 
@@ -42,10 +42,10 @@ describe('AI API', () => {
   })
 
   // ---- clear ----
-  it('aiApi.clear should call DELETE /chat/:id', async () => {
+  it('aiApi.clear should call DELETE /api/ai/conversation/:id', async () => {
     vi.mocked(client.delete).mockResolvedValueOnce(undefined)
     await aiApi.clear('conv-1')
-    expect(client.delete).toHaveBeenCalledWith('/chat/conv-1')
+    expect(client.delete).toHaveBeenCalledWith('/api/ai/conversation/conv-1')
   })
 
   it('aiApi.clear should propagate error', async () => {
@@ -54,12 +54,11 @@ describe('AI API', () => {
   })
 
   // ---- analyzeBacktest ----
-  // client 响应拦截器直接返回响应体，故 mock 直接返回 payload
-  it('analyzeBacktest should call POST /ai/analyze-backtest/:id and return insight', async () => {
+  it('analyzeBacktest should call POST /api/ai/analyze-backtest/:id and return insight', async () => {
     const mockInsight = { insight: 'test insight' }
     vi.mocked(client.post).mockResolvedValueOnce(mockInsight)
     const result = await analyzeBacktest('bt-1')
-    expect(client.post).toHaveBeenCalledWith('/ai/analyze-backtest/bt-1')
+    expect(client.post).toHaveBeenCalledWith('/api/ai/analyze-backtest/bt-1')
     expect(result).toEqual(mockInsight)
   })
 

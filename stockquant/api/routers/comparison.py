@@ -5,107 +5,42 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from datetime import datetime
 
+from typing import Any, Dict
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import text
 
 from stockquant.ai.comparison_agent import ComparisonAgent
 from stockquant.api.deps import get_current_user, get_required_user
-from stockquant.persistence.models import get_engine, init_db
+from stockquant.api.schemas import CompareStrategiesRequest, UserToken
+from stockquant.persistence.persistent_store import BacktestTaskStore, ComparisonHistoryStore
 
 logger = logging.getLogger("stockquant.api.comparison")
 router = APIRouter()
 
 # 存储引用（由 main.py 注入）
-_backtest_tasks: dict = {}
-_comparison_history: list[dict] = []
+_backtest_tasks: BacktestTaskStore = {}  # type: ignore[assignment]
+_comparison_history: ComparisonHistoryStore = []  # type: ignore[assignment]
 
 
-def set_storage(backtest_storage: dict, comparison_storage: list):
+def set_storage(backtest_storage: BacktestTaskStore, comparison_storage: ComparisonHistoryStore):
     global _backtest_tasks, _comparison_history
     _backtest_tasks = backtest_storage
     _comparison_history = comparison_storage
 
 
-# ── SQLite 持久化 ──
-
-_COMPARISON_TABLE_CREATED = False
-
-
-def _ensure_comparison_table() -> None:
-    """首次使用时创建 comparison_results 表"""
-    global _COMPARISON_TABLE_CREATED
-    if _COMPARISON_TABLE_CREATED:
-        return
-    try:
-        init_db()
-        with get_engine().begin() as conn:
-            conn.execute(text(
-                "CREATE TABLE IF NOT EXISTS comparison_results ("
-                "id TEXT PRIMARY KEY, "
-                "timestamp TEXT, "
-                "strategy_ids TEXT, "
-                "names TEXT, "
-                "result TEXT)"
-            ))
-        _COMPARISON_TABLE_CREATED = True
-    except Exception as exc:
-        logger.warning("创建 comparison_results 表失败: %s", exc)
-
-
-def _persist_comparison(entry: dict) -> None:
-    """将对比结果持久化到 SQLite"""
-    _ensure_comparison_table()
-    try:
-        with get_engine().begin() as conn:
-            conn.execute(text(
-                "INSERT OR REPLACE INTO comparison_results "
-                "(id, timestamp, strategy_ids, names, result) "
-                "VALUES (:id, :timestamp, :strategy_ids, :names, :result)"
-            ), {
-                "id": entry["id"],
-                "timestamp": entry["timestamp"],
-                "strategy_ids": json.dumps(entry.get("strategy_ids", []), ensure_ascii=False),
-                "names": json.dumps(entry.get("names", []), ensure_ascii=False),
-                "result": json.dumps(entry.get("result", {}), ensure_ascii=False),
-            })
-    except Exception as exc:
-        logger.warning("对比结果持久化失败: %s", exc)
-
-
-def _load_comparisons(limit: int = 100) -> list[dict]:
-    """从 SQLite 加载对比历史"""
-    _ensure_comparison_table()
-    try:
-        with get_engine().connect() as conn:
-            rows = conn.execute(text(
-                "SELECT id, timestamp, strategy_ids, names, result "
-                "FROM comparison_results ORDER BY timestamp DESC LIMIT :limit"
-            ), {"limit": limit}).fetchall()
-            return [
-                {
-                    "id": r[0],
-                    "timestamp": r[1],
-                    "strategy_ids": json.loads(r[2]) if r[2] else [],
-                    "names": json.loads(r[3]) if r[3] else [],
-                    "result": json.loads(r[4]) if r[4] else {},
-                }
-                for r in rows
-            ]
-    except Exception:
-        return []
+# ── 数据库持久化（通过 ComparisonHistoryStore，由 main.py 注入）──
 
 
 @router.post("/comparison", response_model=dict, summary="多策略对比")
-async def compare_strategies(payload: dict, _user=Depends(get_required_user)):
+async def compare_strategies(payload: CompareStrategiesRequest, _user: UserToken = Depends(get_required_user)) -> Dict[str, Any]:
     """对比多个策略的回测结果。
 
     请求体:
         strategy_ids: list[str] — 回测任务 ID 列表（至少 2 个）
     """
-    strategy_ids = payload.get("strategy_ids", [])
+    strategy_ids = payload.strategy_ids
     if len(strategy_ids) < 2:
         raise HTTPException(status_code=400, detail="至少需要 2 个策略 ID 进行对比")
 
@@ -137,53 +72,39 @@ async def compare_strategies(payload: dict, _user=Depends(get_required_user)):
         "recent_performance": recent_perf,
     }
 
-    # 记录对比历史
+    # 记录对比历史（ComparisonHistoryStore 会自动持久化到 DB）
     history_entry = {
-        "id": str(uuid.uuid4()),
-        "timestamp": datetime.now().isoformat(),
-        "strategy_ids": strategy_ids,
-        "names": names,
-        "result": {
+        "strategy_ids": ",".join(strategy_ids),
+        "result": json.dumps({
             "strategies": comparison.strategies,
             "rankings": comparison.rankings,
             "recommendations": comparison.recommendations,
             "portfolio_weights": comparison.portfolio_weights,
             "correlation_matrix": comparison.correlation_matrix,
             "recent_performance": recent_perf,
-        },
+        }),
     }
     _comparison_history.append(history_entry)
-    _persist_comparison(history_entry)
 
     return return_data
 
 
 @router.get("/comparison/history", response_model=list, summary="对比历史")
 async def comparison_history():
-    """获取历史对比结果（最新的在前），优先从 SQLite 加载"""
-    db_results = _load_comparisons()
-    if not db_results and _comparison_history:
-        # SQLite 为空时降级到内存
-        return list(reversed(_comparison_history))
+    """获取历史对比结果（最新的在前），使用 ComparisonHistoryStore"""
     if not _comparison_history:
-        return db_results
-    # 合并：内存中可能有 SQLite 尚未包含的新条目
-    db_ids = {r["id"] for r in db_results}
-    merged = list(db_results)
-    for entry in reversed(_comparison_history):
-        if entry["id"] not in db_ids:
-            merged.insert(0, entry)
-    return merged
+        return []
+    return list(reversed(_comparison_history))
 
 
 @router.post("/comparison/optimize", response_model=dict, summary="组合优化")
-async def optimize_portfolio(payload: dict, _user=Depends(get_current_user)):
+async def optimize_portfolio(payload: CompareStrategiesRequest, _user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
     """策略组合优化 — 相关性+最优权重。
 
     请求体:
         strategy_ids: list[str] — 回测任务 ID 列表（至少 2 个）
     """
-    strategy_ids = payload.get("strategy_ids", [])
+    strategy_ids = payload.strategy_ids
     if len(strategy_ids) < 2:
         raise HTTPException(status_code=400, detail="至少需要 2 个策略 ID 进行组合优化")
 
@@ -200,7 +121,7 @@ async def optimize_portfolio(payload: dict, _user=Depends(get_current_user)):
 
 
 @router.get("/comparison/lifecycle/{strategy_id}", response_model=dict, summary="生命周期建议")
-async def lifecycle_advice(strategy_id: str, _user=Depends(get_current_user)):
+async def lifecycle_advice(strategy_id: str, _user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
     """策略生命周期建议 — 启用/停用/调整。
 
     基于近 30 天表现给出建议。

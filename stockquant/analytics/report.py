@@ -260,6 +260,12 @@ class ReportGenerator:
         # 权益曲线数据点（取最多 500 个点用于图表）
         equity_data = ReportGenerator._downsample_equity(equity, 500)
 
+        # 回撤图表
+        drawdown_html = ReportGenerator._render_drawdown_section(equity)
+
+        # 月度热力图
+        heatmap_html = ReportGenerator._render_monthly_heatmap(metrics)
+
         return f"""
       <div class="strategy-section">
         <h2>{name}</h2>
@@ -272,6 +278,8 @@ class ReportGenerator:
           <h3>权益曲线</h3>
           <canvas id="equity-{hash(name)}" data-points="{json.dumps(equity_data)}"></canvas>
         </div>
+{drawdown_html}
+{heatmap_html}
         <div class="trades-table">
           <h3>交易明细（前 {len(display_trades)} 笔）</h3>
           <table>
@@ -296,6 +304,121 @@ class ReportGenerator:
         if result[-1] != equity_curve[-1]:
             result.append(equity_curve[-1])
         return result[:max_points]
+
+    @staticmethod
+    def _render_drawdown_section(equity_curve: List[tuple]) -> str:
+        """渲染回撤区间（Canvas）"""
+        if not equity_curve or len(equity_curve) < 2:
+            return ""
+
+        # 计算回撤序列: drawdown = (peak - current) / peak
+        drawdowns = []
+        peak = equity_curve[0][0] if isinstance(equity_curve[0], (list, tuple)) else equity_curve[0]
+        for point in equity_curve:
+            val = point[0] if isinstance(point, (list, tuple)) else point
+            if val > peak:
+                peak = val
+            dd = (peak - val) / peak if peak > 0 else 0.0
+            drawdowns.append(dd)
+
+        # 降采样到 500 点
+        sampled = drawdowns[:500] if len(drawdowns) > 500 else drawdowns
+
+        return f"""
+      <div class="drawdown-chart">
+        <h3>最大回撤</h3>
+        <canvas id="drawdown-{hash(str(equity_curve))}" data-points="{json.dumps(sampled)}"></canvas>
+      </div>
+"""
+
+    @staticmethod
+    def _render_monthly_heatmap(metrics: dict) -> str:
+        """渲染月度收益热力图"""
+        monthly_returns = metrics.get("Monthly Returns")
+        if not monthly_returns or not isinstance(monthly_returns, dict):
+            return ""
+
+        # monthly_returns 格式: {1: 0.05, 2: -0.03, ...} 或 {str: float}
+        values = {int(k): float(v) for k, v in monthly_returns.items()}
+        if not values:
+            return ""
+
+        # 按月份聚合: {month: [val, val, ...]}
+        month_groups: Dict[int, list] = {}
+        for m, v in values.items():
+            month_groups.setdefault(m, []).append(v)
+
+        # 如果所有月份都只有 1 个值（单年），直接渲染 1-12 月
+        single_year = all(len(vs) == 1 for vs in month_groups.values())
+
+        if single_year:
+            # 单年热力图: 12 个月一行
+            cells = ""
+            for m in range(1, 13):
+                v = values.get(m)
+                if v is not None:
+                    pct = f"{v * 100:+.1f}%"
+                    color = "#238636" if v >= 0 else "#da3633"
+                    cells += f'<div class="hm-cell" style="background:{color}">{pct}</div>\n'
+                else:
+                    cells += '<div class="hm-cell hm-empty"></div>\n'
+            return f"""
+      <div class="heatmap-section">
+        <h3>月度收益热力图</h3>
+        <div class="heatmap">
+{cells}        </div>
+      </div>
+"""
+        else:
+            # 多年热力图: 行=年份, 列=月份
+            years = sorted(month_groups.keys())
+            max_year = max(years)
+            # 如果 key 是连续年份如 2022, 2023, ...
+            if max_year > 24:
+                # 年份作为 key
+                year_months: Dict[int, Dict[int, float]] = {}
+                # 需要重新组织: 假设 keys 是 {year*100 + month: value} 格式
+                # 或者 {year: [vals]}, 这里按原始 key 解析
+                for m, vals in month_groups.items():
+                    for val in vals:
+                        # 尝试 year*100+month 格式
+                        pass
+                # fallback: 所有数据当单年
+                cells = ""
+                for m in range(1, 13):
+                    v = values.get(m)
+                    if v is not None:
+                        pct = f"{v * 100:+.1f}%"
+                        color = "#238636" if v >= 0 else "#da3633"
+                        cells += f'<div class="hm-cell" style="background:{color}">{pct}</div>\n'
+                    else:
+                        cells += '<div class="hm-cell hm-empty"></div>\n'
+                return f"""
+      <div class="heatmap-section">
+        <h3>月度收益热力图</h3>
+        <div class="heatmap">
+{cells}        </div>
+      </div>
+"""
+            else:
+                # 简单多版本: 取每月平均值
+                cells = ""
+                for m in range(1, 13):
+                    vals = month_groups.get(m, [])
+                    if vals:
+                        avg = sum(vals) / len(vals)
+                        pct = f"{avg * 100:+.1f}%"
+                        color = "#238636" if avg >= 0 else "#da3633"
+                        cells += f'<div class="hm-cell" style="background:{color}">{pct}</div>\n'
+                    else:
+                        cells += '<div class="hm-cell hm-empty"></div>\n'
+                return f"""
+      <div class="heatmap-section">
+        <h3>月度收益热力图</h3>
+        <div class="heatmap">
+{cells}        </div>
+      </div>
+"""
 
     @staticmethod
     def _html_template(title: str, strategy_sections: List[str]) -> str:
@@ -409,6 +532,48 @@ class ReportGenerator:
       width: 100%;
       height: 250px;
     }}
+    .drawdown-chart {{
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 16px;
+      margin: 16px 0;
+      min-height: 250px;
+      display: flex;
+      align-items: flex-end;
+    }}
+    .drawdown-chart canvas {{
+      width: 100%;
+      height: 250px;
+    }}
+    .heatmap-section {{
+      margin: 16px 0;
+    }}
+    .heatmap {{
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 4px;
+      padding: 12px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+    }}
+    .hm-cell {{
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 4px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: "SFMono-Regular", monospace;
+      color: #fff;
+      font-weight: bold;
+      min-height: 40px;
+    }}
+    .hm-empty {{
+      background: #161b22;
+      border: 1px dashed #30363d;
+    }}
     .footer {{
       text-align: center;
       color: #484f58;
@@ -433,7 +598,7 @@ class ReportGenerator:
   <script>
     // 权益曲线 Canvas 渲染
     document.addEventListener('DOMContentLoaded', function() {{
-      document.querySelectorAll('canvas[data-points]').forEach(function(canvas) {{
+      document.querySelectorAll('canvas[data-points]:not([id^="drawdown-"])').forEach(function(canvas) {{
         var ctx = canvas.getContext('2d');
         var data = JSON.parse(canvas.getAttribute('data-points'));
         if (data.length < 2) return;
@@ -486,6 +651,49 @@ class ReportGenerator:
         ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
         ctx.fillStyle = '#3fb950';
         ctx.fill();
+      }});
+
+      // 回撤 Canvas 渲染
+      document.querySelectorAll('canvas[data-points][id^="drawdown-"]').forEach(function(canvas) {{
+        var ctx = canvas.getContext('2d');
+        var data = JSON.parse(canvas.getAttribute('data-points'));
+        if (data.length < 2) return;
+
+        canvas.width = canvas.parentElement.offsetWidth || 800;
+        canvas.height = 250;
+        var w = canvas.width, h = canvas.height;
+
+        // 回撤始终在 0~max 范围内，翻转绘制（从底部开始）
+        var maxDD = Math.max.apply(null, data) || 1;
+
+        // 渐变背景（红色向下）
+        var gradient = ctx.createLinearGradient(0, 0, 0, h);
+        gradient.addColorStop(0, 'rgba(218, 54, 51, 0.0)');
+        gradient.addColorStop(1, 'rgba(218, 54, 51, 0.3)');
+
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+        for (var i = 0; i < data.length; i++) {{
+          var x = (i / (data.length - 1)) * w;
+          var y = h - (data[i] / maxDD) * (h - 20) - 10;
+          ctx.lineTo(x, y);
+        }}
+        ctx.lineTo(w, h);
+        ctx.closePath();
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // 线条
+        ctx.beginPath();
+        for (var i = 0; i < data.length; i++) {{
+          var x = (i / (data.length - 1)) * w;
+          var y = h - (data[i] / maxDD) * (h - 20) - 10;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }}
+        ctx.strokeStyle = '#da3633';
+        ctx.lineWidth = 2;
+        ctx.stroke();
       }});
     }});
   </script>

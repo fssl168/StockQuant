@@ -186,6 +186,13 @@ class DecisionAdvice:
     sentiment: Optional[SentimentResult] = None
     position_eval: Optional[PositionEvaluation] = None
 
+    # NFR009: LLM 原始调用记录
+    _raw_prompt: Optional[str] = None
+    _raw_response: Optional[str] = None
+    _reasoning_content: Optional[str] = None
+    _tokens_used: Optional[int] = None
+    _cost: Optional[float] = None
+
 
 @dataclass
 class AuditLog:

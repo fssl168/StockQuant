@@ -16,6 +16,7 @@ from stockquant.ai.models import (
     StrategyScore,
     ValidationResult,
 )
+from stockquant.api.routers.settings import build_data_feed
 
 logger = logging.getLogger("stockquant.agent")
 
@@ -309,7 +310,6 @@ def _make_backtest_strategy(fetcher_manager: Any) -> Any:
         """
         try:
             from stockquant.engine.cerebro import Cerebro
-            from stockquant.data.feed import BaoStockFeed
 
             # 沙箱执行策略代码，获取策略类
             namespace = _safe_exec(code)
@@ -327,10 +327,10 @@ def _make_backtest_strategy(fetcher_manager: Any) -> Any:
             if strategy_cls is None:
                 return json.dumps({"error": "未找到 BaseStrategy 子类"}, ensure_ascii=False)
 
-            # 构建回测
+            # 构建回测（根据配置动态选择数据源）
             cerebro = Cerebro()
-            feed = BaoStockFeed(
-                symbol=symbol,
+            feed = build_data_feed(
+                symbols=[symbol],
                 timeframe="1d",
                 start_date=start_date,
                 end_date=end_date,

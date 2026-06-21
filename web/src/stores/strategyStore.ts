@@ -9,6 +9,7 @@ interface StrategyState {
   createStrategy: (data: Omit<Strategy, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
   updateStrategy: (id: string, data: { name: string; code: string }) => Promise<void>
   deleteStrategy: (id: string) => Promise<void>
+  clearAllStrategies: () => Promise<void>
   currentStrategy: Strategy | null
   setCurrentStrategy: (s: Strategy | null) => void
 }
@@ -47,6 +48,12 @@ export const useStrategyStore = create<StrategyState>((set) => ({
         strategies: st.strategies.filter((s) => s.id !== id),
         currentStrategy: st.currentStrategy?.id === id ? null : st.currentStrategy,
       }))
+    } catch { /* ignore */ }
+  },
+  clearAllStrategies: async () => {
+    try {
+      await strategyApi.clearAll()
+      set({ strategies: [], currentStrategy: null })
     } catch { /* ignore */ }
   },
 }))

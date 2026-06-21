@@ -363,7 +363,7 @@ export default function ChatPanel({ messages, streamingContent = '', isStreaming
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <div ref={containerRef} style={{ flex: 1, overflowY: 'auto', paddingRight: 8, scrollbarWidth: 'thin', scrollbarColor: '#52525b #27272a' }}>
+      <div ref={containerRef} style={{ flex: 1, overflowY: 'auto', minWidth: 0, minHeight: 0, paddingRight: 8, scrollbarWidth: 'thin', scrollbarColor: '#52525b #27272a' }}>
         {/* 加载更多按钮 */}
         {hasMore && messages.length > 0 && (
           <div style={{ textAlign: 'center', padding: '12px 0' }}>

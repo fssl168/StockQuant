@@ -13,12 +13,13 @@ from .l2_store import L2Store
 class ShortTermMemory:
     """L2 短期记忆 — 委托给 L2Store (PostgreSQL + asyncpg) 实现"""
 
-    def __init__(self, db_url: str | None = None) -> None:
-        self._store = L2Store(db_url=db_url)
+    def __init__(self, db_url: str | None = None, user_id: str = "test_user") -> None:
+        self._store = L2Store(db_url=db_url, user_id=user_id)
 
     def add(self, symbol: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         """添加条目"""
         return self._store.write({
+            "user_id": self._store._user_id,
             "symbol": symbol,
             "content": content,
             "metadata": metadata or {},
@@ -49,9 +50,7 @@ class ShortTermMemory:
 
     def clear(self) -> None:
         """清空所有条目"""
-        items = self._store.get_all(limit=100000)
-        for item in items:
-            self._store.delete(item["id"])
+        self._store.clear_all()
 
     def count(self) -> int:
         return self._store.count()

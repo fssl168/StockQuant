@@ -152,14 +152,16 @@ class Momentum(BaseStrategy):
 
 export const strategyApi = {
   list: () =>
-    client.get('/strategy') as Promise<Strategy[]>,
+    client.get('/api/strategy') as Promise<Strategy[]>,
   create: (data: Omit<Strategy, 'id' | 'created_at' | 'updated_at'>) =>
-    client.post('/strategy', data) as Promise<Strategy>,
+    client.post('/api/strategy', data) as Promise<Strategy>,
   get: (id: string) =>
-    client.get(`/strategy/${id}`) as Promise<Strategy>,
+    client.get(`/api/strategy/${id}`) as Promise<Strategy>,
   update: (id: string, data: Partial<Strategy>) =>
-    client.put(`/strategy/${id}`, data) as Promise<Strategy>,
+    client.put(`/api/strategy/${id}`, data) as Promise<Strategy>,
   delete: (id: string) =>
-    client.delete(`/strategy/${id}`) as Promise<void>,
+    client.delete(`/api/strategy/${id}`) as Promise<void>,
+  clearAll: () =>
+    client.delete('/api/strategy/clear-all') as Promise<{ success: boolean; deleted_count: number }>,
   templates: () => STRATEGY_TEMPLATES as { name: string; code: string }[],
 }

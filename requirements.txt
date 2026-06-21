@@ -1,4 +1,4 @@
-numpy>=1.24
+﻿numpy>=1.24
 pandas>=2.0
 matplotlib>=3.5
 jinja2>=3.0
@@ -24,6 +24,11 @@ sqlalchemy>=2.0
 psycopg2-binary>=2.9
 asyncpg>=0.29
 pgvector>=0.3
-# ── 可选 AI 增强依赖（NFR008 本地推理 + R3 情感分析升级）──
-transformers>=4.36  # HuggingFace NLP 模型（情感分析/本地推理）
-torch>=2.0  # PyTorch（transformers 后端，CPU 版本即可）
+alembic>=1.13
+prometheus-client>=0.19
+celery>=5.3
+transformers>=4.36
+torch>=2.0
+vnpy_xtp>=1.2.0
+openctp-ctp>=1.0.0
+xtquant>=2024.1.0

@@ -15,7 +15,7 @@ export default function Login() {
   const handleSubmit = async (values: { username: string; password: string }) => {
     try {
       if (isRegister) {
-        await (await import('@/api/client')).default.post('/auth/register', values)
+        await (await import('@/api/client')).default.post('/api/auth/register', values)
         message.success('注册成功，请登录')
         setIsRegister(false)
       } else {

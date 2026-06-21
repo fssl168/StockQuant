@@ -14,11 +14,13 @@ class LongTermMemory:
     委托给 L3Store (PostgreSQL + pgvector) 实现。
     """
 
-    def __init__(self, db_url: str | None = None) -> None:
-        self._store = L3Store(db_url=db_url)
+    def __init__(self, db_url: str | None = None, user_id: str = "test_user") -> None:
+        self._store = L3Store(db_url=db_url, user_id=user_id)
 
     def add(self, insight: Dict[str, Any]) -> str:
-        return self._store.write(insight)
+        item = dict(insight)
+        item.setdefault("user_id", self._store._user_id)
+        return self._store.write(item)
 
     def search(
         self,
@@ -43,5 +45,5 @@ class LongTermMemory:
     def get_all(self, limit: int = 1000) -> List[Dict[str, Any]]:
         return self._store.get_all(limit)
 
-    def close(self) -> None:
-        self._store.close()
+    def clear(self) -> None:
+        self._store.clear_all()

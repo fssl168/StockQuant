@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import json
-import os
 import logging
+import random
+from collections import Counter
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query
@@ -19,7 +20,9 @@ from stockquant.ai.chat_tools import (
     trigger_backtest,
     search_news,
 )
+from stockquant.ai.sentiment import SentimentAnalyzer
 from stockquant.api.routers.settings import _settings, _decrypt_value
+from stockquant.api.schemas import ChatRequest, SaveMessageRequest, GenerateStrategyRequest
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -59,57 +62,71 @@ def _get_chat_memory() -> ChatMemory:
 @router.get("/sentiment", summary="社交媒体情绪分析")
 async def sentiment_analysis(symbol: str = Query("sh600519", description="股票代码")):
     """分析指定股票的市场情绪。
-    
-    MVP 实现：基于 search_news 结果 + 关键词简单分析
+
+    基于 search_news 结果 + SentimentAnalyzer 进行情感分析。
     未来可接入外部社交媒体 API（微博、雪球、东方财富等）
     """
+    # 初始化 SentimentAnalyzer（使用增强版关键词规则，自动降级）
+    sentiment_analyzer = SentimentAnalyzer(method="auto")
+
     try:
         # 搜索相关新闻
         news_result = search_news(symbol, limit=10)
         news_data = json.loads(news_result) if isinstance(news_result, str) else news_result
-        
-        # 基于关键词的情绪分析（简单版）
-        positive_words = ["利好", "上涨", "突破", "增长", "盈利", "强劲", "看好", "买入", "推荐", "新高", "反弹"]
-        negative_words = ["利空", "下跌", "亏损", "风险", "预警", "暴跌", "跌停", "减持", "抛售", "违约", "调查"]
-        
-        all_text = ""
-        headlines = []
+
+        # 收集所有文本用于分析
+        all_texts: List[str] = []
+        headlines: List[str] = []
+
         if isinstance(news_data, dict) and "news" in news_data:
             for item in news_data["news"]:
                 if isinstance(item, dict):
-                    all_text += item.get("title", "") + " " + item.get("content", "")
-                    if item.get("title"):
-                        headlines.append(item["title"])
+                    title = item.get("title", "")
+                    content = item.get("content", "")
+                    if title:
+                        all_texts.append(f"{title} {content}")
+                        headlines.append(title)
                 elif isinstance(item, str):
-                    all_text += item
+                    all_texts.append(item)
                     headlines.append(item)
         elif isinstance(news_data, list):
             for item in news_data:
                 if isinstance(item, dict):
-                    all_text += item.get("title", "") + " " + item.get("content", "")
-                    if item.get("title"):
-                        headlines.append(item["title"])
+                    title = item.get("title", "")
+                    content = item.get("content", "")
+                    if title:
+                        all_texts.append(f"{title} {content}")
+                        headlines.append(title)
                 elif isinstance(item, str):
-                    all_text += item
+                    all_texts.append(item)
                     headlines.append(item)
-        
-        # 计算情绪分数
-        pos_count = sum(1 for w in positive_words if w in all_text)
-        neg_count = sum(1 for w in negative_words if w in all_text)
-        
-        # 归一化到 0-100
-        sentiment_score = max(0, min(100, 50 + (pos_count - neg_count) * 8))
-        
-        # 情绪趋势（模拟近 7 天数据）
-        import random
+
+        # 使用 SentimentAnalyzer 分析每条新闻
+        individual_scores: List[float] = []
+        for text in all_texts[:10]:  # 限制分析数量
+            result = sentiment_analyzer.analyze([text])
+            individual_scores.append(result.score)
+
+        # 计算综合情绪分数（平均分转换为 0-100）
+        if individual_scores:
+            avg_score = sum(individual_scores) / len(individual_scores)
+            # 从 -1~1 映射到 0~100，中心为 50
+            sentiment_score = max(0, min(100, int(50 + avg_score * 50)))
+        else:
+            sentiment_score = 50
+            individual_scores = [0.0]
+
+        # 情绪趋势（基于计算出的分数，加一点随机波动模拟7天历史）
         base_score = sentiment_score
         trend = [max(0, min(100, base_score + random.randint(-10, 10))) for _ in range(7)]
-        
-        # 提取话题标签
-        from collections import Counter
-        word_freq = Counter(all_text.split())
-        topics = [w for w, _ in word_freq.most_common(5) if len(w) >= 2][:5]
-        
+
+        # 提取话题标签（高频词）
+        all_text_combined = " ".join(all_texts)
+        word_freq = Counter(all_text_combined.split())
+        # 过滤掉短词和无意义词
+        stop_words = {"的", "了", "是", "在", "和", "与", "或", "等", "为", "有", "这", "那", "中", "于", "上", "下", "将", "被", "把", "到", "从", "以", "及", "其", "而", "但", "却", "又", "可", "也"}
+        topics = [w for w, _ in word_freq.most_common(10) if len(w) >= 2 and w not in stop_words][:5]
+
         # 情绪总结
         if sentiment_score >= 70:
             summary = f"近期市场情绪偏乐观，{symbol} 相关新闻以正面消息为主。"
@@ -117,7 +134,7 @@ async def sentiment_analysis(symbol: str = Query("sh600519", description="股票
             summary = f"近期市场情绪偏谨慎，{symbol} 相关新闻存在一定负面因素，建议关注风险。"
         else:
             summary = f"近期市场情绪中性，{symbol} 利好与利空消息交织，需结合技术面综合判断。"
-        
+
         return {
             "symbol": symbol,
             "score": sentiment_score,
@@ -125,6 +142,7 @@ async def sentiment_analysis(symbol: str = Query("sh600519", description="股票
             "topics": topics if topics else ["市场动态", "板块轮动", "资金流向"],
             "summary": summary,
             "news_count": len(headlines),
+            "avg_confidence": round(sum(s.abs() for s in individual_scores) / len(individual_scores), 2) if individual_scores else 0,
         }
     except Exception as exc:
         logger.error("情绪分析失败: %s", exc)
@@ -135,15 +153,16 @@ async def sentiment_analysis(symbol: str = Query("sh600519", description="股票
             "topics": [],
             "summary": "暂无情绪数据",
             "news_count": 0,
+            "avg_confidence": 0,
         }
 
 
 @router.post("/chat/complete")
-def chat(payload: dict = Body(...)) -> Dict[str, Any]:
+def chat(payload: ChatRequest) -> Dict[str, Any]:
     """发送消息获取 AI 回复（非流式）。"""
-    message = payload.get("message", "")
-    conversation_id = payload.get("conversation_id", "default")
-    mode = payload.get("mode", "general")
+    message = payload.message
+    conversation_id = payload.conversation_id
+    mode = payload.mode
     agent = _get_chat_agent()
     reply = agent.chat(message, conversation_id=conversation_id, mode=mode)
     raw_messages = agent.get_conversation(conversation_id, limit=10)
@@ -172,11 +191,11 @@ def chat(payload: dict = Body(...)) -> Dict[str, Any]:
 
 
 @router.post("/chat")
-def chat_stream(payload: dict = Body(...)) -> StreamingResponse:
+def chat_stream(payload: ChatRequest) -> StreamingResponse:
     """流式对话（SSE 兼容）。"""
-    message = payload.get("message", "")
-    conversation_id = payload.get("conversation_id", "default")
-    mode = payload.get("mode", "general")
+    message = payload.message
+    conversation_id = payload.conversation_id
+    mode = payload.mode
     agent = _get_chat_agent()
 
     def event_generator():
@@ -218,11 +237,11 @@ def get_conversation(conversation_id: str, limit: int = 50) -> Dict[str, Any]:
 @router.post("/conversation/{conversation_id}/message")
 def save_message(
     conversation_id: str,
-    payload: dict = Body(...),
+    payload: SaveMessageRequest,
 ) -> Dict[str, Any]:
     """保存单条消息到数据库（不触发 AI 回复）。"""
-    role = payload.get("role", "user")
-    content = payload.get("content", "")
+    role = payload.role
+    content = payload.content
     try:
         from stockquant.persistence.repository import save_chat_message
         db_url = _settings.get("database.url")
@@ -266,33 +285,126 @@ def tool_search_news(symbol: str, limit: int = 5) -> Dict[str, Any]:
 
 @router.post("/analyze-backtest/{backtest_id}", summary="AI 解读回测结果")
 async def analyze_backtest(backtest_id: str):
-    """AI 解读回测结果"""
-    # MVP: 返回模板解读
+    """AI 解读回测结果 — 返回结构化分析（策略概述 / 过拟合风险 / Alpha来源 / 改进建议）"""
+    from stockquant.api.routers.backtest import _tasks
+
+    task = _tasks.get(backtest_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"回测任务 {backtest_id} 不存在")
+
+    metrics = task.get("metrics", {})
+    strategy_name = task.get("strategy_name", "未知策略")
+
+    # 如果有 LLM，尝试用 AI 分析
+    agent = _get_chat_agent()
+    if agent and task.get("status") == "completed" and metrics:
+        # 构造分析 Prompt
+        key_metrics = {
+            k: v for k, v in metrics.items()
+            if k in [
+                "Annualized Return", "Max Drawdown", "Sharpe Ratio", "Sortino Ratio",
+                "Calmar Ratio", "Win Rate", "Total Trades", "Profit Factor",
+                "SQN (System Quality Number)", "Alpha", "Beta", "VaR (95%)",
+                "CVaR (95%)", "Volatility (Annual)", "Avg Drawdown",
+                "Longest Win Streak", "Longest Loss Streak",
+            ] and v is not None
+        }
+        prompt = f"""请分析以下回测结果，返回严格 JSON 格式（无 markdown 标记）。
+
+策略: {strategy_name}
+关键指标: {json.dumps(key_metrics, ensure_ascii=False, default=str)}
+
+请返回以下 JSON:
+{{
+  "summary": "2-3句话的策略表现概述",
+  "overfitRisk": "过拟合风险评估：低/中/高，附理由",
+  "alphaDecomposition": "Alpha来源分解：超额收益来自哪些因素",
+  "suggestions": ["具体可操作的改进建议1", "改进建议2", "改进建议3"]
+}}
+
+注意：只返回 JSON，不要其他文字。"""
+        try:
+            reply = agent.chat(prompt, conversation_id=f"backtest_analysis_{backtest_id}")
+            # 清理 markdown 包裹
+            clean = reply.strip()
+            if clean.startswith("```"):
+                clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+            if clean.endswith("```"):
+                clean = clean[:-3]
+            clean = clean.strip()
+            parsed = json.loads(clean)
+            return {"insight": parsed}
+        except (json.JSONDecodeError, Exception) as e:
+            logger.warning("AI 结构化分析失败，回退到模板: %s", e)
+
+    # Fallback: 模板解读
+    ann_ret = metrics.get("Annualized Return", 0)
+    max_dd = metrics.get("Max Drawdown", 0)
+    sharpe = metrics.get("Sharpe Ratio", 0)
+    win_rate = metrics.get("Win Rate", 0)
+    total_trades = metrics.get("Total Trades", 0)
+
+    # 过拟合风险判断
+    if total_trades and total_trades < 30:
+        overfit = "高 — 交易次数过少（<30），统计显著性不足，容易过拟合参数"
+    elif sharpe and sharpe > 3:
+        overfit = "中 — 夏普比率异常高，可能存在过拟合，建议样本外验证"
+    elif total_trades and total_trades > 200 and (sharpe or 0) < 1.5:
+        overfit = "低 — 交易次数充足且收益合理"
+    else:
+        overfit = "中 — 需要进一步样本外测试验证"
+
+    # Alpha 来源
+    alpha = metrics.get("Alpha", 0)
+    beta = metrics.get("Beta", 0)
+    if alpha and alpha > 0:
+        alpha_src = f"策略 Alpha 为 {alpha*100:.1f}%，超额收益主要来自选股能力而非市场 Beta 暴露（Beta={beta:.2f}）"
+    elif alpha and alpha < 0:
+        alpha_src = f"策略 Alpha 为 {alpha*100:.1f}%，跑输基准，需审视信号有效性"
+    else:
+        alpha_src = "Alpha 数据不足，无法分解"
+
+    # 改进建议
+    suggestions = []
+    if max_dd and abs(max_dd) > 0.2:
+        suggestions.append("最大回撤偏大，建议增加止损条件或降低单票仓位上限")
+    if win_rate and win_rate < 0.4 and total_trades and total_trades > 20:
+        suggestions.append("胜率较低，考虑增加信号过滤条件（如成交量确认、多周期共振）")
+    if sharpe and sharpe < 0.5:
+        suggestions.append("夏普比率偏低，建议优化持仓周期或加入动态仓位管理")
+    if total_trades and total_trades < 30:
+        suggestions.append("交易次数过少，考虑放宽信号阈值或扩展回测时间范围")
+    if not suggestions:
+        suggestions = [
+            "策略整体表现稳健，可考虑在不同市场环境下进行样本外验证",
+            "尝试调整参数范围进行优化，确认策略鲁棒性",
+            "如需进一步提升收益，可研究加入多因子信号融合",
+        ]
+
     return {
-        "insight": (
-            f"回测任务 {backtest_id} 的 AI 解读：\n\n"
-            "1. **策略表现**: 该策略在回测期间表现出较好的收益风险比，"
-            "年化收益率处于中等偏上水平。\n\n"
-            "2. **风险分析**: 最大回撤控制在合理范围内，"
-            "建议关注尾部风险事件的影响。\n\n"
-            "3. **优化建议**: 可考虑调整止损参数和仓位管理策略，"
-            "以进一步改善风险调整后收益。\n\n"
-            "4. **市场适应性**: 策略在趋势行情中表现较佳，"
-            "震荡市中需注意信号过滤。"
-        )
+        "insight": {
+            "summary": (
+                f"策略「{strategy_name}」年化收益率 {ann_ret*100:.1f}%，"
+                f"最大回撤 {abs(max_dd)*100:.1f}%，夏普比率 {sharpe:.2f}，"
+                f"胜率 {win_rate*100:.1f}%，共 {total_trades} 笔交易。"
+            ),
+            "overfitRisk": overfit,
+            "alphaDecomposition": alpha_src,
+            "suggestions": suggestions[:5],
+        }
     }
 
 
 @router.post("/strategy/generate", summary="AI 生成策略代码")
-async def generate_strategy(payload: dict):
+async def generate_strategy(payload: GenerateStrategyRequest) -> Dict[str, Any]:
     """AI 生成量化交易策略代码。
     
     请求体:
         description: str — 策略描述（自然语言）
         strategy_type: str — 策略类型（可选）: "trend", "mean_reversion", "momentum", "arbitrage"
     """
-    description = payload.get("description", "")
-    strategy_type = payload.get("strategy_type", "trend")
+    description = payload.description
+    strategy_type = payload.strategy_type
     
     if not description.strip():
         raise HTTPException(status_code=400, detail="策略描述不能为空")

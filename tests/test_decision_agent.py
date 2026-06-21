@@ -476,11 +476,11 @@ def test_decision_agent_db_url_config():
         agent = DecisionAgent.__new__(DecisionAgent)
         agent._mode = DecisionMode.READ_ONLY
         agent._audit_logs = []
-        agent._db_url = "sqlite:///./custom.db"
+        agent._db_url = "sqlite:///./stockquant.db"
 
     advice = agent.evaluate({"symbol": "sh600519", "direction": "BUY"})
     # db_url 应可用于持久化
-    assert agent._db_url == "sqlite:///./custom.db"
+    assert agent._db_url == "sqlite:///./stockquant.db"
 
 
 # ── 16. test_audit_persistence_wired ──

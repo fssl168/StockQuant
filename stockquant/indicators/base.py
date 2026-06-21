@@ -161,7 +161,7 @@ class IndicatorProxy:
 
         # plotly figure 支持 to_html
         if hasattr(fig, "to_html"):
-            return fig.to_html(include_plotly_script="cdn", full_html=False)
+            return fig.to_html(include_plotlyjs="cdn", full_html=False)
 
         # matplotlib figure 导出为 SVG 内联
         try:

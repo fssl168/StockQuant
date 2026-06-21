@@ -30,6 +30,15 @@ class SignalSource(Enum):
     AI_ELEVATION = "ai_elevation"          # AI 升华建议
 
 
+# --- AI 信号默认过期时间映射（分钟） ---
+_DEFAULT_EXPIRY_MAP = {
+    SignalSource.AI_MONITOR.value: 30,        # 盯盘信号 30 分钟
+    SignalSource.AI_DECISION.value: 4 * 60,    # 决策信号 4 小时
+    SignalSource.AI_ELEVATION.value: 60,       # 升华建议 1 小时
+    # TRADITIONAL / 其他: 不过期
+}
+
+
 @dataclass
 class SignalAuditLog:
     """信号操作审计日志"""
@@ -150,18 +159,48 @@ class Signal:
 
     @property
     def priority(self) -> int:
-        """信号优先级（越小越高）"""
+        """信号优先级（越小越高）
+
+        TRADITIONAL: 0 (最高)
+        AI_MONITOR: 1
+        AI_DECISION: 2
+        AI_ELEVATION: 3 (最低)
+        """
         priority_map = {
             SignalSource.TRADITIONAL: 0,
             SignalSource.AI_MONITOR: 1,
-            SignalSource.AI_DECISION: 1,
-            SignalSource.AI_ELEVATION: 2,
+            SignalSource.AI_DECISION: 2,
+            SignalSource.AI_ELEVATION: 3,
         }
         return priority_map.get(self.source, 99)
 
     def __repr__(self) -> str:
         return (f"Signal({self.symbol} {self.side.value} conf={self.confidence:.2f} "
                 f"src={self.source.value})")
+
+
+def _default_expiry(source: str, timestamp: datetime) -> datetime:
+    """
+    根据信号来源返回默认过期时间。
+
+    - NEWS/AI_MONITOR: 30 分钟
+    - ANNOUNCEMENT/AI_DECISION: 4 小时
+    - TECHINICAL/TRADITIONAL: 永不过期 (None)
+    """
+    source_lower = source.lower()
+    minutes = None
+    if "news" in source_lower or "monitor" in source_lower:
+        minutes = 30
+    elif "announce" in source_lower or "decision" in source_lower:
+        minutes = 4 * 60
+    elif "technical" in source_lower or "traditional" in source_lower:
+        minutes = None
+    elif "elevation" in source_lower:
+        minutes = 60
+
+    if minutes is None:
+        return None
+    return timestamp + timedelta(minutes=minutes)
 
 
 def convert_ai_to_strategy(ai_signal: dict) -> tuple[Signal, list[str]]:
@@ -363,6 +402,27 @@ class SignalManager:
         """按来源类型过滤信号"""
         return [s for s in self._signals if s.source == source and not s.is_expired()]
 
+    def get_signals_by_priority(self) -> list[Signal]:
+        """
+        返回所有有效信号，按优先级排序（数字越小优先级越高）。
+
+        当同一标的存在不同来源的信号时，优先级更高的信号优先。
+        """
+        active = [s for s in self._signals if not s.is_expired()]
+        active.sort(key=lambda s: s.priority)
+
+        # 冲突解决：同一标的只保留优先级最高的信号
+        seen = set()
+        result = []
+        for s in active:
+            if s.symbol not in seen:
+                seen.add(s.symbol)
+                result.append(s)
+            else:
+                self._log("resolved", s, f"Lower priority than existing signal for {s.symbol}")
+
+        return result
+
     def cleanup_expired(self) -> int:
         """
         清理过期信号。
@@ -372,10 +432,11 @@ class SignalManager:
         int — 被清理的信号数量
         """
         before = len(self._signals)
+        expired_signals = [s for s in self._signals if s.is_expired()]
         self._signals = [s for s in self._signals if not s.is_expired()]
         removed_count = before - len(self._signals)
-        for _ in range(removed_count):
-            pass  # audit: "removed" for each removed signal
+        for s in expired_signals:
+            self._log("expired", s, f"Signal expired at {s.expires_at}")
         return removed_count
 
     def get_audit_log(self) -> list[SignalAuditLog]:

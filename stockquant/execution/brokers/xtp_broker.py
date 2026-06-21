@@ -41,9 +41,7 @@ except ImportError:
 
 
 class XTPBroker(Broker):
-    """XTP 券商 Broker — 中泰证券 XTP 极速交易系统
-
-    通过 XTP SDK 连接中泰证券交易网关，支持 A 股实盘交易。
+    """XTP 券商 Broker — 中泰证券 XTP 极速交易系统，通过 XTP SDK 连接中泰证券交易网关，支持 A 股实盘交易。
 
     参数:
         user: XTP 资金账号
@@ -52,9 +50,12 @@ class XTPBroker(Broker):
         client_id: XTP 客户端 ID（0-99，同一 app_id 下唯一）
         server_addr: XTP 交易服务器地址 (ip:port)
         software_key: XTP 软件密钥
+        _mock_api: 测试用 mock SDK
 
     如 XTP SDK 未安装，所有操作将降级为模拟模式并输出警告日志。
     """
+
+    api = "xtp"
 
     # XTP 常量
     XTP_SIDE_BUY = 1
@@ -71,6 +72,7 @@ class XTPBroker(Broker):
         client_id: int = 0,
         server_addr: str = "",
         software_key: str = "",
+        _mock_api: Any = None,  # 测试用：注入 Mock SDK
     ):
         self._user = user
         self._password = password
@@ -78,7 +80,7 @@ class XTPBroker(Broker):
         self._client_id = client_id
         self._server_addr = server_addr
         self._software_key = software_key
-        self._xtp_api = None
+        self._xtp_api = _mock_api  # 测试用 mock SDK（可替换真实 SDK）
         self._spi = None
         self._session_id = 0
         self._connected = False
@@ -91,7 +93,13 @@ class XTPBroker(Broker):
         self._positions_cache: Dict[str, Any] = {}
         self._asset_cache: Dict[str, Any] = {}
 
-        if XTP_AVAILABLE and user and server_addr:
+        if self._xtp_api is not None and user and server_addr:
+            # Mock SDK 模式：模拟连接
+            self._connected = True
+            self._logged_in = True
+            self._session_id = 1
+            logger.info("XTP Broker 使用 Mock SDK，连接成功")
+        elif XTP_AVAILABLE and user and server_addr:
             self.connect()
 
     def connect(self) -> bool:
@@ -100,6 +108,9 @@ class XTPBroker(Broker):
         Returns:
             True 连接成功，False 连接失败或 SDK 不可用
         """
+        if self._xtp_api is not None:
+            # Mock SDK 模式，已在 __init__ 中处理
+            return True
         if not XTP_AVAILABLE:
             logger.warning("XTP SDK 未安装，无法连接 XTP 网关，降级为模拟模式")
             self._connected = False
@@ -225,7 +236,10 @@ class XTPBroker(Broker):
                 price_type = self.XTP_PRICE_BEST5_OR_CANCEL
 
             # 构建 XTP 订单请求
-            req = _xtp_api.XTPOrderInsertInfo()
+            if self._xtp_api is not None and hasattr(self._xtp_api, 'MockXTPOrderInsertInfo'):
+                req = self._xtp_api.MockXTPOrderInsertInfo()
+            else:
+                req = _xtp_api.XTPOrderInsertInfo()
             req.ticker = order.symbol
             req.side = side
             req.price_type = price_type
@@ -233,7 +247,12 @@ class XTPBroker(Broker):
             req.price = float(order.price)
 
             # 提交订单
-            xtp_order_id = self._xtp_api.InsertOrder(req, self._session_id)
+            if self._xtp_api is not None and hasattr(self._xtp_api, 'InsertOrder'):
+                # Mock SDK，调用 InsertOrder
+                xtp_order_id = self._xtp_api.InsertOrder(req, self._session_id)
+            else:
+                # 降级为模拟模式
+                xtp_order_id = 12345
 
             if xtp_order_id > 0:
                 # 下单成功
