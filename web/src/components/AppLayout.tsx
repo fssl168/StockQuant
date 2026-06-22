@@ -20,7 +20,6 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useNotificationStore } from '@/stores/notificationStore'
-import { useAuthStore } from '@/stores/authStore'
 
 const { Header, Sider, Content } = Layout
 
@@ -49,9 +48,6 @@ interface Props {
 export default function AppLayout({ children }: Props) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user } = useAuthStore()
-  const userRoles = (user?.roles ?? '').toString().split(',').map(r => r.trim()) || []
-  const isAdmin = userRoles.includes('ADMIN')
   const [time, setTime] = useState(new Date())
   const [apiLatency, setApiLatency] = useState<number | null>(null)
   const [backendAvailable, setBackendAvailable] = useState(false)
@@ -94,7 +90,7 @@ export default function AppLayout({ children }: Props) {
     return () => clearInterval(interval)
   }, [])
 
-  const visibleItems = menuItems.filter((m) => !m.hidden && (!m.meta?.role || isAdmin))
+  const visibleItems = menuItems.filter((m) => !m.hidden)
 
   const siderStyle: React.CSSProperties = {
     overflow: 'auto',

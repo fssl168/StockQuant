@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Tabs, Table, Card, Typography, Button, Space, Input, Modal, Form, Select, message } from 'antd'
-import { Memory, Plus, Trash, Search, ArrowsOut } from '@phosphor-icons/react'
+import { Tabs, Table, Card, Typography, Button, Space, Input, message } from 'antd'
+import { Memory, ArrowsOut } from '@phosphor-icons/react'
 
 const { Text } = Typography
 
@@ -69,15 +69,15 @@ export default function MemoryPage() {
       title: '操作',
       key: 'action',
       width: 80,
-      render: (_: unknown, record: MemoryEntry) => (
-        <Button size="small" type="text" danger onClick={() => handleDelete(type, record)}>
+      render: () => (
+        <Button size="small" type="text" danger onClick={() => handleDelete(type)}>
           删除
         </Button>
       ),
     },
   ]
 
-  const handleDelete = async (type: 'L1' | 'L2' | 'L3', record: MemoryEntry) => {
+  const handleDelete = async (type: 'L1' | 'L2' | 'L3') => {
     try {
       await fetch(`/api/memory/${type.toLowerCase()}`, { method: 'DELETE' })
       message.success('已清空')
@@ -134,7 +134,7 @@ export default function MemoryPage() {
                       fetchAll()
                     })
                   }}>压缩到 L3</Button>
-                  <Button danger onClick={() => handleDelete('L2', {}) as any}>清空 L2</Button>
+                  <Button danger onClick={() => handleDelete('L2')}>清空 L2</Button>
                 </Space>
                 <Table
                   dataSource={l2Data}
@@ -156,7 +156,7 @@ export default function MemoryPage() {
                   <Input.Search placeholder="关键词搜索" allowClear onSearch={(v) => {
                     fetch(`/api/memory/l3?keyword=${v}`).then(r => r.json()).then(setL3Data).catch(() => setL3Data([]))
                   }} style={{ width: 300 }} />
-                  <Button danger onClick={() => handleDelete('L3', {}) as any}>清空 L3</Button>
+                  <Button danger onClick={() => handleDelete('L3')}>清空 L3</Button>
                 </Space>
                 <Table
                   dataSource={l3Data}

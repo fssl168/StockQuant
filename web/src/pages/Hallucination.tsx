@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Table, Card, Typography, Tabs, Tag, Row, Col, Space, Select, Empty } from 'antd'
-import { ShieldCheck, ChartBar } from '@phosphor-icons/react'
+import { ShieldCheck } from '@phosphor-icons/react'
 
 const { Text } = Typography
 
@@ -167,7 +167,7 @@ export default function HallucinationPage() {
                       { title: 'Agent', dataIndex: 'name', key: 'name' },
                       { title: '频次', dataIndex: 'count', key: 'count', width: 60 },
                       { title: '平均置信度', dataIndex: 'avg_confidence', key: 'avg_confidence', width: 100, render: (v: number) => v.toFixed(2) },
-                      { title: '主要类型', dataIndex: 'top_types', key: 'top_types', render: (v: Record<string, number>) => Object.keys(v).map(k => <Tag key={k} size="small">{k}</Tag>) },
+                      { title: '主要类型', dataIndex: 'top_types', key: 'top_types', render: (v: Record<string, number>) => Object.keys(v).map(k => <Tag key={k}>{k}</Tag>) },
                     ]}
                     rowKey={(r) => r.name}
                     size="small"
