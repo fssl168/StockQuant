@@ -363,7 +363,7 @@ def create_app() -> FastAPI:
     return app
 
 
-# 模块级 ASGI 实例（供 uvicorn stockquant.api.main:app 使用）
+# 模块级 app 实例（供 uvicorn stockquant.api.main:app 加载）
 app = create_app()
 
 

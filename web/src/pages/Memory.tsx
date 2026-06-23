@@ -13,6 +13,14 @@ interface MemoryEntry {
   metadata?: Record<string, unknown>
 }
 
+/** 带 JWT 认证的 fetch 封装 */
+function authFetch(url: string, options?: RequestInit): Promise<Response> {
+  const token = localStorage.getItem('auth_token')
+  const headers: Record<string, string> = {}
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  return fetch(url, { ...options, headers: { ...headers, ...(options?.headers as Record<string, string> || {}) } })
+}
+
 export default function MemoryPage() {
   const [l1Data, setL1Data] = useState<MemoryEntry[]>([])
   const [l2Data, setL2Data] = useState<MemoryEntry[]>([])
@@ -23,9 +31,9 @@ export default function MemoryPage() {
     setLoading(true)
     try {
       const [l1, l2, l3] = await Promise.all([
-        fetch('/api/memory/l1').then(r => r.json()).catch(() => []),
-        fetch('/api/memory/l2').then(r => r.json()).catch(() => []),
-        fetch('/api/memory/l3').then(r => r.json()).catch(() => []),
+        authFetch('/api/memory/l1').then(r => r.json()).catch(() => []),
+        authFetch('/api/memory/l2').then(r => r.json()).catch(() => []),
+        authFetch('/api/memory/l3').then(r => r.json()).catch(() => []),
       ])
       setL1Data(Array.isArray(l1) ? l1 : [])
       setL2Data(Array.isArray(l2) ? l2 : [])
@@ -79,7 +87,7 @@ export default function MemoryPage() {
 
   const handleDelete = async (type: 'L1' | 'L2' | 'L3') => {
     try {
-      await fetch(`/api/memory/${type.toLowerCase()}`, { method: 'DELETE' })
+      await authFetch(`/api/memory/${type.toLowerCase()}`, { method: 'DELETE' })
       message.success('已清空')
       fetchAll()
     } catch {
@@ -126,10 +134,10 @@ export default function MemoryPage() {
               <Card size="small">
                 <Space style={{ marginBottom: 12 }}>
                   <Input.Search placeholder="关键词搜索" allowClear onSearch={(v) => {
-                    fetch(`/api/memory/l2?keyword=${v}`).then(r => r.json()).then(setL2Data).catch(() => setL2Data([]))
+                    authFetch(`/api/memory/l2?keyword=${v}`).then(r => r.json()).then(setL2Data).catch(() => setL2Data([]))
                   }} style={{ width: 300 }} />
                   <Button onClick={() => {
-                    fetch('/api/memory/compress', { method: 'POST' }).then(() => {
+                    authFetch('/api/memory/compress', { method: 'POST' }).then(() => {
                       message.success('压缩完成')
                       fetchAll()
                     })
@@ -154,7 +162,7 @@ export default function MemoryPage() {
               <Card size="small">
                 <Space style={{ marginBottom: 12 }}>
                   <Input.Search placeholder="关键词搜索" allowClear onSearch={(v) => {
-                    fetch(`/api/memory/l3?keyword=${v}`).then(r => r.json()).then(setL3Data).catch(() => setL3Data([]))
+                    authFetch(`/api/memory/l3?keyword=${v}`).then(r => r.json()).then(setL3Data).catch(() => setL3Data([]))
                   }} style={{ width: 300 }} />
                   <Button danger onClick={() => handleDelete('L3')}>清空 L3</Button>
                 </Space>

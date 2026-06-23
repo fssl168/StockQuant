@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """F004 策略框架 — BaseStrategy 基类"""
 
-from __future__ import annotations
-
 import logging
 from abc import ABC
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
@@ -39,7 +37,7 @@ class BaseStrategy(ABC):
     name: str = "Unnamed Strategy"
     parameters: Dict[str, Any] = {}
 
-    def __init__(self, cerebro: Cerebro, **kwargs):
+    def __init__(self, cerebro: "Cerebro", **kwargs):
         # 合并参数
         for k, v in self.parameters.items():
             setattr(self, f"_param_{k}", kwargs.get(k, v))
@@ -52,7 +50,7 @@ class BaseStrategy(ABC):
         self._order_id_counter = 0
         self._log_messages: List[str] = []
 
-    def initialize(self, cerebro: Cerebro):
+    def initialize(self, cerebro: "Cerebro"):
         """由 Cerebro 调用，注入引用"""
         self._cerebro = cerebro
 
@@ -325,9 +323,16 @@ class BaseStrategy(ABC):
                 self.order_sell(bar, current - quantity)
 
     def on_bar_with_data(self, bars: Dict[str, BarData]):
-        """内部调用：设置 _current_bars 后调用 on_bar"""
+        """内部调用：设置 _current_bars 后调用 on_bar（自动适配 on_bar(self) 和 on_bar(self, bars) 两种签名）"""
         self._current_bars = bars
-        self.on_bar(bars)
+        import inspect
+        sig = inspect.signature(type(self).on_bar)
+        params = list(sig.parameters.keys())
+        # 排除 'self' 后，如果还有参数就传 bars，否则不传
+        if len(params) > 1:
+            self.on_bar(bars)
+        else:
+            self.on_bar()
 
     # ------------------------------------------------------------------
     # 指标可视化

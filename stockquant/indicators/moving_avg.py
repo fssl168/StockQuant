@@ -13,18 +13,19 @@ class MA(Indicator):
     """简单移动平均"""
 
     def __init__(self, data: List[float], period: int = 20):
-        self._data = np.array(data, dtype=float)
         self._period = period
+        super().__init__(data)
 
     @property
     def name(self) -> str:
         return "MA"
 
-    def calculate(self) -> IndicatorProxy:
-        n = len(self._data)
+    def _do_calculate(self, data) -> IndicatorProxy:
+        arr = np.array(data, dtype=float)
+        n = len(arr)
         result = np.full(n, np.nan)
         for i in range(self._period - 1, n):
-            result[i] = np.mean(self._data[i - self._period + 1:i + 1])
+            result[i] = np.mean(arr[i - self._period + 1:i + 1])
         return IndicatorProxy(list(result))
 
 
@@ -32,22 +33,23 @@ class EMA(Indicator):
     """指数移动平均"""
 
     def __init__(self, data: List[float], period: int = 12):
-        self._data = np.array(data, dtype=float)
         self._period = period
+        super().__init__(data)
 
     @property
     def name(self) -> str:
         return "EMA"
 
-    def calculate(self) -> IndicatorProxy:
-        n = len(self._data)
+    def _do_calculate(self, data) -> IndicatorProxy:
+        arr = np.array(data, dtype=float)
+        n = len(arr)
         result = np.full(n, np.nan)
         if n == 0:
             return IndicatorProxy([])
-        result[0] = self._data[0]
+        result[0] = arr[0]
         multiplier = 2.0 / (self._period + 1)
         for i in range(1, n):
-            result[i] = (self._data[i] - result[i - 1]) * multiplier + result[i - 1]
+            result[i] = (arr[i] - result[i - 1]) * multiplier + result[i - 1]
         return IndicatorProxy(list(result))
 
 
@@ -55,28 +57,29 @@ class KAMA(Indicator):
     """适应性移动平均线 (Kaufman Adaptive MA)"""
 
     def __init__(self, data: List[float], period: int = 30):
-        self._data = np.array(data, dtype=float)
         self._period = period
+        super().__init__(data)
 
     @property
     def name(self) -> str:
         return "KAMA"
 
-    def calculate(self) -> IndicatorProxy:
-        n = len(self._data)
+    def _do_calculate(self, data) -> IndicatorProxy:
+        arr = np.array(data, dtype=float)
+        n = len(arr)
         if n < self._period + 1:
             return IndicatorProxy([np.nan] * n)
 
         result = np.full(n, np.nan)
-        result[0] = self._data[0]
+        result[0] = arr[0]
 
         fast_smoothing = 2.0 / (2 + 1)
         slow_smoothing = 2.0 / (self._period + 1)
 
         for i in range(self._period, n):
             # 计算变化率
-            change = abs(self._data[i] - self._data[i - self._period])
-            volatility_sum = sum(abs(self._data[i - j] - self._data[i - j - 1])
+            change = abs(arr[i] - arr[i - self._period])
+            volatility_sum = sum(abs(arr[i - j] - arr[i - j - 1])
                                  for j in range(self._period))
 
             efficiency_ratio = change / volatility_sum if volatility_sum > 0 else 0
@@ -84,7 +87,7 @@ class KAMA(Indicator):
             # 平滑系数
             smoothing = (efficiency_ratio * (fast_smoothing - slow_smoothing) + slow_smoothing) ** 2
 
-            result[i] = smoothing * self._data[i] + (1 - smoothing) * result[i - 1]
+            result[i] = smoothing * arr[i] + (1 - smoothing) * result[i - 1]
 
         return IndicatorProxy(list(result))
 
@@ -93,15 +96,15 @@ class TRIX(Indicator):
     """三重指数平滑平均线"""
 
     def __init__(self, data: List[float], period: int = 15):
-        self._data = np.array(data, dtype=float)
         self._period = period
+        super().__init__(data)
 
     @property
     def name(self) -> str:
         return "TRIX"
 
-    def calculate(self) -> IndicatorProxy:
-        result = self._triple_ema(self._data, self._period)
+    def _do_calculate(self, data) -> IndicatorProxy:
+        result = self._triple_ema(data, self._period)
         # TRIX = (result - prev_result) / prev_result * 100
         output = np.full(len(result), np.nan)
         for i in range(1, len(result)):
@@ -110,7 +113,7 @@ class TRIX(Indicator):
         return IndicatorProxy(list(output))
 
     @staticmethod
-    def _triple_ema(data: np.ndarray, period: int) -> np.ndarray:
+    def _triple_ema(data, period: int) -> np.ndarray:
         """计算三重EMA"""
         ema1 = EMA(data, period).calculate()
         ema2 = EMA(list(ema1), period).calculate()

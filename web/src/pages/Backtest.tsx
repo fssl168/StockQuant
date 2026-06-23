@@ -497,7 +497,7 @@ export default function Backtest() {
         配置策略参数，启动回测验证
       </Text>
 
-      <Form form={form} layout="vertical" onFinish={handleSubmit} initialValues={{ cash: 1_000_000, commission_type: 'ashare', slippage_type: 'none' }}>
+      <Form form={form} layout="vertical" onFinish={handleSubmit} initialValues={{ cash: 1_000_000, commission_type: 'ashare', slippage_type: 'none', data_source: 'baostock', max_drawdown: 15 }}>
         <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
           <Code size={16} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> 策略配置
         </span>} styles={{ body: { padding: 16 } }} style={{ marginBottom: 16 }}>

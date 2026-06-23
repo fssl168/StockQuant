@@ -4,6 +4,14 @@ import { ShieldCheck } from '@phosphor-icons/react'
 
 const { Text } = Typography
 
+/** 带 JWT 认证的 fetch 封装 */
+function authFetch(url: string, options?: RequestInit): Promise<Response> {
+  const token = localStorage.getItem('auth_token')
+  const headers: Record<string, string> = {}
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  return fetch(url, { ...options, headers: { ...headers, ...(options?.headers as Record<string, string> || {}) } })
+}
+
 interface HallucinationRecord {
   id: string
   timestamp: string
@@ -56,8 +64,8 @@ export default function HallucinationPage() {
     setLoading(true)
     try {
       const [recs, analysisData] = await Promise.all([
-        fetch(`/api/hallucination/records?agent=${agentTypeFilter}&hallucination_type=${typeFilter}`).then(r => r.json()).catch(() => []),
-        fetch('/api/hallucination/analysis').then(r => r.json()).catch(() => null),
+        authFetch(`/api/hallucination/records?agent=${agentTypeFilter}&hallucination_type=${typeFilter}`).then(r => r.json()).catch(() => []),
+        authFetch('/api/hallucination/analysis').then(r => r.json()).catch(() => null),
       ])
       setRecords(Array.isArray(recs) ? recs : [])
       setAnalysis(analysisData)

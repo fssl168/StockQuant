@@ -1,4 +1,4 @@
-﻿version: '3.8'
+version: '3.8'
 
 services:
   frontend:
@@ -22,6 +22,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # === AI/LLM 配置 ===
       - AI_PROVIDER=${AI_PROVIDER:-openai}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_API_BASE=${OPENAI_API_BASE}
@@ -30,102 +31,7 @@ services:
       - OPENAI_TEMPERATURE=${OPENAI_TEMPERATURE:-0.7}
       - AI_LIGHTWEIGHT_MODEL=${AI_LIGHTWEIGHT_MODEL:-gpt-4o-mini}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
-      - ANTHROPIC_API_BASE=${ANTHROPIC_API_BASE}
-      - EVO_LLM_PROVIDER=${EVO_LLM_PROVIDER:-openai}
-      - EVO_LLM_MODEL=${EVO_LLM_MODEL:-gpt-4o}
-      - EVO_LLM_API_KEY=${EVO_LLM_API_KEY}
-      - EVO_LLM_API_BASE=${EVO_LLM_API_BASE}
-      - EVO_LLM_TEMPERATURE=${EVO_LLM_TEMPERATURE:-0.5}
-      - EVO_LLM_MAX_TOKENS=${EVO_LLM_MAX_TOKENS:-4096}
-      - EVO_LLM_RETRY=${EVO_LLM_RETRY:-3}
-      - EVO_ANTHROPIC_MODEL=${EVO_ANTHROPIC_MODEL:-claude-3-opus}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stockquant_secret}
-      - DATABASE_URL=${DATABASE_URL:-postgresql://stockquant:stockquant_secret@postgres:5432/stockquant}
-      - DATABASE_POOL_SIZE=${DATABASE_POOL_SIZE:-10}
-      - DATABASE_MAX_OVERFLOW=${DATABASE_MAX_OVERFLOW:-20}
-      - DATABASE_POOL_TIMEOUT=${DATABASE_POOL_TIMEOUT:-30}
-      - DATABASE_ECHO=${DATABASE_ECHO:-false}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_DB=${REDIS_DB:-0}
-      - REDIS_POOL_SIZE=${REDIS_POOL_SIZE:-10}
-      - REDIS_SOCKET_TIMEOUT=${REDIS_SOCKET_TIMEOUT:-5}
-      - KAFKA_ENABLED=${KAFKA_ENABLED:-false}
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
-      - KAFKA_CONSUMER_GROUP=${KAFKA_CONSUMER_GROUP:-stockquant-consumers}
-      - KAFKA_SIGNAL_TOPIC=${KAFKA_SIGNAL_TOPIC:-stock-signal}
-      - KAFKA_ALERT_TOPIC=${KAFKA_ALERT_TOPIC:-stock-alert}
-      - KAFKA_SECURITY_PROTOCOL=${KAFKA_SECURITY_PROTOCOL:-plaintext}
-      - TRADING_BROKER=${TRADING_BROKER:-paper}
-      - TRADING_ADMIN_TOKEN=${TRADING_ADMIN_TOKEN}
-      - QMT_PATH=${QMT_PATH}
-      - QMT_ACCOUNT=${QMT_ACCOUNT}
-      - QMT_PASSWORD=${QMT_PASSWORD}
-      - XTP_USER=${XTP_USER}
-      - XTP_PASSWORD=${XTP_PASSWORD}
-      - XTP_APP_ID=${XTP_APP_ID}
-      - CTP_USER=${CTP_USER}
-      - CTP_PASSWORD=${CTP_PASSWORD}
-      - CTP_BROKER_ID=${CTP_BROKER_ID}
-      - DATA_PROVIDER_SOURCE=${DATA_PROVIDER_SOURCE:-alphafeed}
-      - DATA_PROVIDER_API_KEY=${DATA_PROVIDER_API_KEY}
-      - DATA_PROVIDER_API_URL=${DATA_PROVIDER_API_URL}
-      - ALPHAFEED_KEY=${ALPHAFEED_KEY}
-      - TUSHARE_TOKEN=${TUSHARE_TOKEN}
-      - AKSHARE_PROXY=${AKSHARE_PROXY}
-      - JQDATA_MOBILE=${JQDATA_MOBILE}
-      - JQDATA_PASSWORD=${JQDATA_PASSWORD}
-      - BACKTEST_DEFAULT_CASH=${BACKTEST_DEFAULT_CASH:-1000000}
-      - RISK_MAX_POSITION_PCT=${RISK_MAX_POSITION_PCT:-0.3}
-      - RISK_MAX_DAILY_LOSS_PCT=${RISK_MAX_DAILY_LOSS_PCT:-0.05}
-      - RISK_MAX_DRAWDOWN_PCT=${RISK_MAX_DRAWDOWN_PCT:-0.15}
-      - DINGTALK_WEBHOOK_URL=${DINGTALK_WEBHOOK_URL}
-      - WECHAT_WEBHOOK_URL=${WECHAT_WEBHOOK_URL}
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT:-465}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASSWORD=${SMTP_PASSWORD}
-      - EMAIL_FROM=${EMAIL_FROM}
-      - EMAIL_TO=${EMAIL_TO}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
-      - PUSHPLUS_TOKEN=${PUSHPLUS_TOKEN}
-      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - CACHE_DIR=${CACHE_DIR}
-      - LOG_DIR=${LOG_DIR:-./log}
-      - HOST=${HOST:-0.0.0.0}
-      - PORT=${PORT:-8000}
-      - DEBUG=${DEBUG:-false}
-      - WORKERS=${WORKERS:-4}
-      - SIGNAL_DEDUP_COOLDOWN_SEC=${SIGNAL_DEDUP_COOLDOWN_SEC:-14400}
-      - SIGNAL_DEDUP_DB_CHECK_PENDING=${SIGNAL_DEDUP_DB_CHECK_PENDING:-true}
-      - SIGNAL_DEDUP_AUDIT_REJECTED=${SIGNAL_DEDUP_AUDIT_REJECTED:-true}
-      - DECISION_MODE=${DECISION_MODE:-manual}
-      - MONITOR_SCAN_INTERVAL=${MONITOR_SCAN_INTERVAL:-30}
-      - ALERT_THRESHOLD=${ALERT_THRESHOLD:-3.0}
-      - CACHE_TTL_HOURS=${CACHE_TTL_HOURS:-24}
-      - CACHE_MAX_SIZE_MB=${CACHE_MAX_SIZE_MB:-1024}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-stockquant-dev-secret}
-      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
-      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-1440}
-      - SQ_ENCRYPTION_KEY=${SQ_ENCRYPTION_KEY}
-      - RATE_LIMIT=${RATE_LIMIT:-100 per minute}
-      - SIGNAL_DEDUP_ENABLED=${SIGNAL_DEDUP_ENABLED:-false}
-      - SIMULATOR_FORCE_RUN=${SIMULATOR_FORCE_RUN:-true}
-      - AI_PIPELINE_COLLECT_INTERVAL_SEC=${AI_PIPELINE_COLLECT_INTERVAL_SEC:-300}
-      - AI_PIPELINE_DENOISE_SOURCE_CREDIT_THRESHOLD=${AI_PIPELINE_DENOISE_SOURCE_CREDIT_THRESHOLD:-0.5}
-      - AI_PIPELINE_DENOISE_TIMELINESS_HOURS=${AI_PIPELINE_DENOISE_TIMELINESS_HOURS:-24}
-      - AI_PIPELINE_SUMMARIZE_PERIOD=${AI_PIPELINE_SUMMARIZE_PERIOD:-daily}
-      - AI_PIPELINE_ELEVATE_MIN_ARTICLES=${AI_PIPELINE_ELEVATE_MIN_ARTICLES:-3}
-      - AI_PIPELINE_HALLUCINATION_MODE=${AI_PIPELINE_HALLUCINATION_MODE:-standard}
-      - AI_PIPELINE_MEMORY_L2_RETENTION_DAYS=${AI_PIPELINE_MEMORY_L2_RETENTION_DAYS:-30}
-      - AI_PIPELINE_MEMORY_L3_CONFIDENCE_THRESHOLD=${AI_PIPELINE_MEMORY_L3_CONFIDENCE_THRESHOLD:-0.15}
-      - LOCAL_RULE_ENGINE_ENABLED=${LOCAL_RULE_ENGINE_ENABLED:-true}
-      - SENTIMENT_METHOD=${SENTIMENT_METHOD:-auto}
-      - TRADING_ADMIN_TOKEN=${TRADING_ADMIN_TOKEN:-MyTradingAdminSecret2026}
+      - DATABASE_URL=${DATABASE_URL}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
@@ -175,74 +81,7 @@ services:
       retries: 3
     restart: unless-stopped
 
-  prometheus:
-    image: prom/prometheus:v2.48.0
-    container_name: stockquant-prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./prometheus/rules:/etc/prometheus/rules
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=15d'
-      - '--web.enable-lifecycle'
-      - '--web.enable-admin-api'
-    restart: unless-stopped
-    depends_on:
-      - backend
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  grafana:
-    image: grafana/grafana:10.2.2
-    container_name: stockquant-grafana
-    ports:
-      - "3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-stockquant2026}
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_SERVER_ROOT_URL: "http://localhost:3000"
-      GF_INSTALL_PLUGINS: grafana-piechart-panel
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - grafana_data:/var/lib/grafana
-    restart: unless-stopped
-    depends_on:
-      - prometheus
-      - postgres
-
-  loki:
-    image: grafana/loki:2.9.4
-    container_name: stockquant-loki
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./loki/loki-config.yml:/etc/loki/loki-config.yml
-      - loki_data:/loki
-    command: -config.file=/etc/loki/loki-config.yml
-    restart: unless-stopped
-    depends_on:
-      - redis
-
-  promtail:
-    image: grafana/promtail:2.9.4
-    container_name: stockquant-promtail
-    volumes:
-      - ./log:/var/log/stockquant:ro
-      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml
-    command: -config.file=/etc/promtail/promtail-config.yml
-    restart: unless-stopped
-    depends_on:
-      - loki
-
 volumes:
   data:
   pg_data:
   redis-data:
-  prometheus_data:
-  grafana_data:
-  loki_data:

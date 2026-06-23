@@ -6,7 +6,6 @@
 2. Cerebro — 主引擎，流畅API: add_data / add_strategy / run
 """
 
-from __future__ import annotations
 
 import logging
 import itertools
@@ -27,8 +26,9 @@ from stockquant.models.portfolio import Portfolio
 if TYPE_CHECKING:
     from stockquant.engine.commission import CommissionInfo
     from stockquant.engine.broker import Broker
-    from stockquant.strategy.base import BaseStrategy
     from stockquant.data.feed import DataFeed
+
+from stockquant.strategy.base import BaseStrategy
 
 logger = logging.getLogger("stockquant.engine")
 
@@ -36,6 +36,64 @@ logger = logging.getLogger("stockquant.engine")
 # ============================================================================
 # EventEngine — 事件调度器
 # ============================================================================
+
+class _StrategyDataWrapper:
+    """策略 self.data 包装器 — 从 DataFrame 提供 close 等序列供指标计算使用。
+
+    设计约定：
+    - 直接迭代/索引 self.data → 返回 close 价序列（兼容 EMA(self.data, ...) 等指标调用）
+    - self.data.close / self.data['close'] → 返回指定列的列表
+    """
+
+    def __init__(self, df):
+        import pandas as pd
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"Expected DataFrame, got {type(df)}")
+        self._df = df
+        # 预取 close 列为列表（最常用路径）
+        self._close = df["close"].tolist()
+
+    @property
+    def close(self):
+        """收盘价列表"""
+        return self._close
+
+    @property
+    def open(self):
+        """开盘价列表"""
+        col = "open" if "open" in self._df.columns else "Open"
+        return self._df[col].tolist()
+
+    @property
+    def high(self):
+        """最高价列表"""
+        return self._df["high"].tolist()
+
+    @property
+    def low(self):
+        """最低价列表"""
+        return self._df["low"].tolist()
+
+    @property
+    def volume(self):
+        """成交量列表"""
+        return self._df["volume"].tolist()
+
+    def __len__(self):
+        return len(self._close)
+
+    def __iter__(self):
+        """迭代返回 close 价（使 np.array(self.data) 得到一维 float 数组）"""
+        return iter(self._close)
+
+    def __getitem__(self, key):
+        """整数索引 → close 价；字符串键 → 对应列列表"""
+        if isinstance(key, int):
+            return self._close[key]
+        if isinstance(key, str) and key in self._df.columns:
+            return self._df[key].tolist()
+        raise KeyError(f"Key '{key}' not found. Columns: {list(self._df.columns)}")
+
 
 class EventEngine:
     """
@@ -254,6 +312,12 @@ class Cerebro:
         # 2. 初始化策略
         for strategy in self._strategies:
             strategy.initialize(self)
+            # 注入 self.data 供策略模板在 on_start() 中使用（如 EMA(self.data, ...)）
+            if self._data_feeds:
+                feed = self._data_feeds[0]
+                df = feed.get_dataframe()
+                if df is not None and not df.empty:
+                    strategy.data = _StrategyDataWrapper(df)
             strategy.on_start()
 
         # 3. 逐 Bar 驱动

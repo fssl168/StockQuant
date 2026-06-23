@@ -4,6 +4,14 @@ import { Funnel, Play, ArrowClockwise } from '@phosphor-icons/react'
 
 const { Text } = Typography
 
+/** 带 JWT 认证的 fetch 封装 */
+function authFetch(url: string, options?: RequestInit): Promise<Response> {
+  const token = localStorage.getItem('auth_token')
+  const headers: Record<string, string> = {}
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  return fetch(url, { ...options, headers: { ...headers, ...(options?.headers as Record<string, string> || {}) } })
+}
+
 interface PipelineTask {
   task_id: string
   status: string
@@ -26,7 +34,7 @@ export default function AIPipelinePage() {
   const fetchTasks = async () => {
     setLoading(true)
     try {
-      const data = await fetch('/api/pipeline/status').then(r => r.json()).catch(() => [])
+      const data = await authFetch('/api/pipeline/status').then(r => r.json()).catch(() => [])
       setTasks(Array.isArray(data) ? data : [])
     } finally {
       setLoading(false)
@@ -44,16 +52,19 @@ export default function AIPipelinePage() {
     if (!symbols.length) { message.warning('请输入股票代码'); return }
     setRunning(true)
     try {
-      const resp = await fetch('/api/pipeline/run', {
+      const resp = await authFetch('/api/pipeline/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbols }),
       })
-      const data = await resp.json()
-      if (data.task_id) {
-        message.success(`管线任务已启动: ${data.task_id}`)
-        fetchTasks()
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        message.error(err.detail || `运行失败 (${resp.status})`)
+        return
       }
+      const data = await resp.json()
+      message.success(`管线任务已启动: ${data.task_id}`)
+      fetchTasks()
     } catch (e) {
       message.error('运行失败')
     } finally {

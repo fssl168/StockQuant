@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """F029 策略路由 — 策略 CRUD"""
 
-from __future__ import annotations
 
 import logging
 import uuid
@@ -48,6 +47,7 @@ async def create_strategy(payload: StrategyCreate, _user: UserToken = Depends(ge
         "name": payload.name,
         "code": payload.code,
         "description": payload.description,
+        "user_id": _user.sub,
         "created_at": now,
         "updated_at": now,
     }
@@ -87,6 +87,8 @@ async def update_strategy(strategy_id: str, payload: Dict[str, Any], _user: User
     if "description" in payload:
         strategy["description"] = payload["description"]
     strategy["updated_at"] = datetime.now().isoformat()
+    # 触发 StrategyStore.__setitem__ 写入数据库
+    _strategies[strategy_id] = strategy
 
     logger.info(f"策略已更新: {strategy_id}")
     return strategy

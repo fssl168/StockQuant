@@ -59,7 +59,20 @@ function RoleRoute({
   requiredRoles?: string[]
 }) {
   const { user } = useAuthStore()
-  const userRoles = (user?.roles ?? '').toString().split(',').map(r => r.trim()) || []
+  // roles 可能是字符串（逗号分隔）或数组
+  const rawRoles = user?.roles
+  const rawRole = user?.role
+  
+  let userRoles: string[] = []
+  if (Array.isArray(rawRoles)) {
+    userRoles = rawRoles.map((r: string) => r.toUpperCase())
+  } else if (typeof rawRoles === 'string' && rawRoles) {
+    userRoles = rawRoles.split(',').map((r: string) => r.trim().toUpperCase())
+  }
+  // 也检查 role 字段
+  if (typeof rawRole === 'string' && rawRole) {
+    userRoles.push(rawRole.toUpperCase())
+  }
   
   if (!hasPermission(requiredRoles, userRoles)) {
     return <Navigate to="/" replace />

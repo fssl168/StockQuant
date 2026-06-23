@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """数据持久化 — CRUD 仓库操作"""
 
-from __future__ import annotations
 
 import json
 import logging
@@ -28,6 +27,7 @@ from stockquant.persistence.models import (
     Order,
     OrderAudit,
     PendingOrder,
+    PipelineTask,
     Position,
     RiskEvent,
     SchedulerTask,
@@ -768,6 +768,16 @@ def save_strategy(engine_url: str, user_id: Optional[str] = None, strategy_id: s
             session.add(strategy)
         session.commit()
     logger.info("Saved strategy id=%s user=%s name=%s", strategy_id, user_id, name)
+
+
+def _ensure_user_exists(engine_url: str, user_id: str) -> None:
+    """确保 users 表中存在指定用户（用于外键约束）。"""
+    if not user_id:
+        return
+    try:
+        save_user(engine_url, user_id, user_id, "", '["admin"]')
+    except Exception:
+        pass
 
 
 def list_strategies(engine_url: str, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -2003,3 +2013,122 @@ def delete_scheduler_task(engine_url: str, user_id: Optional[str] = None, task_i
         session.commit()
         logger.info("Deleted scheduler task id=%s user=%s", task_id, user_id)
         return True
+
+
+# ── AI 管线任务持久化 ──
+
+def save_pipeline_task(
+    engine_url: str,
+    user_id: Optional[str] = None,
+    task_id: str = "",
+    status: str = "queued",
+    symbols: Optional[List[str]] = None,
+    sources: Optional[List[str]] = None,
+    result: Optional[Dict[str, Any]] = None,
+    error: Optional[str] = None,
+) -> None:
+    """保存或更新管线任务（按 user_id 存储）。"""
+    session_factory = _session_factory(engine_url)
+    effective_uid = user_id or ""
+
+    with session_factory() as session:
+        stmt = select(PipelineTask).where(
+            PipelineTask.task_id == task_id, PipelineTask.user_id == effective_uid
+        )
+        task = session.execute(stmt).scalars().first()
+        if task:
+            task.status = status
+            if result is not None:
+                task.result = json.dumps(result, ensure_ascii=False)
+            if error is not None:
+                task.error = error
+            if status in ("completed", "failed"):
+                task.completed_at = datetime.now()
+        else:
+            task = PipelineTask(
+                task_id=task_id,
+                user_id=effective_uid,
+                status=status,
+                symbols=json.dumps(symbols or [], ensure_ascii=False),
+                sources=json.dumps(sources or [], ensure_ascii=False),
+                result=json.dumps(result or {}, ensure_ascii=False) if result else None,
+                error=error,
+                created_at=datetime.now(),
+                completed_at=datetime.now() if status in ("completed", "failed") else None,
+            )
+            session.add(task)
+        session.commit()
+    logger.info("Saved pipeline task %s user=%s status=%s", task_id, user_id, status)
+
+
+def get_pipeline_task(engine_url: str, user_id: Optional[str] = None, task_id: str = "") -> Optional[Dict[str, Any]]:
+    """获取单个管线任务。"""
+    session_factory = _session_factory(engine_url)
+
+    with session_factory() as session:
+        stmt = select(PipelineTask).where(PipelineTask.task_id == task_id)
+        if user_id is not None:
+            stmt = stmt.where(PipelineTask.user_id == user_id)
+        task = session.execute(stmt).scalars().first()
+        if task is None:
+            return None
+        return _pipeline_task_to_dict(task)
+
+
+def list_pipeline_tasks(engine_url: str, user_id: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+    """获取管线任务列表（按 created_at 倒序）。"""
+    session_factory = _session_factory(engine_url)
+
+    with session_factory() as session:
+        stmt = select(PipelineTask).order_by(PipelineTask.created_at.desc()).limit(limit)
+        if user_id is not None:
+            stmt = stmt.where(PipelineTask.user_id == user_id)
+        tasks = session.execute(stmt).scalars().all()
+        return [_pipeline_task_to_dict(t) for t in tasks]
+
+
+def delete_pipeline_task(engine_url: str, user_id: Optional[str] = None, task_id: str = "") -> bool:
+    """删除管线任务。"""
+    session_factory = _session_factory(engine_url)
+    effective_uid = user_id or ""
+
+    with session_factory() as session:
+        stmt = select(PipelineTask).where(
+            PipelineTask.task_id == task_id, PipelineTask.user_id == effective_uid
+        )
+        task = session.execute(stmt).scalars().first()
+        if task is None:
+            return False
+        session.delete(task)
+        session.commit()
+        logger.info("Deleted pipeline task %s user=%s", task_id, user_id)
+        return True
+
+
+def _pipeline_task_to_dict(task: PipelineTask) -> Dict[str, Any]:
+    """ORM 行转字典"""
+    d = {
+        "task_id": task.task_id,
+        "user_id": task.user_id,
+        "status": task.status,
+        "created_at": task.created_at.isoformat() if task.created_at else None,
+        "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+    }
+    if task.symbols:
+        try:
+            d["symbols"] = json.loads(task.symbols)
+        except (json.JSONDecodeError, TypeError):
+            d["symbols"] = []
+    if task.sources:
+        try:
+            d["sources"] = json.loads(task.sources)
+        except (json.JSONDecodeError, TypeError):
+            d["sources"] = []
+    if task.result:
+        try:
+            d["result"] = json.loads(task.result)
+        except (json.JSONDecodeError, TypeError):
+            d["result"] = {}
+    if task.error:
+        d["error"] = task.error
+    return d

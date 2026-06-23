@@ -14,17 +14,17 @@ class MACD(Indicator):
 
     def __init__(self, data: List[float], fastperiod: int = 12,
                  slowperiod: int = 26, signalperiod: int = 9):
-        self._data = np.array(data, dtype=float)
         self._fast = fastperiod
         self._slow = slowperiod
         self._signal = signalperiod
+        super().__init__(data)
 
     @property
     def name(self) -> str:
         return "MACD"
 
-    def calculate(self) -> dict:
-        dif = self._ema(self._data, self._fast) - self._ema(self._data, self._slow)
+    def _do_calculate(self, data) -> dict:
+        dif = self._ema(data, self._fast) - self._ema(data, self._slow)
         dea = self._ema(dif, self._signal)
         macd_hist = (dif - dea) * 2
 
@@ -51,20 +51,20 @@ class OBV(Indicator):
     """能量潮指标 (On-Balance Volume)"""
 
     def __init__(self, close: List[float], volume: List[float]):
-        self._close = np.array(close, dtype=float)
         self._volume = np.array(volume, dtype=float)
+        super().__init__(close)
 
     @property
     def name(self) -> str:
         return "OBV"
 
-    def calculate(self) -> IndicatorProxy:
-        n = len(self._close)
+    def _do_calculate(self, data) -> IndicatorProxy:
+        n = len(data)
         result = np.zeros(n)
         for i in range(1, n):
-            if self._close[i] > self._close[i - 1]:
+            if data[i] > data[i - 1]:
                 result[i] = result[i - 1] + self._volume[i]
-            elif self._close[i] < self._close[i - 1]:
+            elif data[i] < data[i - 1]:
                 result[i] = result[i - 1] - self._volume[i]
             else:
                 result[i] = result[i - 1]
@@ -75,18 +75,19 @@ class HIGHEST(Indicator):
     """周期最高价"""
 
     def __init__(self, data: List[float], timeperiod: int = 20):
-        self._data = np.array(data, dtype=float)
         self._period = timeperiod
+        super().__init__(data)
 
     @property
     def name(self) -> str:
         return "HIGHEST"
 
-    def calculate(self) -> IndicatorProxy:
-        n = len(self._data)
+    def _do_calculate(self, data) -> IndicatorProxy:
+        arr = np.array(data, dtype=float)
+        n = len(arr)
         result = np.full(n, np.nan)
         for i in range(self._period - 1, n):
-            result[i] = np.max(self._data[i - self._period + 1:i + 1])
+            result[i] = np.max(arr[i - self._period + 1:i + 1])
         return IndicatorProxy(list(result))
 
 
@@ -94,18 +95,19 @@ class LOWEST(Indicator):
     """周期最低价"""
 
     def __init__(self, data: List[float], timeperiod: int = 20):
-        self._data = np.array(data, dtype=float)
         self._period = timeperiod
+        super().__init__(data)
 
     @property
     def name(self) -> str:
         return "LOWEST"
 
-    def calculate(self) -> IndicatorProxy:
-        n = len(self._data)
+    def _do_calculate(self, data) -> IndicatorProxy:
+        arr = np.array(data, dtype=float)
+        n = len(arr)
         result = np.full(n, np.nan)
         for i in range(self._period - 1, n):
-            result[i] = np.min(self._data[i - self._period + 1:i + 1])
+            result[i] = np.min(arr[i - self._period + 1:i + 1])
         return IndicatorProxy(list(result))
 
 

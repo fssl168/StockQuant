@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """指标基类与代理"""
 
-from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
@@ -13,16 +12,52 @@ if TYPE_CHECKING:
 
 
 class Indicator(ABC):
-    """指标抽象基类"""
+    """指标抽象基类 — 构造时自动计算，支持 [] 索引访问"""
+
+    def __init__(self, data: List[float]):
+        self._result = self._do_calculate(data)
 
     @abstractmethod
-    def calculate(self, data: List[float]) -> List[float]:
+    def _do_calculate(self, data: List[float]) -> "IndicatorProxy":
+        """子类实现：返回计算结果"""
         ...
 
     @property
     @abstractmethod
     def name(self) -> str:
         ...
+
+    def calculate(self) -> "IndicatorProxy":
+        """返回计算结果（兼容旧接口）"""
+        return self._result
+
+    # ── 代理到 IndicatorProxy 的快捷访问 ──
+
+    def __getitem__(self, key: int) -> float:
+        return self._result[key]
+
+    def __len__(self) -> int:
+        return len(self._result)
+
+    def __iter__(self):
+        return iter(self._result)
+
+    @property
+    def current(self) -> float:
+        return self._result.current
+
+    def crossed_above(self, other: "Indicator") -> bool:
+        if isinstance(other, Indicator):
+            other = other._result
+        return self._result.crossed_above(other)
+
+    def crossed_below(self, other: "Indicator") -> bool:
+        if isinstance(other, Indicator):
+            other = other._result
+        return self._result.crossed_below(other)
+
+    def plot(self, title=None):
+        return self._result.plot(title)
 
 
 class IndicatorProxy:

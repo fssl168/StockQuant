@@ -1,7 +1,6 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """数据持久化 - SQLAlchemy ORM 模型 (多租户重构)"""
 
-from __future__ import annotations
 
 import json
 import logging
@@ -538,6 +537,28 @@ class SchedulerTask(Base):
 
     __table_args__ = (
         Index("ix_scheduler_task_user_id", "user_id"),
+    )
+
+
+class PipelineTask(Base):
+    """AI 信息管线任务"""
+    __tablename__ = "pipeline_tasks"
+
+    task_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
+    symbols: Mapped[str] = mapped_column(Text, nullable=True)  # JSON array string
+    sources: Mapped[str] = mapped_column(Text, nullable=True)  # JSON array string
+    result: Mapped[str] = mapped_column(Text, nullable=True)   # JSON object string
+    error: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_pipeline_task_status", "status"),
+        Index("ix_pipeline_task_user_id", "user_id"),
     )
 
 
