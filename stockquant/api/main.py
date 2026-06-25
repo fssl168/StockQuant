@@ -21,6 +21,8 @@ from fastapi.middleware.cors import CORSMiddleware
 USE_RATE_LIMIT = False
 
 from stockquant.api.routers import backtest, strategy, dashboard, monitor, ai_chat, comparison, notification, data, settings, trading, portfolio, optimize
+from stockquant.data.service import DataService, KlineResult
+from stockquant.ai.service import AIService
 from stockquant.api.routers import auth as auth_router
 from stockquant.api.routers import signal as signal_router
 from stockquant.api.routers import scheduler as scheduler_router
@@ -309,6 +311,24 @@ def create_app() -> FastAPI:
     # 加载 YAML 配置
     config = get_config()
     logger.info("应用配置已加载")
+
+    # --- Unified Data Service ---
+    try:
+        data_svc = DataService()
+        app.state.data_service = data_svc
+        logger.info("DataService 已初始化")
+    except Exception as e:
+        logger.warning("DataService 初始化失败（非致命）: %s", e)
+        app.state.data_service = None
+
+    # --- Unified AI Service ---
+    try:
+        ai_svc = AIService()
+        app.state.ai_service = ai_svc
+        logger.info("AIService 已初始化: enabled=%s", ai_svc.is_configured)
+    except Exception as e:
+        logger.warning("AIService 初始化失败（非致命）: %s", e)
+        app.state.ai_service = None
 
     # 初始化 AI Agent Orchestrator
     try:
