@@ -1,8 +1,9 @@
-# -*- coding: utf-8 -*-
-"""DataService - unified data service layer"""
+﻿# -*- coding: utf-8 -*-
+"""DataService - 统一数据服务层"""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from pathlib import Path
@@ -11,12 +12,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from stockquant.config import DataProvider, get_config
+from stockquant.data.protocol import DataSourceResolver
 
 logger = logging.getLogger("stockquant.data.service")
 
 
 class KlineResult:
-    """K-line query result"""
+    """K线查询结果"""
+
     def __init__(
         self,
         symbol: str,
@@ -50,6 +53,7 @@ class KlineResult:
             return []
         rows = []
         from datetime import datetime as _dt
+
         for _, row in self.data.iterrows():
             dv = row.get("datetime", row.get("date", ""))
             if hasattr(dv, "strftime"):
@@ -75,7 +79,8 @@ class KlineResult:
 
 
 class DataCache:
-    """In-memory + file-based K-line cache"""
+    """内存+文件K线缓存"""
+
     def __init__(self, cache_dir: str = ""):
         self._mem_cache: Dict[str, Tuple[pd.DataFrame, float]] = {}
         self._mem_ttl = 300
@@ -87,7 +92,13 @@ class DataCache:
     def _key(self, symbol: str, timeframe: str, start: str, end: str) -> str:
         return f"{symbol}:{timeframe}:{start}:{end}"
 
-    def get(self, symbol: str, timeframe: str, start: str = "", end: str = "") -> pd.DataFrame:
+    def get(
+        self,
+        symbol: str,
+        timeframe: str,
+        start: str = "",
+        end: str = "",
+    ) -> pd.DataFrame:
         key = self._key(symbol, timeframe, start, end)
         if key in self._mem_cache:
             df, ts = self._mem_cache[key]
@@ -100,7 +111,14 @@ class DataCache:
             return df.copy()
         return pd.DataFrame()
 
-    def put(self, symbol: str, timeframe: str, start: str, end: str, df: pd.DataFrame):
+    def put(
+        self,
+        symbol: str,
+        timeframe: str,
+        start: str,
+        end: str,
+        df: pd.DataFrame,
+    ):
         if df.empty:
             return
         key = self._key(symbol, timeframe, start, end)
@@ -109,7 +127,7 @@ class DataCache:
             path = self._cache_dir / f"{key}.csv"
             df.to_csv(path)
         except Exception as e:
-            logger.warning(f"Cache write failed: {e}")
+            logger.warning("Cache write failed: %s", e)
 
     def invalidate(self, symbol: str, timeframe: str = ""):
         if timeframe:
@@ -141,11 +159,19 @@ class DataCache:
             "cache_dir": str(self._cache_dir),
             "file_count": len(list(self._cache_dir.glob("*"))),
             "total_size_mb": round(
-                sum(f.stat().st_size for f in self._cache_dir.glob("*") if f.is_file()) / (1024 * 1024), 2
+                sum(f.stat().st_size for f in self._cache_dir.glob("*") if f.is_file())
+                / (1024 * 1024),
+                2,
             ),
         }
 
-    def _load_from_file(self, symbol: str, timeframe: str, start: str, end: str) -> Optional[pd.DataFrame]:
+    def _load_from_file(
+        self,
+        symbol: str,
+        timeframe: str,
+        start: str,
+        end: str,
+    ) -> Optional[pd.DataFrame]:
         patterns = [f"{symbol}_{timeframe}*.csv", f"{symbol}_*.csv"]
         for pat in patterns:
             for f in self._cache_dir.glob(pat):
@@ -163,53 +189,8 @@ class DataCache:
         return None
 
 
-class DataSourceResolver:
-    @staticmethod
-    def resolve(source: DataProvider | None = None) -> List[Tuple[str, Any]]:
-        config = get_config()
-        preferred = source or config.data_provider.source
-        feeds: List[Tuple[str, Any]] = []
-        cache_dir = str(Path.home() / ".stockquant" / "data")
-
-        if preferred == DataProvider.ALPHAFeed:
-            try:
-                from stockquant.data.providers.alphafeed_feed import AlphaFeedFeed
-                feeds.append(("alphafeed", AlphaFeedFeed(
-                    symbols=[], timeframe="1d",
-                    api_key=config.data_provider.alphafeed_key or None,
-                    cache_dir=cache_dir,
-                )))
-            except Exception as e:
-                logger.debug(f"AlphaFeed unavailable: {e}")
-
-        if preferred != DataProvider.BAOSTOCK:
-            try:
-                from stockquant.data.providers.baostock_feed import BaoStockFeed
-                feeds.append(("baostock", BaoStockFeed()))
-            except Exception as e:
-                logger.debug(f"BaoStock unavailable: {e}")
-
-        try:
-            from stockquant.data.providers.sqlite_feed import SQLiteFeed
-            feeds.append(("sqlite", SQLiteFeed()))
-        except Exception as e:
-            logger.debug(f"SQLiteFeed unavailable: {e}")
-
-        try:
-            from stockquant.data.providers.csv_feed import CSVFeed
-            csv_dir = config.data_provider.csv.directory
-            if csv_dir:
-                feeds.append(("csv", CSVFeed(directory=csv_dir)))
-        except Exception as e:
-            logger.debug(f"CSVFeed unavailable: {e}")
-
-        if not feeds:
-            logger.warning("No data providers available")
-        return feeds
-
-
 class DataService:
-    """Unified data service layer"""
+    """统一数据服务层"""
 
     def __init__(self, cache: Optional[DataCache] = None):
         self.cache = cache or DataCache()
@@ -222,27 +203,36 @@ class DataService:
         end: str = "",
         provider: Optional[DataProvider] = None,
     ) -> KlineResult:
-        logger.debug(f"DataService.get_kline: {symbol} {timeframe} {start}/{end}")
+        logger.debug("DataService.get_kline: %s %s %s/%s", symbol, timeframe, start, end)
         cached_df = self.cache.get(symbol, timeframe, start, end)
         if not cached_df.empty:
-            return KlineResult(symbol, timeframe, start, end, cached_df, source="cache", cached=True)
+            return KlineResult(
+                symbol, timeframe, start, end, cached_df, source="cache", cached=True
+            )
 
-        feeds = DataSourceResolver.resolve(provider)
+        # 使用 protocol.py 中的 DataSourceResolver
+        feeds = DataSourceResolver.resolve(str(provider.value) if provider else None)
         last_error = ""
         for name, feed in feeds:
             try:
                 df = self._fetch_from_feed(feed, symbol, timeframe, start, end)
                 if df is not None and not df.empty:
                     self.cache.put(symbol, timeframe, start, end, df)
-                    logger.info(f"Fetched {len(df)} bars for {symbol} from {name}")
-                    return KlineResult(symbol, timeframe, start, end, df, source=name, cached=False)
+                    logger.info("Fetched %d bars for %s from %s", len(df), symbol, name)
+                    return KlineResult(
+                        symbol, timeframe, start, end, df, source=name, cached=False
+                    )
             except Exception as e:
                 last_error = str(e)
-                logger.warning(f"Provider {name} failed for {symbol}: {e}")
+                logger.warning("Provider %s failed for %s: %s", name, symbol, e)
 
-        return KlineResult(symbol, timeframe, start, end, pd.DataFrame(), source="none", error=last_error)
+        return KlineResult(
+            symbol, timeframe, start, end, pd.DataFrame(), source="none", error=last_error
+        )
 
-    def _fetch_from_feed(self, feed, symbol: str, timeframe: str, start: str, end: str) -> Optional[pd.DataFrame]:
+    def _fetch_from_feed(
+        self, feed, symbol: str, timeframe: str, start: str, end: str
+    ) -> Optional[pd.DataFrame]:
         if hasattr(feed, "get_dataframe"):
             if hasattr(feed, "symbols") and feed.symbols:
                 return feed.get_dataframe()
@@ -253,7 +243,13 @@ class DataService:
             return feed.get_dataframe() if hasattr(feed, "get_dataframe") else None
         return None
 
-    def get_multiple_klines(self, symbols: List[str], timeframe: str = "1d", start: str = "", end: str = "") -> Dict[str, KlineResult]:
+    def get_multiple_klines(
+        self,
+        symbols: List[str],
+        timeframe: str = "1d",
+        start: str = "",
+        end: str = "",
+    ) -> Dict[str, KlineResult]:
         return {s: self.get_kline(s, timeframe, start, end) for s in symbols}
 
     def get_health(self) -> List[Dict[str, Any]]:
@@ -262,14 +258,23 @@ class DataService:
             healthy = True
             error = ""
             try:
-                test_df = self.get_kline("sh600519", timeframe="1d", start="2024-01-01", end="2024-01-05")
+                test_df = self.get_kline(
+                    "sh600519", timeframe="1d", start="2024-01-01", end="2024-01-05"
+                )
                 if test_df.empty and name != "cache":
                     healthy = False
                     error = "test fetch returned empty"
             except Exception as e:
                 healthy = False
                 error = str(e)
-            result.append({"provider": name, "healthy": healthy, "last_check": time.strftime("%Y-%m-%d %H:%M:%S"), "error": error})
+            result.append(
+                {
+                    "provider": name,
+                    "healthy": healthy,
+                    "last_check": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "error": error,
+                }
+            )
         return result
 
     def refresh_kline(self, symbol: str, timeframe: str = "1d") -> KlineResult:
@@ -281,14 +286,18 @@ class DataService:
         return self.cache._cache_dir
 
     def upload_csv(self, content: bytes, filename: str) -> Dict[str, Any]:
-        import pandas as pd
+        import pandas as _pd
+
         required = {"date", "open", "high", "low", "close", "volume"}
         try:
-            df = pd.read_csv(pd.io.common.BytesIO(content))
+            df = _pd.read_csv(_pd.io.common.BytesIO(content))
             df.columns = df.columns.str.lower()
             missing = required - set(df.columns)
             if missing:
-                return {"success": False, "error": f"CSV missing columns: {', '.join(sorted(missing))}"}
+                return {
+                    "success": False,
+                    "error": f"CSV missing columns: {', '.join(sorted(missing))}",
+                }
             symbols = []
             if "symbol" in df.columns:
                 symbols = df["symbol"].unique().tolist()
@@ -299,7 +308,13 @@ class DataService:
             else:
                 path = self._cache_dir / filename
                 df.sort_values("date").to_csv(path, index=False)
-            return {"success": True, "filename": filename, "rows": len(df), "symbols": symbols, "columns": df.columns.tolist()}
+            return {
+                "success": True,
+                "filename": filename,
+                "rows": len(df),
+                "symbols": symbols,
+                "columns": df.columns.tolist(),
+            }
         except Exception as e:
             logger.error("CSV upload failed: %s", e, exc_info=True)
             return {"success": False, "error": str(e)}

@@ -211,7 +211,17 @@ async def list_backtests(_user: UserToken = Depends(get_current_user)) -> List[B
     """获取所有回测任务（按创建时间倒序）"""
     tasks = list(_tasks.values())
     tasks.sort(key=lambda t: t.get("created_at", ""), reverse=True)
-    return tasks
+    results: List[BacktestResult] = []
+    for t in tasks:
+        results.append(BacktestResult(
+            task_id=t.get("task_id", ""),
+            status=t.get("status", "unknown"),
+            strategy_name=t.get("strategy_name", ""),
+            metrics=t.get("metrics") or {},
+            trades=t.get("trades") or [],
+            equity_curve=t.get("equity_curve") or [],
+        ))
+    return results
 
 
 @router.get("/backtest/{task_id}", response_model=BacktestResult, summary="回测结果")

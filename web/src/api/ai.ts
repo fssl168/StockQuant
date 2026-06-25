@@ -1,4 +1,4 @@
-﻿import client from "./client"
+import client from "./client"
 
 // SSE event types from /api/ai/chat
 export interface SSEEvent {
@@ -18,10 +18,6 @@ export const aiApi = {
       conversations: { id: string; title: string; created_at: string; message_count: number }[];
     }>,
   clear: (id: string) => client.delete(`/api/ai/conversation/${id}`) as Promise<void>,
-  getConversations: () =>
-    client.get("/api/ai/conversations") as Promise<{
-      conversations: { id: string; title: string; created_at: string; message_count: number }[];
-    }>,
   getConversation: (id: string) =>
     client.get(`/api/ai/conversation/${id}`) as Promise<{
       conversation_id: string;

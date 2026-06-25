@@ -212,13 +212,6 @@ class NotificationItem(BaseModel):
 # 盯盘
 # ====================================================================
 
-class StartMonitoringRequest(BaseModel):
-    """启动盯盘请求"""
-
-    symbols: Optional[List[str]] = Field(default=None, description="盯盘标的列表")
-    threshold: Optional[float] = Field(default=0.5, description="告警阈值")
-
-
 class MonitorAlertItem(BaseModel):
     """盯盘告警项"""
 
@@ -407,16 +400,6 @@ class DataSourceUpdateRequest(BaseModel):
     api_key: Optional[str] = None
     api_url: Optional[str] = None
     is_active: bool = True
-
-
-class CollectDataRequest(BaseModel):
-    """数据收集请求"""
-
-    symbols: List[str] = Field(..., description="标的列表")
-    source: str = Field(default="baostock", description="数据源")
-    start_date: str = Field(default="", description="开始日期")
-    end_date: str = Field(default="", description="结束日期")
-    timeframe: str = Field(default="1d", description="K线周期")
 
 
 class CacheStatsResponse(BaseModel):

@@ -198,12 +198,22 @@ class AIService:
     def is_configured(self):
         return self._adapter is not None and self._config.enabled
 
+
+    def get_ai_model(self) -> str:
+        p = self._config.default_provider
+        return {
+            "openai": self._config.openai_model,
+            "anthropic": self._config.anthropic_model,
+            "ollama": self._config.ollama_model,
+            "qwen": self._config.qwen_model,
+        }.get(p.value, "gpt-4o")
+
     @property
     def stats(self):
         return {
             "enabled": self._config.enabled,
             "provider": self._config.default_provider.value,
-            "model": self._config.default_provider.value,
+            "model": self.get_ai_model(),
             "total_calls": self._total_calls,
             "total_cost": round(self._total_cost, 6),
         }

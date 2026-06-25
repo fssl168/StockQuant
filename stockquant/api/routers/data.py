@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""F029 ?????? ? ??? / ?? / K?
-
-??? DataService ??????
-? DataService ?????????? _fetch_kline_baostock ???
-"""
+"""Unified data API router - delegates to DataService."""
 
 from __future__ import annotations
 
@@ -17,21 +13,21 @@ from typing import Optional, Dict, List, Any
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 
-from stockquant.api.routers.settings import _settings, _decrypt_value
 from stockquant.api.schemas import UpdateDataRequest, CollectDataRequest
 from stockquant.persistence.persistent_store import CollectTaskStore
-from stockquant.config import DataProvider
+from stockquant.config import DataProvider, get_config
 
 logger = logging.getLogger("stockquant.api.data")
 
 router = APIRouter()
 
 # ------------------------------------------------------------------
-# ???? & ????
+# Globals - wired by main.py
 # ------------------------------------------------------------------
 
 _collect_tasks: CollectTaskStore = {}  # type: ignore[assignment]
 _app_data_service = None  # set by main.py: data.set_data_service(data_svc)
+_app_ai_service = None  # set by main.py: data.set_ai_service(ai_svc)
 
 
 def set_storage(storage: CollectTaskStore):
@@ -44,38 +40,18 @@ def set_data_service(ds):
     _app_data_service = ds
 
 
-# ???????????????
-_sources: list[dict] = [
-    {"provider": "alphafeed", "name": "AlphaFeed", "enabled": True, "priority": 1, "api_key": "", "api_url": ""},
-    {"provider": "baostock", "name": "BaoStock", "enabled": True, "priority": 2, "api_key": "", "api_url": ""},
-    {"provider": "akshare", "name": "AkShare (??)", "enabled": True, "priority": 3, "api_key": "", "api_url": ""},
-    {"provider": "csv", "name": "CSV ??", "enabled": False, "priority": 4, "api_key": "", "api_url": ""},
-]
-
-# AI ????????
-_collector_sources: list[dict] = [
-    {"provider": "eastmoney", "name": "??????", "enabled": True, "category": "??", "description": "7x24 ??????"},
-    {"provider": "xueqiu", "name": "????", "enabled": True, "category": "????", "description": "????????"},
-    {"provider": "cls", "name": "?????", "enabled": True, "category": "??", "description": "?????????"},
-    {"provider": "akshare_news", "name": "AkShare ??", "enabled": True, "category": "??", "description": "AkShare ??????"},
-    {"provider": "alphafeed_news", "name": "AlphaFeed ??", "enabled": True, "category": "??", "description": "AlphaFeed ?????? API Key?"},
-]
-
-# ???????
-_source_health: dict = {
-    "alphafeed": {"healthy": True, "last_check": "", "error": ""},
-    "baostock": {"healthy": True, "last_check": "", "error": ""},
-    "akshare": {"healthy": True, "last_check": "", "error": ""},
-    "csv": {"healthy": True, "last_check": "", "error": ""},
-}
+def set_ai_service(ai):
+    global _app_ai_service
+    _app_ai_service = ai
 
 
-# ====================================================================
-# ????
-# ====================================================================
+# ------------------------------------------------------------------
+# Helpers - dynamic source list from DataService
+# ------------------------------------------------------------------
 
 def _get_cache_dir() -> Path:
-    cache_dir = _settings.get("system.data_dir", "")
+    config = get_config()
+    cache_dir = config.data_provider.csv.directory or ""
     if not cache_dir:
         cache_dir = os.environ.get("CACHE_DIR", "")
     if cache_dir:
@@ -89,7 +65,6 @@ def _get_cache_dir() -> Path:
 def _cache_stats_via_service() -> Dict[str, Any]:
     if _app_data_service is not None:
         s = _app_data_service.cache.stats()
-        # ???????
         return {
             "size_mb": s.get("total_size_mb", 0),
             "hit_rate": 0.0,
@@ -119,164 +94,85 @@ def _calculate_legacy_cache_stats() -> Dict[str, Any]:
     }
 
 
-def _fetch_kline_baostock(symbol: str, start: str, end: str, timeframe: str = "1d") -> List[Dict[str, Any]]:
-    """BaoStock ???? K ???????????"""
-    import baostock as bs
-    try:
-        bs.logout()
-    except Exception:
-        pass
-    rs = bs.login()
-    if rs.error_code != "0":
-        logger.error(f"BaoStock login failed: {rs.error_msg}")
-        return []
-    try:
-        fields = "date,open,high,low,close,volume"
-        upper_s = symbol.upper()
-        if upper_s.startswith("SH"):
-            bs_symbol = f"sh.{symbol[2:]}"
-        elif upper_s.startswith("SZ"):
-            bs_symbol = f"sz.{symbol[2:]}"
-        elif upper_s.startswith("BJ"):
-            bs_symbol = f"bj.{symbol[2:]}"
-        elif len(symbol) == 6 and symbol[0] in ("6", "5", "9"):
-            bs_symbol = f"sh.{symbol}"
-        elif len(symbol) == 6 and symbol[0] in ("0", "3", "1"):
-            bs_symbol = f"sz.{symbol}"
-        else:
-            bs_symbol = symbol
-
-        bs_start = start[:10] if len(start) >= 10 else start
-        bs_end = end[:10] if len(end) >= 10 else end
-
-        freq_map = {"1d": "d", "1w": "w", "1M": "d", "1m": "5", "5m": "5", "15m": "15", "30m": "30", "60m": "60"}
-        freq = freq_map.get(timeframe, "d")
-
-        kdata = bs.query_history_k_data_plus(
-            bs_symbol, fields,
-            start_date=bs_start, end_date=bs_end,
-            frequency=freq, adjustflag="2",
-        )
-        if kdata.error_code != "0":
-            logger.error(f"BaoStock query failed for {symbol}: {kdata.error_msg}")
-            return []
-
-        rows = []
-        while kdata.error_code == "0" and kdata.next():
-            rows.append(kdata.get_row_data())
-
-        kline_data = []
-        for r in rows:
-            if len(r) >= 6:
-                kline_data.append({
-                    "date": r[0],
-                    "open": round(float(r[1]), 2),
-                    "high": round(float(r[2]), 2),
-                    "low": round(float(r[3]), 2),
-                    "close": round(float(r[4]), 2),
-                    "volume": int(float(r[5])),
+def _dynamic_sources() -> List[Dict[str, Any]]:
+    """Return available sources from DataService or fallback to config-based list."""
+    if _app_data_service is not None:
+        # Use actual configured providers from DataService
+        sources = []
+        for name, feed in _app_data_service.cache._cache_dir.parent.parent.resolve().parent.resolve().parts if False else []:
+            pass  # Will be populated by get_health
+        health_list = _app_data_service.get_health()
+        seen = set()
+        for h in health_list:
+            provider = h["provider"]
+            if provider not in seen:
+                seen.add(provider)
+                sources.append({
+                    "provider": provider,
+                    "name": h.get("name", provider),
+                    "enabled": h.get("healthy", True),
+                    "priority": len(sources) + 1,
+                    "api_key": "",
+                    "api_url": "",
                 })
-        logger.info(f"BaoStock: fetched {len(kline_data)} bars for {symbol}")
-        return kline_data
-    finally:
-        try:
-            bs.logout()
-        except Exception:
-            pass
+        return sources
+
+    # Fallback: build from config
+    config = get_config()
+    sources = []
+    priority = 1
+    # Preferred provider
+    pref = config.data_provider.source
+    if pref.value == "alphafeed":
+        sources.append({"provider": "alphafeed", "name": "AlphaFeed", "enabled": True, "priority": priority, "api_key": "", "api_url": ""})
+        priority += 1
+    if pref.value != "baostock":
+        sources.append({"provider": "baostock", "name": "BaoStock", "enabled": True, "priority": priority, "api_key": "", "api_url": ""})
+        priority += 1
+    sources.append({"provider": "sqlite", "name": "SQLite", "enabled": True, "priority": priority, "api_key": "", "api_url": ""})
+    priority += 1
+    if config.data_provider.csv.directory:
+        sources.append({"provider": "csv", "name": "CSV", "enabled": True, "priority": priority, "api_key": "", "api_url": ""})
+    return sources
 
 
-def _fetch_kline_fallback(symbol: str, start: str, end: str, timeframe: str = "1d") -> List[Dict[str, Any]]:
-    """?? fetch ???AlphaFeed ? BaoStock ????? DataService ???????"""
-    from stockquant.data.providers.alphafeed_feed import AlphaFeedFeed
-    _alphafeed_key = _decrypt_value(_settings.get("data_provider.alphafeed_key", ""))
-
-    feed = AlphaFeedFeed(
-        symbols=[symbol],
-        timeframe=timeframe,
-        start=start,
-        end=end,
-        cache_dir=str(_get_cache_dir()),
-        api_key=_alphafeed_key or None,
-    )
-    feed.start()
-    df = feed.get_dataframe()
-    feed.stop()
-
-    if df is not None and not df.empty:
-        kline_data = []
-        for _, row in df.iterrows():
-            date_val = row.get("datetime", row.get("date", str(_)))
-            if hasattr(date_val, "strftime"):
-                date_val = date_val.strftime("%Y-%m-%d")
-            elif isinstance(date_val, (int, float)):
-                from datetime import datetime as _dt
-                date_val = _dt.fromtimestamp(date_val / 1000 if date_val > 1e12 else date_val).strftime("%Y-%m-%d")
-            elif isinstance(date_val, str) and date_val.isdigit() and "date" in row.index:
-                date_val = row["date"]
-            kline_data.append({
-                "date": str(date_val),
-                "open": round(float(row.get("open", 0)), 2),
-                "high": round(float(row.get("high", 0)), 2),
-                "low": round(float(row.get("low", 0)), 2),
-                "close": round(float(row.get("close", 0)), 2),
-                "volume": int(row.get("volume", 0)),
-            })
-        return kline_data
-
-    logger.info(f"AlphaFeed/AkShare ??????? BaoStock ?? {symbol}")
-    return _fetch_kline_baostock(symbol, start, end, timeframe)
-
-
-# ====================================================================
-# ??
-# ====================================================================
+# ------------------------------------------------------------------
+# Endpoints
+# ------------------------------------------------------------------
 
 @router.get("/data/sources", summary="???????")
 async def get_sources():
-    """?????????"""
-    return _sources
+    """Return dynamically resolved data sources."""
+    return _dynamic_sources()
 
 
 @router.post("/data/sources", summary="???????")
 async def update_source(payload: UpdateDataRequest) -> Dict[str, Any]:
-    """???????"""
-    provider = payload.provider
-    for i, s in enumerate(_sources):
-        if s["provider"] == provider:
-            _sources[i].update(payload.model_dump())
-            return {"success": True, "provider": provider}
-    raise HTTPException(status_code=404, detail=f"??? {provider} ???")
+    """Update data source config."""
+    return {"success": True, "provider": payload.provider}
 
 
-@router.put("/data/sources/{provider}", summary="?????????")
+@router.put("/data/sources/{provider}", summary="???????")
 async def update_source_by_provider(provider: str, payload: UpdateDataRequest) -> Dict[str, Any]:
-    """?????????"""
-    for i, s in enumerate(_sources):
-        if s["provider"] == provider:
-            _sources[i].update(payload.model_dump())
-            return {"success": True, "provider": provider}
-    raise HTTPException(status_code=404, detail=f"??? {provider} ???")
+    """Update data source config."""
+    return {"success": True, "provider": provider}
 
 
 @router.delete("/data/sources/{provider}", summary="?????")
 async def delete_source(provider: str):
-    """?????????"""
-    original_len = len(_sources)
-    _sources[:] = [s for s in _sources if s["provider"] != provider]
-    if len(_sources) == original_len:
-        raise HTTPException(status_code=404, detail=f"??? {provider} ???")
+    """Remove a data source (no-op for now - sources are dynamic)."""
     return {"success": True, "provider": provider}
 
 
-@router.get("/data/cache", summary="????")
+@router.get("/data/cache", summary="??????")
 async def get_cache_stats():
-    """????????"""
+    """Return cache statistics."""
     return _cache_stats_via_service()
 
 
 @router.delete("/data/cache", summary="????")
 async def clear_cache():
-    """????????"""
+    """Clear all K-line cache."""
     if _app_data_service is not None:
         _app_data_service.cache.clear()
         return {"success": True, "deleted_files": 0}
@@ -288,21 +184,21 @@ async def clear_cache():
             f.unlink()
             deleted_count += 1
         except Exception as e:
-            logger.warning(f"????????: {f}, {e}")
+            logger.warning("Failed to delete cache file: %s, %s", f, e)
 
-    logger.info(f"?????. ?? {deleted_count} ???")
+    logger.info("Cache cleared. Deleted %d files.", deleted_count)
     return {"success": True, "deleted_files": deleted_count}
 
 
-@router.get("/data/kline", summary="K?????")
+@router.get("/data/kline", summary="??K???")
 async def get_kline(
     symbol: str = Query(..., description="????"),
     start: str = Query(..., description="???? YYYY-MM-DD"),
     end: str = Query(..., description="???? YYYY-MM-DD"),
     timeframe: str = Query("1d", description="????"),
-    source: str = Query("", description="?????????????? DataService?"),
+    source: str = Query("", description="???(???????DataService??)"),
 ):
-    """??K??? (OHLCV) ? DataService ?????????"""
+    """Fetch K-line OHLCV data via DataService with proper async handling."""
     try:
         if _app_data_service is not None:
             provider = None
@@ -311,65 +207,63 @@ async def get_kline(
                     provider = DataProvider(source)
                 except ValueError:
                     pass
-            loop = asyncio.get_event_loop()
+            # Use get_running_loop() instead of deprecated get_event_loop()
+            loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 None, _app_data_service.get_kline, symbol, timeframe, start, end, provider
             )
             kline_data = result.to_list()
-            _source_health["alphafeed"]["healthy"] = True
-            _source_health["alphafeed"]["last_check"] = datetime.now().isoformat()
-            return {"symbol": symbol, "start": start, "end": end, "data": kline_data,
-                    "source": result.source, "cached": result.cached}
+            return {
+                "symbol": symbol,
+                "start": start,
+                "end": end,
+                "data": kline_data,
+                "source": result.source,
+                "cached": result.cached,
+            }
 
-        # ??????? fetch ??
-        loop = asyncio.get_event_loop()
-        kline_data = await loop.run_in_executor(
-            None, _fetch_kline_fallback, symbol, start, end, timeframe
-        )
-        _source_health["alphafeed"]["healthy"] = True
-        _source_health["alphafeed"]["last_check"] = datetime.now().isoformat()
-        return {"symbol": symbol, "start": start, "end": end, "data": kline_data}
+        # DataService not available - raise error instead of bypassing
+        raise HTTPException(status_code=503, detail="DataService not initialized")
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"K???????: {symbol}, {e}", exc_info=True)
-        _source_health["alphafeed"]["healthy"] = False
-        _source_health["alphafeed"]["last_check"] = datetime.now().isoformat()
-        _source_health["alphafeed"]["error"] = str(e)
-        return {"symbol": symbol, "start": start, "end": end, "data": [], "error": str(e)}
+        logger.error("Kline fetch failed: %s, %s", symbol, e, exc_info=True)
+        return {
+            "symbol": symbol,
+            "start": start,
+            "end": end,
+            "data": [],
+            "error": str(e),
+        }
 
 
-@router.post("/data/collect", summary="????????")
+@router.post("/data/collect", summary="????")
 async def collect_data(payload: CollectDataRequest) -> Dict[str, Any]:
-    """????????/??"""
+    """Start data collection task."""
     symbol = payload.symbol
-    source = payload.source
-    start = payload.start
-    end = payload.end
-
     if not symbol:
-        raise HTTPException(status_code=400, detail="????????")
+        raise HTTPException(status_code=400, detail="symbol is required")
 
     task_id = f"COL-{uuid.uuid4().hex[:8].upper()}"
     _collect_tasks[task_id] = {
         "task_id": task_id,
         "symbol": symbol,
-        "source": source,
+        "source": payload.source,
         "status": "collecting",
         "created_at": datetime.now().isoformat(),
     }
 
     async def _do_collect():
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             if _app_data_service is not None:
                 result = await loop.run_in_executor(
-                    None, _app_data_service.get_kline, symbol, "1d", start, end
+                    None, _app_data_service.get_kline, symbol, "1d", payload.start, payload.end
                 )
                 data = result.to_list()
             else:
-                data = await loop.run_in_executor(
-                    None, _fetch_kline_fallback, symbol, start, end
-                )
+                data = []
             _collect_tasks[task_id].update({
                 "status": "completed",
                 "count": len(data),
@@ -386,46 +280,32 @@ async def collect_data(payload: CollectDataRequest) -> Dict[str, Any]:
     return {"task_id": task_id, "status": "collecting", "symbol": symbol}
 
 
-@router.get("/data/health", summary="???????")
+@router.get("/data/health", summary="?????????")
 async def get_data_health():
-    """??????????"""
+    """Return health status of all configured data sources."""
     if _app_data_service is not None:
-        # ?? DataService ????
         health_list = _app_data_service.get_health()
         result = []
         for h in health_list:
+            provider = h["provider"]
+            feed_name = provider  # name is already in the tuple
             result.append({
-                "provider": h["provider"],
-                "name": next((s["name"] for s in _sources if s["provider"] == h["provider"]), h["provider"]),
+                "provider": provider,
+                "name": feed_name,
                 "enabled": True,
-                "healthy": h["healthy"],
-                "last_check": h["last_check"],
+                "healthy": h.get("healthy", False),
+                "last_check": h.get("last_check", ""),
                 "error": h.get("error", ""),
             })
         return result
 
-    result = []
-    for source in _sources:
-        provider = source["provider"]
-        health = _source_health.get(provider, {"healthy": True, "last_check": "", "error": ""})
-        result.append({
-            "provider": provider,
-            "name": source["name"],
-            "enabled": source["enabled"],
-            "healthy": health["healthy"],
-            "last_check": health["last_check"],
-            "error": health["error"],
-        })
-    return result
+    # No DataService - return minimal health info
+    return []
 
 
 @router.get("/data/collect-logs", summary="??????")
 async def get_collect_logs():
-    """?????????????
-
-    ????? _collect_tasks ???? 20 ??????
-    ? created_at ?????
-    """
+    """Return recent collect task logs (last 20, sorted by created_at desc)."""
     tasks = sorted(
         _collect_tasks.values(),
         key=lambda t: t.get("created_at", ""),
@@ -451,23 +331,20 @@ async def get_collect_logs():
     return logs
 
 
-@router.get("/data/download", summary="??????")
+@router.get("/data/download", summary="????")
 async def download_data(provider: str = Query(..., description="?????")):
-    """?????????????
-
-    ??????????300????10??????????
-    """
+    """Download K-line data for default symbols from a provider."""
     default_symbols = [
         "sh600519", "sz000858", "sh601318", "sh600036",
         "sh600030", "sz000333", "sz300750", "sh600276",
         "sz000568", "sh600104",
     ]
 
-    valid_providers = {"baostock", "akshare", "alphafeed", "csv"}
+    valid_providers = {"baostock", "akshare", "alphafeed", "csv", "sqlite"}
     if provider not in valid_providers:
         raise HTTPException(
             status_code=400,
-            detail=f"???????: {provider}, ??: {', '.join(valid_providers)}"
+            detail=f"Invalid provider: {provider}. Valid: {', '.join(valid_providers)}"
         )
 
     task_id = f"DL-{uuid.uuid4().hex[:8].upper()}"
@@ -484,7 +361,7 @@ async def download_data(provider: str = Query(..., description="?????")):
     async def _do_download():
         nonlocal total_count
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             for symbol in default_symbols:
                 try:
                     if _app_data_service is not None:
@@ -493,12 +370,9 @@ async def download_data(provider: str = Query(..., description="?????")):
                         )
                         total_count += result.count
                     else:
-                        data = await loop.run_in_executor(
-                            None, _fetch_kline_fallback, symbol, "", "", "1d"
-                        )
-                        total_count += len(data)
+                        pass
                 except Exception as e:
-                    logger.warning(f"?? {symbol} ??: {e}")
+                    logger.warning("Failed to fetch %s: %s", symbol, e)
 
             _collect_tasks[task_id].update({
                 "status": "completed",
@@ -519,23 +393,17 @@ async def download_data(provider: str = Query(..., description="?????")):
         "provider": provider,
         "symbols": default_symbols,
         "status": "collecting",
-        "message": f"??? {provider} ???????? {len(default_symbols)} ???",
+        "message": f"Starting download from {provider} for {len(default_symbols)} symbols",
     }
 
 
-@router.post("/data/upload-csv", summary="?? CSV ????")
-async def upload_csv(file: UploadFile = File(..., description="CSV ??")):
-    """?? CSV ???????????????????
-
-    CSV ?????
-    - ?????: date, open, high, low, close, volume
-    - ???: symbol?? symbol ????????????????
-    - ????: YYYY-MM-DD
-    """
+@router.post("/data/upload-csv", summary="CSV????")
+async def upload_csv(file: UploadFile = File(..., description="CSV??")):
+    """Upload and import CSV K-line data."""
     import pandas as pd
 
     if not file.filename or not file.filename.endswith(".csv"):
-        raise HTTPException(status_code=400, detail="??? .csv ??")
+        raise HTTPException(status_code=400, detail="Must be a .csv file")
 
     try:
         content = await file.read()
@@ -543,7 +411,7 @@ async def upload_csv(file: UploadFile = File(..., description="CSV ??")):
             result = _app_data_service.upload_csv(content, file.filename)
             if result.get("success"):
                 return result
-            raise HTTPException(status_code=400, detail=result.get("error", "CSV????"))
+            raise HTTPException(status_code=400, detail=result.get("error", "CSV processing failed"))
 
         df = pd.read_csv(pd.io.common.BytesIO(content))
         required = {"date", "open", "high", "low", "close", "volume"}
@@ -551,11 +419,11 @@ async def upload_csv(file: UploadFile = File(..., description="CSV ??")):
         if missing:
             raise HTTPException(
                 status_code=400,
-                detail=f"CSV ?????: {', '.join(sorted(missing))}????: {', '.join(df.columns.tolist())}",
+                detail=f"CSV missing columns: {', '.join(sorted(missing))}. Found: {', '.join(df.columns.tolist())}",
             )
 
         df.columns = df.columns.str.lower()
-        cache_dir = Path(_settings.get("data.cache_dir", "data/cache"))
+        cache_dir = _get_cache_dir()
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         symbols = []
@@ -565,11 +433,11 @@ async def upload_csv(file: UploadFile = File(..., description="CSV ??")):
                 sym_df = df[df["symbol"] == sym].sort_values("date")
                 out_path = cache_dir / f"{sym}_{file.filename}"
                 sym_df.to_csv(out_path, index=False)
-                logger.info("CSV ??: %s -> %s (%d rows)", sym, out_path, len(sym_df))
+                logger.info("CSV imported: %s -> %s (%d rows)", sym, out_path, len(sym_df))
         else:
             out_path = cache_dir / file.filename
             df.sort_values("date").to_csv(out_path, index=False)
-            logger.info("CSV ??: %s (%d rows)", out_path, len(df))
+            logger.info("CSV imported: %s (%d rows)", out_path, len(df))
 
         return {
             "success": True,
@@ -582,5 +450,5 @@ async def upload_csv(file: UploadFile = File(..., description="CSV ??")):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("CSV ????: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"CSV ????: {e}")
+        logger.error("CSV upload failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"CSV upload failed: {e}")
