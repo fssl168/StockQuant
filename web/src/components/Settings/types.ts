@@ -6,7 +6,7 @@ export interface SettingEntry {
   defaultValue: unknown
   value_type: 'string' | 'number' | 'boolean' | 'select' | 'password' | 'float'
   label: string
-  description: string
+  description?: string
   secret?: boolean
   min?: number
   max?: number

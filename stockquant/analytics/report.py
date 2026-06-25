@@ -371,19 +371,19 @@ class ReportGenerator:
 """
         else:
             # 多年热力图: 行=年份, 列=月份
-            years = sorted(month_groups.keys())
-            max_year = max(years)
-            # 如果 key 是连续年份如 2022, 2023, ...
-            if max_year > 24:
-                # 年份作为 key
-                year_months: Dict[int, Dict[int, float]] = {}
-                # 需要重新组织: 假设 keys 是 {year*100 + month: value} 格式
-                # 或者 {year: [vals]}, 这里按原始 key 解析
-                for m, vals in month_groups.items():
-                    for val in vals:
-                        # 尝试 year*100+month 格式
-                        pass
-                # fallback: 所有数据当单年
+            # 解析 key 格式：year*100+month → divmod(year, 100)
+            year_months: Dict[int, Dict[int, float]] = {}
+            for key, val in values.items():
+                k = int(key)
+                if k > 24:  # year*100 + month 格式
+                    year, month = divmod(k, 100)
+                    year_months.setdefault(year, {})[month] = val
+                else:
+                    # 单年份数据，归入 2024
+                    year_months.setdefault(2024, {})[k] = val
+
+            if not year_months:
+                # 所有 key 都是单年份且 ≤24，无法组织多年数据
                 cells = ""
                 for m in range(1, 13):
                     v = values.get(m)
@@ -400,23 +400,25 @@ class ReportGenerator:
 {cells}        </div>
       </div>
 """
-            else:
-                # 简单多版本: 取每月平均值
+
+            rows_html = ""
+            for year in sorted(year_months.keys()):
                 cells = ""
                 for m in range(1, 13):
-                    vals = month_groups.get(m, [])
-                    if vals:
-                        avg = sum(vals) / len(vals)
-                        pct = f"{avg * 100:+.1f}%"
-                        color = "#238636" if avg >= 0 else "#da3633"
+                    v = year_months[year].get(m)
+                    if v is not None:
+                        pct = f"{v * 100:+.1f}%"
+                        color = "#238636" if v >= 0 else "#da3633"
                         cells += f'<div class="hm-cell" style="background:{color}">{pct}</div>\n'
                     else:
                         cells += '<div class="hm-cell hm-empty"></div>\n'
-                return f"""
+                rows_html += f'<div class="hm-row"><span class="hm-year">{year}</span>{cells}</div>\n'
+
+            return f"""
       <div class="heatmap-section">
         <h3>月度收益热力图</h3>
-        <div class="heatmap">
-{cells}        </div>
+        <div class="heatmap heatmap-multi-year">
+{rows_html}        </div>
       </div>
 """
 

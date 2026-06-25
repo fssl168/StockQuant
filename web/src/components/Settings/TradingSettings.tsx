@@ -1,5 +1,5 @@
-﻿import { Card, Form, InputNumber, Slider, Space, Typography, Text } from 'antd'
-import { WalletOutlined, TargetOutlined } from '@ant-design/icons'
+﻿import { Card, Form, InputNumber, Slider, Space, Typography } from 'antd'
+import { WalletOutlined } from '@ant-design/icons'
 import type { SettingEntry } from './types'
 
 const { Text: AntText } = Typography
@@ -54,7 +54,7 @@ export default function TradingSettings({ values, onChange }: TradingSettingsPro
   return (
     <div style={{ maxWidth: 800 }}>
       {renderSection('交易成本', <WalletOutlined />, TRADING_COST_ITEMS)}
-      {renderSection('执行参数', <TargetOutlined />, EXECUTION_ITEMS)}
+      {renderSection('执行参数', <WalletOutlined />, EXECUTION_ITEMS)}
     </div>
   )
 }

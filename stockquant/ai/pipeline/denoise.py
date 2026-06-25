@@ -46,15 +46,26 @@ class DenoiseStage:
         return [a for a in articles if a.published_at is None or a.published_at >= cutoff]
 
     def _deduplicate(self, articles: List[RawArticle]) -> List[RawArticle]:
-        """语义去重 — 相似度 > 95% 的去重"""
-        seen_titles: Dict[str, str] = {}
-        unique: List[RawArticle] = []
+        """语义去重 — 基于 Jaccard 词集合重叠率（≥60% 视为重复）"""
+        seen: List[RawArticle] = []
         for a in articles:
-            key = a.title.strip().lower()[:20]
-            if key not in seen_titles:
-                seen_titles[key] = a.title
-                unique.append(a)
-        return unique
+            title_words = set(a.title.lower().split())
+            if not title_words:
+                seen.append(a)
+                continue
+            is_dup = False
+            for existing in seen:
+                exist_words = set(existing.title.lower().split())
+                if not exist_words:
+                    continue
+                overlap = len(title_words & exist_words)
+                min_len = min(len(title_words), len(exist_words))
+                if min_len > 0 and overlap / min_len >= 0.6:
+                    is_dup = True
+                    break
+            if not is_dup:
+                seen.append(a)
+        return seen
 
     def _source_rank(self, articles: List[RawArticle]) -> List[RawArticle]:
         """按来源信用度排序"""

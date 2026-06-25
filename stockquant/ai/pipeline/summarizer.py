@@ -160,23 +160,42 @@ class Summarizer:
         items: List[RawInfoItem],
         facts: List[Dict[str, Any]],
     ) -> str:
-        """规则总结（LLM 不可用时的降级方案）"""
+        """规则总结（LLM 不可用时的降级方案）— 提取关键短语+实体"""
         sources = set(it.source for it in items)
-        parts = [f"共采集 {len(items)} 条信息，来源：{', '.join(sources)}"]
+        symbols = set(it.symbol for it in items if it.symbol)
 
+        parts = [f"共 {len(items)} 条信息"]
+        if symbols:
+            parts[-1] += f"，标的：{', '.join(sorted(symbols))}"
+        parts[-1] += f"，来源：{', '.join(sorted(sources))}"
+
+        # 按来源分组，提取关键短语
         by_source: Dict[str, List[RawInfoItem]] = {}
         for it in items:
             by_source.setdefault(it.source, []).append(it)
 
         for source, group in sorted(by_source.items()):
             parts.append(f"\n[{source}] {len(group)} 条：")
-            for g in group[:3]:
+            for g in group[:5]:
+                # 提取标题 + 前 80 字内容
+                snippet = g.content[:80] if g.content and len(g.content) > 20 else g.title
                 parts.append(f"  - {g.title}")
+                if snippet != g.title:
+                    parts[-1] += f" ({snippet}...)"
+
+        # 提取关键实体
+        all_text = " ".join(it.content or "" for it in items)
+        if all_text:
+            # 简单数字提取
+            import re
+            numbers = re.findall(r'\d+(?:\.\d+)?%', all_text)
+            if numbers:
+                parts.append(f"\n关键数据点：{', '.join(sorted(set(numbers))[:10])}")
 
         if facts:
             parts.append(f"\n历史参考: {len(facts)} 条相关事实")
 
-        return "\n".join(parts[:50])
+        return "\n".join(parts[:60])
 
     def _determine_summary_level(self, items: List[RawInfoItem]) -> str:
         """确定摘要级别 — session/daily/weekly/monthly"""

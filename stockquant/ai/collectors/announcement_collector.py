@@ -115,6 +115,10 @@ class AnnouncementCollector(BaseCollector):
             logger.warning("日期格式无效，跳过日期过滤")
 
         logger.info("公告采集完成(AkShare): %s, 去重后 %d 条", source_status, len(all_items))
+        if not all_items:
+            failed_sources = [k for k, v in source_status.items() if "failed" in v or "empty" in v]
+            if failed_sources:
+                logger.warning("所有公告数据源采集失败: %s", failed_sources)
         return all_items[:limit]
 
     async def _collect_notice_report(

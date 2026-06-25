@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
-"""F020 信息升华器 — L3 检索 + 多源融合 + 推理链验证 + 交叉验证 + 存储"""
+"""DEPRECATED — 信息升华器（旧版）
 
+请改用 :mod:`stockquant.ai.pipeline.elevate`（新版 ElevateStage）。
+此文件保留仅供向后兼容，将在下一大版本移除。
+"""
 from __future__ import annotations
 
 import logging

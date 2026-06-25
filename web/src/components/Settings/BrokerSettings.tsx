@@ -1,4 +1,4 @@
-﻿import { Card, Form, Input, Select, Space, Typography, Button, Alert, Tag, Divider } from 'antd'
+﻿import { Card, Form, Input, Select, Space, Typography, Button, Alert, Tag, Divider, InputNumber } from 'antd'
 import { ApiOutlined, CheckCircleOutlined, DisconnectOutlined, ExperimentOutlined } from '@ant-design/icons'
 import type { SettingEntry } from './types'
 

@@ -26,7 +26,7 @@ ALGORITHM = "HS256"
 _DEBUG_MODE = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
 
 # 启动时强制校验 JWT_SECRET_KEY
-if SECRET_KEY == "stockquant-dev-secret-change-in-prod" and not _DEBUG_MODE:
+if SECRET_KEY == "" and not _DEBUG_MODE:
     raise RuntimeError(
         "JWT_SECRET_KEY 未设置（生产环境）。请设置环境变量 JWT_SECRET_KEY，"
         "或设置 DEBUG=1 启用开发模式。"

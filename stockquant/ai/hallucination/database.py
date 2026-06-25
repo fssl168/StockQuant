@@ -306,3 +306,65 @@ class HallucinationDatabase:
             "omission": "禁止忽略关键缺失信息",
         }
         return banned.get(hallucination_type)
+
+    def get_metrics(self, window_hours: int = 24) -> Dict[str, Any]:
+        """计算 AI 可靠性指标（NFR009）
+
+        返回:
+            - total_checks: 时间窗口内检查总数
+            - fact_pass_rate: 事实验证通过率
+            - hallucination_rate: 幻觉检出率
+            - consecutive_hallucinations: 连续幻觉次数
+            - emergency_mode: 是否触发紧急模式（连续 ≥ 3 次幻觉）
+        """
+        from datetime import timedelta
+
+        cutoff = datetime.now() - timedelta(hours=window_hours)
+        records = self.query()
+
+        recent = []
+        for r in records:
+            ts_str = r.get("timestamp", "")
+            try:
+                ts = datetime.fromisoformat(ts_str) if ts_str else None
+            except (ValueError, TypeError):
+                ts = None
+            if ts and ts >= cutoff:
+                recent.append(r)
+
+        total = len(recent)
+        if total == 0:
+            return {
+                "window_hours": window_hours,
+                "total_checks": 0,
+                "fact_pass_rate": 1.0,
+                "hallucination_rate": 0.0,
+                "consecutive_hallucinations": 0,
+                "emergency_mode": False,
+            }
+
+        # 幻觉记录（verified 为 False 或 hallucination_type 非空）
+        hallucination_records = [
+            r for r in recent
+            if r.get("hallucination_type") and r.get("verified", True) is False
+        ]
+        n_hallucinations = len(hallucination_records)
+
+        # 连续幻觉次数（从最近往前数）
+        consecutive = 0
+        for r in reversed(recent):
+            if r.get("hallucination_type") and r.get("verified", True) is False:
+                consecutive += 1
+            else:
+                break
+
+        return {
+            "window_hours": window_hours,
+            "total_checks": total,
+            "verified_count": total - n_hallucinations,
+            "hallucination_count": n_hallucinations,
+            "fact_pass_rate": round((total - n_hallucinations) / total, 4),
+            "hallucination_rate": round(n_hallucinations / total, 4),
+            "consecutive_hallucinations": consecutive,
+            "emergency_mode": consecutive >= 3,
+        }

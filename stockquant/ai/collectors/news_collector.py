@@ -164,6 +164,12 @@ class NewsCollector(BaseCollector):
                     all_items.append(item)
 
         logger.info("新闻采集完成: %s, 去重后 %d 条", source_status, len(all_items))
+        if not all_items:
+            failed_sources = [k for k, v in source_status.items() if "failed" in v or "empty" in v]
+            if failed_sources:
+                logger.warning("所有数据源采集失败: %s", failed_sources)
+            else:
+                logger.debug("新闻采集完成但无匹配结果（数据源返回空）: %s", source_status)
         return all_items[:limit]
 
     async def _collect_eastmoney(self, symbol: str, limit: int) -> List[RawInfoItem]:

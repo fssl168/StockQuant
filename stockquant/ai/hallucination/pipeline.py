@@ -129,21 +129,64 @@ class HallucinationPipeline:
         return result
 
     def _source_verify(self, articles: List[RawArticle]) -> Dict[str, Any]:
-        known_sources = {"news_searcher", "eastmoney", "xueqiu", "cls", "cninfo"}
+        known_sources = {"news_searcher", "eastmoney", "xueqiu", "cls", "cninfo", "cctv", "global_em", "eastmoney_express", "hot_rank_em", "comment_em", "disclosure"}
         verified = sum(1 for a in articles if a.source in known_sources)
         ratio = verified / len(articles) if articles else 0
-        return {"verified_count": verified, "score": ratio}
+        # 额外检查：验证 URL 格式（基础检查，不实际请求以避免阻塞）
+        valid_urls = 0
+        for a in articles:
+            url = getattr(a, 'url', '') or ''
+            if url and (url.startswith('http://') or url.startswith('https://')):
+                valid_urls += 1
+        url_ratio = valid_urls / len(articles) if articles else 0
+        combined_score = (ratio * 0.7 + url_ratio * 0.3)
+        return {"verified_count": verified, "score": combined_score, "url_valid_ratio": round(url_ratio, 3)}
 
     def _fact_screen(self, articles: List[RawArticle]) -> Dict[str, Any]:
         has_content = sum(1 for a in articles if a.content and len(a.content) > 10)
         ratio = has_content / len(articles) if articles else 0
-        return {"valid_count": has_content, "score": ratio}
+        # 额外检查：提取内容中的数字/日期做基础验证
+        import re
+        valid_numbers = 0
+        date_patterns = []
+        for a in articles:
+            if not a.content:
+                continue
+            # 提取百分比数字
+            nums = re.findall(r'\d+(?:\.\d+)?%', a.content)
+            if nums:
+                valid_numbers += len(nums)
+            # 提取日期
+            dates = re.findall(r'\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日]?', a.content)
+            date_patterns.extend(dates)
+        return {
+            "valid_count": has_content,
+            "score": ratio,
+            "numbers_extracted": valid_numbers,
+            "dates_extracted": len(date_patterns),
+        }
 
     def _consistency_filter(self, articles: List[RawArticle]) -> Dict[str, Any]:
         titles = [a.title.strip().lower() for a in articles]
-        unique = len(set(titles))
-        ratio = unique / len(titles) if titles else 0
-        return {"unique_count": unique, "score": ratio}
+        unique_exact = len(set(titles))
+        # 基于 Jaccard 词集合重叠率的语义去重（≥70% 视为重复）
+        semantic_dup = 0
+        for i in range(len(titles)):
+            for j in range(i + 1, len(titles)):
+                words_i = set(titles[i].split())
+                words_j = set(titles[j].split())
+                if not words_i or not words_j:
+                    continue
+                overlap = len(words_i & words_j)
+                min_len = min(len(words_i), len(words_j))
+                if min_len > 0 and overlap / min_len >= 0.7:
+                    semantic_dup += 1
+        ratio = unique_exact / len(titles) if titles else 0
+        return {
+            "unique_count": unique_exact,
+            "semantic_duplicates": semantic_dup,
+            "score": ratio,
+        }
 
 
 class FactDatabase:

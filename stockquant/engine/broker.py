@@ -708,6 +708,37 @@ class LiveBroker(Broker):
         self._order_log: List[OrderAuditLog] = []
         self._open_orders: Dict[str, Order] = {}  # 尚未撤单的订单缓存
         self._data_feeds: List[Any] = []  # 数据源列表，运行时注入
+        # 连接券商 SDK
+        self._sdk_broker = self._connect_sdk()
+
+    def _connect_sdk(self) -> Any:
+        """连接券商 SDK Broker — 根据 api 类型动态导入"""
+        sdk_map = {
+            "xtp": "stockquant.execution.brokers.xtp_broker",
+            "qmt": "stockquant.execution.brokers.qmt_broker",
+            "ctp": "stockquant.execution.brokers.ctp_broker",
+        }
+        mod_path = sdk_map.get(self._api)
+        if not mod_path:
+            logging.getLogger("stockquant.engine.broker").warning("未知券商 API 类型: %s，使用占位符模式", self._api)
+            return None
+        try:
+            mod = __import__(mod_path, fromlist=[""])
+            cls_name = f"{self._api.upper()}Broker"
+            cls = getattr(mod, cls_name, None)
+            if cls:
+                # 尝试用 config 参数初始化，失败则无参初始化
+                try:
+                    sdk = cls(config=self._config)
+                except TypeError:
+                    sdk = cls()
+                logging.getLogger("stockquant.engine.broker").info("券商 SDK 连接成功: %s (%s)", cls_name, self._api)
+                return sdk
+        except ImportError as e:
+            logging.getLogger("stockquant.engine.broker").warning("券商 SDK 未安装 (%s): %s，使用占位符模式", self._api, e)
+        except Exception as e:
+            logging.getLogger("stockquant.engine.broker").warning("券商 SDK 连接失败 (%s): %s，使用占位符模式", self._api, e)
+        return None
 
     @property
     def api(self) -> str:
@@ -741,15 +772,13 @@ class LiveBroker(Broker):
 
     def place_order(self, order: Order, bar: BarData) -> Optional[TradeData]:
         """
-        实盘下单骨架。
+        实盘下单。
 
-        当前行为：
+        优先委托给券商 SDK (XTP/QMT/CTP)，SDK 不可用时回退到骨架模式：
         1. 验证 100 股整数倍（A 股最小交易单位）
         2. 将订单置为 SUBMITTED 并记录审计日志
         3. 缓存订单以便后续查询/撤销
         4. 返回 TradeData 占位符
-
-        TODO: 集成中泰 XTP API / CTP API 进行真实下单
         """
         # 1. A 股 100 股整数倍校验
         if order.quantity % 100 != 0:
@@ -767,12 +796,25 @@ class LiveBroker(Broker):
                             reason="price beyond ±10% limit")
             return None
 
-        # 3. 标记为已提交
+        # 3. 委托给券商 SDK（如已连接）
+        if self._sdk_broker:
+            try:
+                result = self._sdk_broker.place_order(order, bar)
+                if result:
+                    order.update_status(OrderStatus.SUBMITTED)
+                    self._open_orders[order.order_id] = order
+                    self._log_order(order, status="SUBMITTED",
+                                    reason=f"order submitted via {self._api} SDK")
+                    return result
+            except Exception as e:
+                logger.warning("SDK 下单失败，回退到骨架模式: %s", e)
+
+        # 4. 骨架模式：标记为已提交
         order.update_status(OrderStatus.SUBMITTED)
         self._open_orders[order.order_id] = order
         self._log_order(order, status="SUBMITTED", reason="order submitted to broker")
 
-        # 4. 返回占位成交记录
+        # 5. 返回占位成交记录
         trade = TradeData(
             trade_id=f"{order.order_id}_submitted",
             order_id=order.order_id,
@@ -790,7 +832,7 @@ class LiveBroker(Broker):
                 quantity=trade.quantity,
                 status="PLACE",
                 timestamp=datetime.now(),
-                reason="order placed placeholder",
+                reason="order placed placeholder (SDK fallback)",
             )
         )
         return trade

@@ -23,8 +23,6 @@ celery_app = Celery(
     backend=REDIS_URL,
     include=[
         "stockquant.tasks.backtest",
-        "stockquant.tasks.optimize",
-        "stockquant.tasks.data",
     ]
 )
 
@@ -53,17 +51,10 @@ celery_app.conf.update(
     # 路由配置
     task_routes={
         "stockquant.tasks.backtest.*": {"queue": "backtest"},
-        "stockquant.tasks.optimize.*": {"queue": "optimize"},
-        "stockquant.tasks.data.*": {"queue": "data"},
     },
-    
+
     # 定时任务
-    beat_schedule={
-        "cleanup-old-tasks": {
-            "task": "stockquant.tasks.maintenance.cleanup_old_tasks",
-            "schedule": crontab(hour=3, minute=0),  # 每天凌晨3点
-        },
-    },
+    beat_schedule={},
 )
 
 # 自动发现任务

@@ -1,5 +1,5 @@
 ﻿import { useState, useCallback } from 'react'
-import { Card, Form, Input, Switch, Select, InputNumber, Slider, Button, Space, message, Typography, Divider } from 'antd'
+import { Card, Form, Input, Switch, Select, InputNumber, Slider, Button, Space, Typography, message } from 'antd'
 import { SaveOutlined, DatabaseOutlined, LaptopOutlined, CloudServerOutlined } from '@ant-design/icons'
 import type { SettingEntry } from './types'
 

@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
-"""F020 信息降噪器 — 来源信用降权 + 时效降权 + 一致性过滤 + 冗余压缩"""
+"""DEPRECATED — 信息降噪器（旧版）
 
+请改用 :mod:`stockquant.ai.pipeline.denoise`（新版 DenoiseStage）。
+此文件保留仅供向后兼容，将在下一大版本移除。
+"""
 from __future__ import annotations
 
 import logging
