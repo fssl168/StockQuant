@@ -119,7 +119,7 @@ export default function Data() {
       .then((data) => {
         const rawData = data?.data ?? data
         if (Array.isArray(rawData) && rawData.length > 0) {
-          setKlineResult({ dates: data.map((_: any, i: number) => dayjs().subtract(i, 'day').format('YYYY-MM-DD')), data: data })
+          setKlineResult({ dates: (rawData as any[]).map((_: any, i: number) => dayjs().subtract(i, 'day').format('YYYY-MM-DD')), data: rawData as any })
         } else {
           setKlineError('未查询到数据')
         }

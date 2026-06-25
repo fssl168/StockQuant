@@ -45,6 +45,7 @@ _data_service = None
 
 
 def set_data_service(ds):
+    global _data_service
     _data_service = ds
 
 

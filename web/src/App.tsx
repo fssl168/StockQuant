@@ -64,10 +64,11 @@ function RoleRoute({
   const rawRole = user?.role
   
   let userRoles: string[] = []
-  if (Array.isArray(rawRoles)) {
-    userRoles = rawRoles.map((r: string) => r.toUpperCase())
-  } else if (typeof rawRoles === 'string' && rawRoles) {
-    userRoles = rawRoles.split(',').map((r: string) => r.trim().toUpperCase())
+  const rolesUnknown = rawRoles as unknown
+  if (Array.isArray(rolesUnknown)) {
+    userRoles = (rolesUnknown as string[]).map((r: string) => r.toUpperCase())
+  } else if (typeof rolesUnknown === 'string' && rolesUnknown) {
+    userRoles = rolesUnknown.split(',').map((r: string) => r.trim().toUpperCase())
   }
   // 也检查 role 字段
   if (typeof rawRole === 'string' && rawRole) {
