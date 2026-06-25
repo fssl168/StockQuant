@@ -356,7 +356,7 @@ class BacktestTask(Base):
     __tablename__ = "backtest_tasks"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
     result: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -376,7 +376,7 @@ class StrategyModel(Base):
     __tablename__ = "strategies"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     code: Mapped[str] = mapped_column(Text, nullable=False)
@@ -399,7 +399,7 @@ class CollectTask(Base):
     __tablename__ = "collect_tasks"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
     progress: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     result: Mapped[str] = mapped_column(Text, nullable=True)
@@ -420,7 +420,7 @@ class OptimizeTask(Base):
     __tablename__ = "optimize_tasks"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
     progress: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     result: Mapped[str] = mapped_column(Text, nullable=True)
@@ -441,7 +441,7 @@ class ComparisonHistory(Base):
     __tablename__ = "comparison_history"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     strategy_ids: Mapped[str] = mapped_column(String(500), nullable=False)
     result: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -458,7 +458,7 @@ class PendingOrder(Base):
     __tablename__ = "pending_orders"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     symbol: Mapped[str] = mapped_column(String(16), nullable=False)
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
@@ -478,7 +478,7 @@ class OrderAudit(Base):
     __tablename__ = "orders_audit"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     order_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     action: Mapped[str] = mapped_column(String(50), nullable=False)
     from_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
@@ -499,7 +499,7 @@ class MonitorAlert(Base):
     __tablename__ = "monitor_alerts"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(10), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
@@ -521,7 +521,7 @@ class SchedulerTask(Base):
     __tablename__ = "scheduler_tasks"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     cron_expression: Mapped[str] = mapped_column(String(50), nullable=False)
     action: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -545,7 +545,7 @@ class PipelineTask(Base):
     __tablename__ = "pipeline_tasks"
 
     task_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
     symbols: Mapped[str] = mapped_column(Text, nullable=True)  # JSON array string
     sources: Mapped[str] = mapped_column(Text, nullable=True)  # JSON array string
@@ -569,7 +569,7 @@ class CashFlow(Base):
     __tablename__ = "cash_flows"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     balance_after: Mapped[float] = mapped_column(Float, nullable=False)
@@ -611,7 +611,7 @@ class RiskEvent(Base):
     __tablename__ = "risk_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     severity: Mapped[str] = mapped_column(String(10), nullable=False, default="WARNING")
     detail: Mapped[str] = mapped_column(Text, nullable=True)

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""F029 数据管理路由 — 数据源/缓存/K线
+"""F029 ?????? ? ??? / ?? / K?
 
-已接入 BaoStockFeed 真实数据源。
+??? DataService ??????
+? DataService ?????????? _fetch_kline_baostock ???
 """
 
 from __future__ import annotations
@@ -19,38 +20,18 @@ from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from stockquant.api.routers.settings import _settings, _decrypt_value
 from stockquant.api.schemas import UpdateDataRequest, CollectDataRequest
 from stockquant.persistence.persistent_store import CollectTaskStore
+from stockquant.config import DataProvider
 
 logger = logging.getLogger("stockquant.api.data")
 
 router = APIRouter()
 
-# 内存存储
-_sources: list[dict] = [
-    {"provider": "alphafeed", "name": "AlphaFeed", "enabled": True, "priority": 1, "api_key": "", "api_url": ""},
-    {"provider": "baostock", "name": "BaoStock", "enabled": True, "priority": 2, "api_key": "", "api_url": ""},
-    {"provider": "akshare", "name": "AkShare (降级)", "enabled": True, "priority": 3, "api_key": "", "api_url": ""},
-    {"provider": "csv", "name": "CSV 文件", "enabled": False, "priority": 4, "api_key": "", "api_url": ""},
-]
+# ------------------------------------------------------------------
+# ???? & ????
+# ------------------------------------------------------------------
 
-# ── AI 信息采集器数据源 ──────────────────────────────────────────────
-_collector_sources: list[dict] = [
-    {"provider": "eastmoney", "name": "东方财富快讯", "enabled": True, "category": "新闻", "description": "7x24 实时财经快讯"},
-    {"provider": "xueqiu", "name": "雪球热帖", "enabled": True, "category": "社交媒体", "description": "雪球社区热门讨论"},
-    {"provider": "cls", "name": "财联社电报", "enabled": True, "category": "新闻", "description": "财联社实时电报推送"},
-    {"provider": "akshare_news", "name": "AkShare 新闻", "enabled": True, "category": "新闻", "description": "AkShare 个股新闻接口"},
-    {"provider": "alphafeed_news", "name": "AlphaFeed 资讯", "enabled": True, "category": "新闻", "description": "AlphaFeed 专业资讯（需 API Key）"},
-]
-
-# 数据源健康状态
-_source_health: dict = {
-    "alphafeed": {"healthy": True, "last_check": "", "error": ""},
-    "baostock": {"healthy": True, "last_check": "", "error": ""},
-    "akshare": {"healthy": True, "last_check": "", "error": ""},
-    "csv": {"healthy": True, "last_check": "", "error": ""},
-}
-
-# 采集任务
 _collect_tasks: CollectTaskStore = {}  # type: ignore[assignment]
+_app_data_service = None  # set by main.py: data.set_data_service(data_svc)
 
 
 def set_storage(storage: CollectTaskStore):
@@ -58,12 +39,42 @@ def set_storage(storage: CollectTaskStore):
     _collect_tasks = storage
 
 
+def set_data_service(ds):
+    global _app_data_service
+    _app_data_service = ds
+
+
+# ???????????????
+_sources: list[dict] = [
+    {"provider": "alphafeed", "name": "AlphaFeed", "enabled": True, "priority": 1, "api_key": "", "api_url": ""},
+    {"provider": "baostock", "name": "BaoStock", "enabled": True, "priority": 2, "api_key": "", "api_url": ""},
+    {"provider": "akshare", "name": "AkShare (??)", "enabled": True, "priority": 3, "api_key": "", "api_url": ""},
+    {"provider": "csv", "name": "CSV ??", "enabled": False, "priority": 4, "api_key": "", "api_url": ""},
+]
+
+# AI ????????
+_collector_sources: list[dict] = [
+    {"provider": "eastmoney", "name": "??????", "enabled": True, "category": "??", "description": "7x24 ??????"},
+    {"provider": "xueqiu", "name": "????", "enabled": True, "category": "????", "description": "????????"},
+    {"provider": "cls", "name": "?????", "enabled": True, "category": "??", "description": "?????????"},
+    {"provider": "akshare_news", "name": "AkShare ??", "enabled": True, "category": "??", "description": "AkShare ??????"},
+    {"provider": "alphafeed_news", "name": "AlphaFeed ??", "enabled": True, "category": "??", "description": "AlphaFeed ?????? API Key?"},
+]
+
+# ???????
+_source_health: dict = {
+    "alphafeed": {"healthy": True, "last_check": "", "error": ""},
+    "baostock": {"healthy": True, "last_check": "", "error": ""},
+    "akshare": {"healthy": True, "last_check": "", "error": ""},
+    "csv": {"healthy": True, "last_check": "", "error": ""},
+}
+
+
 # ====================================================================
-# 辅助函数
+# ????
 # ====================================================================
 
 def _get_cache_dir() -> Path:
-    """获取缓存目录"""
     cache_dir = _settings.get("system.data_dir", "")
     if not cache_dir:
         cache_dir = os.environ.get("CACHE_DIR", "")
@@ -75,51 +86,52 @@ def _get_cache_dir() -> Path:
     return p
 
 
-def _calculate_cache_stats() -> Dict[str, Any]:
-    """计算真实缓存统计"""
+def _cache_stats_via_service() -> Dict[str, Any]:
+    if _app_data_service is not None:
+        s = _app_data_service.cache.stats()
+        # ???????
+        return {
+            "size_mb": s.get("total_size_mb", 0),
+            "hit_rate": 0.0,
+            "symbol_count": s.get("file_count", 0),
+            "last_update": datetime.now().isoformat(),
+        }
+    return _calculate_legacy_cache_stats()
+
+
+def _calculate_legacy_cache_stats() -> Dict[str, Any]:
     cache_dir = _get_cache_dir()
     total_size = 0
     symbol_count = 0
     csv_files = list(cache_dir.glob("*.csv"))
-
     for f in csv_files:
         total_size += f.stat().st_size
-
-    # 统计不同 symbol 数量
     symbols = set()
     for f in csv_files:
-        # 文件名格式: symbol_timeframe_start_end.csv
         parts = f.stem.split("_")
         if parts:
             symbols.add(parts[0])
-    symbol_count = len(symbols)
-
     return {
         "size_mb": round(total_size / (1024 * 1024), 2),
-        "hit_rate": 0.0,  # 缓存命中率需要额外跟踪
-        "symbol_count": symbol_count,
+        "hit_rate": 0.0,
+        "symbol_count": len(symbols),
         "last_update": datetime.now().isoformat(),
     }
 
 
 def _fetch_kline_baostock(symbol: str, start: str, end: str, timeframe: str = "1d") -> List[Dict[str, Any]]:
-    """使用 BaoStock 获取 K 线数据（最终降级方案）"""
+    """BaoStock ???? K ???????????"""
     import baostock as bs
-
-    # BaoStock 全局只有一个登录会话，确保干净状态
     try:
         bs.logout()
     except Exception:
         pass
-
     rs = bs.login()
     if rs.error_code != "0":
         logger.error(f"BaoStock login failed: {rs.error_msg}")
         return []
-
     try:
         fields = "date,open,high,low,close,volume"
-
         upper_s = symbol.upper()
         if upper_s.startswith("SH"):
             bs_symbol = f"sh.{symbol[2:]}"
@@ -145,7 +157,6 @@ def _fetch_kline_baostock(symbol: str, start: str, end: str, timeframe: str = "1
             start_date=bs_start, end_date=bs_end,
             frequency=freq, adjustflag="2",
         )
-
         if kdata.error_code != "0":
             logger.error(f"BaoStock query failed for {symbol}: {kdata.error_msg}")
             return []
@@ -165,10 +176,8 @@ def _fetch_kline_baostock(symbol: str, start: str, end: str, timeframe: str = "1
                     "close": round(float(r[4]), 2),
                     "volume": int(float(r[5])),
                 })
-
         logger.info(f"BaoStock: fetched {len(kline_data)} bars for {symbol}")
         return kline_data
-
     finally:
         try:
             bs.logout()
@@ -176,11 +185,9 @@ def _fetch_kline_baostock(symbol: str, start: str, end: str, timeframe: str = "1
             pass
 
 
-def _fetch_kline_sync(symbol: str, start: str, end: str, timeframe: str = "1d") -> List[Dict[str, Any]]:
-    """同步获取 K 线数据 — AlphaFeed 优先，AkShare 降级，BaoStock 兜底"""
-    # 优先尝试 AlphaFeed/AkShare
+def _fetch_kline_fallback(symbol: str, start: str, end: str, timeframe: str = "1d") -> List[Dict[str, Any]]:
+    """?? fetch ???AlphaFeed ? BaoStock ????? DataService ???????"""
     from stockquant.data.providers.alphafeed_feed import AlphaFeedFeed
-
     _alphafeed_key = _decrypt_value(_settings.get("data_provider.alphafeed_key", ""))
 
     feed = AlphaFeedFeed(
@@ -196,20 +203,16 @@ def _fetch_kline_sync(symbol: str, start: str, end: str, timeframe: str = "1d") 
     feed.stop()
 
     if df is not None and not df.empty:
-        # DataFrame 转为前端格式 — 兼容多种列名格式
         kline_data = []
         for _, row in df.iterrows():
-            # 优先使用 datetime 列，其次 date
             date_val = row.get("datetime", row.get("date", str(_)))
             if hasattr(date_val, "strftime"):
                 date_val = date_val.strftime("%Y-%m-%d")
             elif isinstance(date_val, (int, float)):
                 from datetime import datetime as _dt
                 date_val = _dt.fromtimestamp(date_val / 1000 if date_val > 1e12 else date_val).strftime("%Y-%m-%d")
-            elif isinstance(date_val, str):
-                # 如果是数字字符串（索引），跳过用 date 列
-                if date_val.isdigit() and "date" in row.index:
-                    date_val = row["date"]
+            elif isinstance(date_val, str) and date_val.isdigit() and "date" in row.index:
+                date_val = row["date"]
             kline_data.append({
                 "date": str(date_val),
                 "open": round(float(row.get("open", 0)), 2),
@@ -220,61 +223,64 @@ def _fetch_kline_sync(symbol: str, start: str, end: str, timeframe: str = "1d") 
             })
         return kline_data
 
-    # AlphaFeed/AkShare 失败，降级到 BaoStock
-    logger.info(f"AlphaFeed/AkShare 无数据，降级到 BaoStock 获取 {symbol}")
+    logger.info(f"AlphaFeed/AkShare ??????? BaoStock ?? {symbol}")
     return _fetch_kline_baostock(symbol, start, end, timeframe)
 
 
 # ====================================================================
-# 端点
+# ??
 # ====================================================================
 
-@router.get("/data/sources", summary="获取数据源列表")
+@router.get("/data/sources", summary="???????")
 async def get_sources():
-    """获取所有数据源配置"""
+    """?????????"""
     return _sources
 
 
-@router.post("/data/sources", summary="更新数据源配置")
+@router.post("/data/sources", summary="???????")
 async def update_source(payload: UpdateDataRequest) -> Dict[str, Any]:
-    """更新数据源配置"""
+    """???????"""
     provider = payload.provider
     for i, s in enumerate(_sources):
         if s["provider"] == provider:
-            _sources[i].update(payload)
+            _sources[i].update(payload.model_dump())
             return {"success": True, "provider": provider}
-    raise HTTPException(status_code=404, detail=f"数据源 {provider} 不存在")
+    raise HTTPException(status_code=404, detail=f"??? {provider} ???")
 
 
-@router.put("/data/sources/{provider}", summary="编辑单个数据源配置")
+@router.put("/data/sources/{provider}", summary="?????????")
 async def update_source_by_provider(provider: str, payload: UpdateDataRequest) -> Dict[str, Any]:
-    """编辑单个数据源配置"""
+    """?????????"""
     for i, s in enumerate(_sources):
         if s["provider"] == provider:
-            _sources[i].update(payload)
+            _sources[i].update(payload.model_dump())
             return {"success": True, "provider": provider}
-    raise HTTPException(status_code=404, detail=f"数据源 {provider} 不存在")
+    raise HTTPException(status_code=404, detail=f"??? {provider} ???")
 
 
-@router.delete("/data/sources/{provider}", summary="删除数据源")
+@router.delete("/data/sources/{provider}", summary="?????")
 async def delete_source(provider: str):
-    """删除单个数据源配置"""
+    """?????????"""
     original_len = len(_sources)
     _sources[:] = [s for s in _sources if s["provider"] != provider]
     if len(_sources) == original_len:
-        raise HTTPException(status_code=404, detail=f"数据源 {provider} 不存在")
+        raise HTTPException(status_code=404, detail=f"??? {provider} ???")
     return {"success": True, "provider": provider}
 
 
-@router.get("/data/cache", summary="缓存统计")
+@router.get("/data/cache", summary="????")
 async def get_cache_stats():
-    """获取缓存统计信息"""
-    return _calculate_cache_stats()
+    """????????"""
+    return _cache_stats_via_service()
 
 
-@router.delete("/data/cache", summary="清除缓存")
+@router.delete("/data/cache", summary="????")
 async def clear_cache():
-    """清除所有缓存数据"""
+    """????????"""
+    if _app_data_service is not None:
+        _app_data_service.cache.clear()
+        return {"success": True, "deleted_files": 0}
+
     cache_dir = _get_cache_dir()
     deleted_count = 0
     for f in cache_dir.glob("*.csv"):
@@ -282,51 +288,66 @@ async def clear_cache():
             f.unlink()
             deleted_count += 1
         except Exception as e:
-            logger.warning(f"删除缓存文件失败: {f}, {e}")
+            logger.warning(f"????????: {f}, {e}")
 
-    logger.info(f"缓存已清除: 删除 {deleted_count} 个文件")
+    logger.info(f"?????. ?? {deleted_count} ???")
     return {"success": True, "deleted_files": deleted_count}
 
 
-@router.get("/data/kline", summary="K线数据查询")
+@router.get("/data/kline", summary="K?????")
 async def get_kline(
-    symbol: str = Query(..., description="股票代码"),
-    start: str = Query(..., description="开始日期 YYYY-MM-DD"),
-    end: str = Query(..., description="结束日期 YYYY-MM-DD"),
-    timeframe: str = Query("1d", description="时间框架"),
+    symbol: str = Query(..., description="????"),
+    start: str = Query(..., description="???? YYYY-MM-DD"),
+    end: str = Query(..., description="???? YYYY-MM-DD"),
+    timeframe: str = Query("1d", description="????"),
+    source: str = Query("", description="?????????????? DataService?"),
 ):
-    """获取K线数据 (OHLCV) — AlphaFeed 优先，BaoStock 降级"""
+    """??K??? (OHLCV) ? DataService ?????????"""
     try:
+        if _app_data_service is not None:
+            provider = None
+            if source:
+                try:
+                    provider = DataProvider(source)
+                except ValueError:
+                    pass
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, _app_data_service.get_kline, symbol, timeframe, start, end, provider
+            )
+            kline_data = result.to_list()
+            _source_health["alphafeed"]["healthy"] = True
+            _source_health["alphafeed"]["last_check"] = datetime.now().isoformat()
+            return {"symbol": symbol, "start": start, "end": end, "data": kline_data,
+                    "source": result.source, "cached": result.cached}
+
+        # ??????? fetch ??
         loop = asyncio.get_event_loop()
         kline_data = await loop.run_in_executor(
-            None, _fetch_kline_sync, symbol, start, end, timeframe
+            None, _fetch_kline_fallback, symbol, start, end, timeframe
         )
-
-        # 更新数据源健康状态
         _source_health["alphafeed"]["healthy"] = True
         _source_health["alphafeed"]["last_check"] = datetime.now().isoformat()
-
         return {"symbol": symbol, "start": start, "end": end, "data": kline_data}
 
     except Exception as e:
-        logger.error(f"K线数据获取失败: {symbol}, {e}", exc_info=True)
+        logger.error(f"K???????: {symbol}, {e}", exc_info=True)
         _source_health["alphafeed"]["healthy"] = False
         _source_health["alphafeed"]["last_check"] = datetime.now().isoformat()
         _source_health["alphafeed"]["error"] = str(e)
-
         return {"symbol": symbol, "start": start, "end": end, "data": [], "error": str(e)}
 
 
-@router.post("/data/collect", summary="手动触发数据采集")
+@router.post("/data/collect", summary="????????")
 async def collect_data(payload: CollectDataRequest) -> Dict[str, Any]:
-    """手动触发数据采集/下载"""
+    """????????/??"""
     symbol = payload.symbol
     source = payload.source
     start = payload.start
     end = payload.end
 
     if not symbol:
-        raise HTTPException(status_code=400, detail="股票代码不能为空")
+        raise HTTPException(status_code=400, detail="????????")
 
     task_id = f"COL-{uuid.uuid4().hex[:8].upper()}"
     _collect_tasks[task_id] = {
@@ -337,13 +358,18 @@ async def collect_data(payload: CollectDataRequest) -> Dict[str, Any]:
         "created_at": datetime.now().isoformat(),
     }
 
-    # 异步执行采集
     async def _do_collect():
         try:
             loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(
-                None, _fetch_kline_sync, symbol, start, end
-            )
+            if _app_data_service is not None:
+                result = await loop.run_in_executor(
+                    None, _app_data_service.get_kline, symbol, "1d", start, end
+                )
+                data = result.to_list()
+            else:
+                data = await loop.run_in_executor(
+                    None, _fetch_kline_fallback, symbol, start, end
+                )
             _collect_tasks[task_id].update({
                 "status": "completed",
                 "count": len(data),
@@ -357,13 +383,27 @@ async def collect_data(payload: CollectDataRequest) -> Dict[str, Any]:
             })
 
     asyncio.create_task(_do_collect())
-
     return {"task_id": task_id, "status": "collecting", "symbol": symbol}
 
 
-@router.get("/data/health", summary="数据源健康状态")
+@router.get("/data/health", summary="???????")
 async def get_data_health():
-    """获取各数据源健康状态"""
+    """??????????"""
+    if _app_data_service is not None:
+        # ?? DataService ????
+        health_list = _app_data_service.get_health()
+        result = []
+        for h in health_list:
+            result.append({
+                "provider": h["provider"],
+                "name": next((s["name"] for s in _sources if s["provider"] == h["provider"]), h["provider"]),
+                "enabled": True,
+                "healthy": h["healthy"],
+                "last_check": h["last_check"],
+                "error": h.get("error", ""),
+            })
+        return result
+
     result = []
     for source in _sources:
         provider = source["provider"]
@@ -379,12 +419,12 @@ async def get_data_health():
     return result
 
 
-@router.get("/data/collect-logs", summary="数据采集日志")
+@router.get("/data/collect-logs", summary="??????")
 async def get_collect_logs():
-    """获取数据采集任务历史日志。
+    """?????????????
 
-    从内存中的 _collect_tasks 返回最近 20 条采集记录，
-    按 created_at 倒序排列。
+    ????? _collect_tasks ???? 20 ??????
+    ? created_at ?????
     """
     tasks = sorted(
         _collect_tasks.values(),
@@ -395,7 +435,6 @@ async def get_collect_logs():
     logs = []
     for t in tasks:
         status = t.get("status", "")
-        # 状态映射：collecting → warning, completed → success, failed → error
         status_label = "warning" if status == "collecting" else (
             "success" if status == "completed" else "error"
         )
@@ -412,28 +451,25 @@ async def get_collect_logs():
     return logs
 
 
-@router.get("/data/download", summary="批量下载数据")
-async def download_data(provider: str = Query(..., description="数据源名称")):
-    """触发指定数据源的批量下载。
+@router.get("/data/download", summary="??????")
+async def download_data(provider: str = Query(..., description="?????")):
+    """?????????????
 
-    下载默认股票池（沪深300成分股前10只）的最新日线数据。
+    ??????????300????10??????????
     """
-    # 默认股票池（沪深300前10只成分股）
     default_symbols = [
         "sh600519", "sz000858", "sh601318", "sh600036",
         "sh600030", "sz000333", "sz300750", "sh600276",
         "sz000568", "sh600104",
     ]
 
-    # 验证 provider
     valid_providers = {"baostock", "akshare", "alphafeed", "csv"}
     if provider not in valid_providers:
         raise HTTPException(
             status_code=400,
-            detail=f"不支持的数据源: {provider}, 支持: {', '.join(valid_providers)}"
+            detail=f"???????: {provider}, ??: {', '.join(valid_providers)}"
         )
 
-    # 生成下载任务
     task_id = f"DL-{uuid.uuid4().hex[:8].upper()}"
     _collect_tasks[task_id] = {
         "task_id": task_id,
@@ -451,12 +487,18 @@ async def download_data(provider: str = Query(..., description="数据源名称"
             loop = asyncio.get_event_loop()
             for symbol in default_symbols:
                 try:
-                    data = await loop.run_in_executor(
-                        None, _fetch_kline_sync, symbol, "", "", "1d"
-                    )
-                    total_count += len(data)
+                    if _app_data_service is not None:
+                        result = await loop.run_in_executor(
+                            None, _app_data_service.get_kline, symbol, "1d", "", ""
+                        )
+                        total_count += result.count
+                    else:
+                        data = await loop.run_in_executor(
+                            None, _fetch_kline_fallback, symbol, "", "", "1d"
+                        )
+                        total_count += len(data)
                 except Exception as e:
-                    logger.warning(f"下载 {symbol} 失败: {e}")
+                    logger.warning(f"?? {symbol} ??: {e}")
 
             _collect_tasks[task_id].update({
                 "status": "completed",
@@ -471,67 +513,63 @@ async def download_data(provider: str = Query(..., description="数据源名称"
             })
 
     asyncio.create_task(_do_download())
-
     return {
         "success": True,
         "task_id": task_id,
         "provider": provider,
         "symbols": default_symbols,
         "status": "collecting",
-        "message": f"已启动 {provider} 数据下载任务，共 {len(default_symbols)} 只股票",
+        "message": f"??? {provider} ???????? {len(default_symbols)} ???",
     }
 
 
-@router.post("/data/upload-csv", summary="上传 CSV 数据文件")
-async def upload_csv(file: UploadFile = File(..., description="CSV 文件")):
-    """上传 CSV 数据文件，存入本地缓存目录供回测使用。
+@router.post("/data/upload-csv", summary="?? CSV ????")
+async def upload_csv(file: UploadFile = File(..., description="CSV ??")):
+    """?? CSV ???????????????????
 
-    CSV 格式要求：
-    - 必须包含列: date, open, high, low, close, volume
-    - 可选列: symbol（无 symbol 列时需在回测配置中指定标的代码）
-    - 日期格式: YYYY-MM-DD
+    CSV ?????
+    - ?????: date, open, high, low, close, volume
+    - ???: symbol?? symbol ????????????????
+    - ????: YYYY-MM-DD
     """
     import pandas as pd
 
     if not file.filename or not file.filename.endswith(".csv"):
-        raise HTTPException(status_code=400, detail="仅支持 .csv 文件")
+        raise HTTPException(status_code=400, detail="??? .csv ??")
 
     try:
         content = await file.read()
-        df = pd.read_csv(pd.io.common.BytesIO(content))
+        if _app_data_service is not None:
+            result = _app_data_service.upload_csv(content, file.filename)
+            if result.get("success"):
+                return result
+            raise HTTPException(status_code=400, detail=result.get("error", "CSV????"))
 
-        # 验证必需列
+        df = pd.read_csv(pd.io.common.BytesIO(content))
         required = {"date", "open", "high", "low", "close", "volume"}
         missing = required - set(df.columns.str.lower())
         if missing:
             raise HTTPException(
                 status_code=400,
-                detail=f"CSV 缺少必需列: {', '.join(sorted(missing))}。"
-                       f"当前列: {', '.join(df.columns.tolist())}",
+                detail=f"CSV ?????: {', '.join(sorted(missing))}????: {', '.join(df.columns.tolist())}",
             )
 
-        # 标准化列名
         df.columns = df.columns.str.lower()
-
-        # 保存到本地缓存
         cache_dir = Path(_settings.get("data.cache_dir", "data/cache"))
         cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # 提取 symbol 信息
         symbols = []
         if "symbol" in df.columns:
             symbols = df["symbol"].unique().tolist()
-            # 按 symbol 分拆保存
             for sym in symbols:
                 sym_df = df[df["symbol"] == sym].sort_values("date")
                 out_path = cache_dir / f"{sym}_{file.filename}"
                 sym_df.to_csv(out_path, index=False)
-                logger.info("CSV 上传: %s → %s (%d rows)", sym, out_path, len(sym_df))
+                logger.info("CSV ??: %s -> %s (%d rows)", sym, out_path, len(sym_df))
         else:
-            # 单标的文件
             out_path = cache_dir / file.filename
             df.sort_values("date").to_csv(out_path, index=False)
-            logger.info("CSV 上传: %s (%d rows)", out_path, len(df))
+            logger.info("CSV ??: %s (%d rows)", out_path, len(df))
 
         return {
             "success": True,
@@ -544,5 +582,5 @@ async def upload_csv(file: UploadFile = File(..., description="CSV 文件")):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("CSV 上传失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"CSV 解析失败: {e}")
+        logger.error("CSV ????: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"CSV ????: {e}")

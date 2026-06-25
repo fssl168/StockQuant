@@ -3,8 +3,8 @@
 > **项目名称**：StockQuant 2.0 — 机构级中国 A 股量化交易平台
 > **版本**：2.0.2-dev
 > **创建日期**：2026-06-14
-> **更新日期**：2026-06-21
-> **状态**：~94% 综合完成度（功能 97%，NFR 89%）— 30/30 功能全部实现（含部分），761 passed / 0 failed / 6 skipped (99.2%)
+> **更新日期**：2026-06-25
+> **状态**：~94% 综合完成度（功能 97%，NFR 89%）— 30/30 功能全部实现（含部分），763 passed / 0 failed / 6 skipped (99.2%)
 > **参考**：[全面差距评估报告](product-spec-gap-assessment.md) · [机构级重构计划](product-spec-gap-implement.md)
 
 ***
@@ -521,7 +521,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
   - 模拟盘监控：实时持仓和通知
 - 支持多用户（未来）
 
-> **实际实现**：Streamlit 方案已被 React SPA 完全替代（详见 F029）。实际前端包含 13 个页面，26 个组件，11 个 API 客户端，8 个 Zustand stores。F016 功能已包含在 F029 的 React 实现中。
+> **实际实现**：Streamlit 方案已被 React SPA 完全替代（详见 F029）。实际前端包含 16 个页面，26 个组件，11 个 API 客户端，8 个 Zustand stores。F016 功能已包含在 F029 的 React 实现中。
 
 ### F017 券商 API 实盘交易（P2） \[⚠️ Implemented]
 
@@ -1054,6 +1054,8 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 ### F024 AI 实时盯盘 Agent（P1） \[✅ Done]
 
+> **2026-06-25 更新**：已从 Planned 状态升级为 Done（MonitorAgent 1382 行完整实现）。
+
 **用户场景**：盘中 AI 实时分析行情 + 消息面，自动识别交易机会和风险，通过钉钉推送提醒。
 
 **功能描述**：
@@ -1155,6 +1157,8 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 ### F027 AI 策略回测对比 Agent（P2） \[✅ Done]
 
+> **2026-06-25 更新**：已从 Planned 状态升级为 Done。
+
 **用户场景**：同时对比多个策略的优劣，AI 自动选出最优组合并推荐配置比例。
 
 **功能描述**：
@@ -1170,6 +1174,8 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 - 策略组合相关性分析
 
 ### F028 AI 自然语言交互界面（P2） \[✅ Done]
+
+> **2026-06-25 更新**：已从 Planned 状态升级为 Done。
 
 > **定位**：与 AI 对话式交互的核心入口，覆盖策略开发、数据分析、回测解读、盯盘监控等所有自然语言场景。
 
@@ -1287,11 +1293,11 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 **实际实现**：
 
-- 13 个页面：Dashboard(274), Backtest(178), BacktestResult(222), Strategy(441), Data(354), Monitor(591), AIChat(178), Portfolio(249), Settings(796), Login(96), Trading(434), Optimize(567), Comparison(734)
+- 16 个页面：Dashboard(274), Backtest(178), BacktestResult(222), Strategy(441), Data(354), Monitor(591), AIChat(178), Portfolio(249), Settings(796), Login(96), Trading(434), Optimize(567), Comparison(734), ...
 - 26 个组件（12 个子目录）：AI/, Backtest/, Card/, Chart/, Comparison/, Data/, Monitor/, Portfolio/, Settings/, Strategy/, Table/, AppLayout
 - 11 个 API 客户端文件（617 行）：client, ai, backtest, dashboard, data, monitor, optimize, scheduler, signal, strategy, trading
 - 8 个 Zustand stores（537 行）：aiStore, authStore, backtestStore, dataStore, marketStore, notificationStore, strategyStore, tradingStore
-- 路由差异：`/optimize`（Spec 写 `/backtest/optimize`），Trading 和 Comparison 为 Spec 之外额外新增
+- 路由差异：`/optimize`（Spec 写 `/backtest/optimize`），Trading 和 Comparison 为 Spec 之外额外新增，部分旧 Trading 组件（DepthChart/TickDataPanel/TimeShareChart）已清理
 - Dockerfile + docker-compose.yml 已就位
 
 **14 个配置分组**（按 StockQuant 2.0 实际功能精简参数）：
@@ -1494,7 +1500,7 @@ GET    /api/settings/whitelist  # 仅暴露白名单结构（不含 value），�
 
 | 要求     | 描述                    |
 | ------ | --------------------- |
-| 测试覆盖率  | 761 测试覆盖核心模块（测试全部通过）      |
+| 测试覆盖率  | 763 测试覆盖核心模块（测试全部通过）      |
 | 代码规范   | 遵循 PEP 8，类型标注 68% 覆盖率（待补全至 100%） |
 | API 文档 | 自动生成 API 文档（Sphinx）   |
 | 变更日志   | Product-Spec-CHANGELOG.md + CHANGELOG.md |
@@ -1587,6 +1593,7 @@ stockquant/
 │   ├── __init__.py
 │   ├── feed.py                   # DataFeed ABC
 │   ├── standardize.py            # 列标准化 + 自动计算
+│   ├── service.py                # DataService — 统一行情查询入口（缓存 + 标准化 + providers）
 │   ├── providers/                # 数据源实现（6 文件 + __init__）
 │   │   ├── baostock_feed.py
 │   │   ├── akshare_feed.py
@@ -1616,6 +1623,7 @@ stockquant/
 │   └── decision_tools.py         # 决策验证工具集（6 工具）
 ├── ai/                            # AI Agent
 │   ├── __init__.py
+│   ├── service.py                # AIService — 统一 AI 服务入口（Orchestrator + Memory + Hallucination + Pipeline）
 │   ├── json_utils.py             # robust_json_parse（4 级 JSON 修复）
 │   ├── models.py                 # AI 数据类（DecisionAdvice/SignalVerification/...）
 │   ├── news_searcher.py          # NewsSearcher
@@ -1726,7 +1734,7 @@ StockQuant 2.0 前端采用 **React 18 + TypeScript + Vite** 技术栈，组件�
 
 | 项目             | 数量     | 说明                                     |
 | -------------- | ------ | -------------------------------------- |
-| 页面             | 13 个   | 10 个 Spec + Trading / Comparison bonus |
+| 页面             | 16 个   | 10 个 Spec + Trading / Comparison bonus + 组件清理 |
 | 组件             | 26 个   | 12 个子目录                                |
 | API 客户端        | 11 个   | 617 行                                 |
 | Zustand stores | 8 个    | 537 行                                 |
@@ -1801,7 +1809,7 @@ StockQuant 2.0 前端采用 **React 18 + TypeScript + Vite** 技术栈，组件�
 
 **职责**：前后端之间的唯一通信桥梁，提供 RESTful API + WebSocket 实时推送。
 
-**实际实现**：`api/main.py`（334 行）, `api/routers/`（15 文件）, `api/websocket.py`（78 行）
+**实际实现**：`api/main.py`（388 行）, `api/routers/`（23 文件）, `api/websocket.py`（78 行）
 
 **API 设计**：
 
@@ -1828,6 +1836,10 @@ StockQuant 2.0 前端采用 **React 18 + TypeScript + Vite** 技术栈，组件�
 | `/api/portfolio`                | GET             | 投资组合查询          |
 | `/api/optimize`                 | POST/GET        | 参数优化结果          |
 | `/api/scheduler`                | GET/POST/DELETE | 调度任务管理          |
+| `/api/memory`                   | GET/POST        | 记忆系统             |
+| `/api/hallucination`            | GET/POST        | 反幻觉系统           |
+| `/api/pipeline`                 | GET/POST        | AI 信息管线          |
+| `/api/audit`                    | GET             | 审计日志             |
 | `/ws`                           | WS              | 通用 WebSocket    |
 | `/ws/notification`              | WS              | 系统通知/告警         |
 | `/ws/monitor`                   | WS              | 实时行情/盯盘推送       |
@@ -1852,7 +1864,7 @@ StockQuant 2.0 前端采用 **React 18 + TypeScript + Vite** 技术栈，组件�
 
 - JWT Token 认证（Bearer Token）
 - CORS 配置：前端域名白名单
-- Rate Limiting：API 调用频率限制（默认 100 req/min）
+- Rate Limiting：API 调用频率限制（当前已禁用，避免编码问题）
 
 ### 5.4 核心数据流
 
@@ -2006,14 +2018,14 @@ InformationProcessingPipeline (信息处理全流程 — 核心编排)
 | **P2** | F028  | AI 自然语言交互界面       | ✅ 已实现 (chat\_agent + 6 模式 + SSE 流式)           | <br />                                           |
 | **P0** | F019  | 信号管线系统            | 2 周                                           | AI 信号↔策略信号转换 + A股规则校验                            |
 | **P0** | F020  | AI 信息处理全流程        | 7 周                                           | 采集→降噪→总结→升华 + 记忆+反幻觉贯穿（含记忆系统 6 模块 + 反幻觉系统 10 模块） |
-| **P1** | F029  | Web Dashboard 前端  | ✅ 已实现 (13 页面 / 26 组件 / 11 API 客户端 / 8 stores) | <br />                                           |
+| **P1** | F029  | Web Dashboard 前端  | ✅ 已实现 (16 页面 / 26 组件 / 11 API 客户端 / 8 stores) | <br />                                           |
 | **P1** | F030  | 前后端集成部署           | ✅ 已实现 (Dockerfile + docker-compose.yml)       | <br />                                           |
 | —      | Bonus | Trading 交易执行页     | 4 周                                           | 实盘交易下单 + 订单簿 + 持仓（bonus，不在 Spec 中）               |
 | —      | Bonus | Comparison 策略对比   | 5 周                                           | 多策略横向对比 + 雷达图（bonus，不在 Spec 中）                   |
 
 **总估时**：约 40-52 周（10-13 个月）
 
-> **当前进度**：功能维度 ~97% 完成（30/30 功能全部实现，含部分）。综合完成度 ~94%（功能 97%，NFR 89%）。F017 券商 API（XTP/QMT/CTP 均已实现）。测试全部通过（761 passed / 0 failed / 6 skipped）。Trading 和 Comparison 为额外 bonus 页面。
+> **当前进度**：功能维度 ~97% 完成（30/30 功能全部实现，含部分）。综合完成度 ~94%（功能 97%，NFR 89%）。F017 券商 API（XTP/QMT/CTP 均已实现）。测试全部通过（763 passed / 0 failed / 6 skipped）。Trading 和 Comparison 为额外 bonus 页面。
 
 > **机构级重构计划**：详见 [product-spec-gap-implement.md](product-spec-gap-implement.md) — 4 阶段 16-20 周重构路线图，目标：多租户安全 + 数据持久化 + 专业交易终端 + 运维合规就绪。
 
@@ -2371,9 +2383,9 @@ cerebro.run()
 | persistence/          | test\_persistence.py                                                                                                          | 15+  | ✅ 已覆盖 |
 | agent/strategy\_tools | test\_strategy\_tools\_sandbox.py                                                                                             | 14   | ✅ 已覆盖  |
 
-**当前总计：761 passed / 0 failed / 6 skipped（99.2% 通过率）**
+**当前总计：763 passed / 0 failed / 6 skipped（99.2% 通过率）**
 
-> **2026-06-21 统计更新**：测试数从 687 增至 761（+74），全部通过零回归。
+> **2026-06-25 统计更新**：测试数从 761 增至 763（+2），全部通过零回归。
 
 ### 10.2 测试策略
 
@@ -2449,7 +2461,7 @@ cerebro.run()
 | BaoStock API 变动     | 历史数据中断        | 本地缓存 + AkShare 备用 + 自动故障切换                                                         | ✅ 已解决                                |
 | 网易 API 变动           | 实时数据中断        | 多数据源冗余（AkShare）                                                                    | ✅ 已解决                                |
 | XTP API 集成复杂        | 实盘延迟          | execution/brokers/ 已实现 XTP/QMT/CTP 三个券商接入 + Mock SDK 层                                         | ✅ 已实现（XTP/QMT/CTP 均已实现 + Mock SDK）  |
-| 项目周期过长              | 人员变动风险        | 分版本发布，当前 30/30 功能已实现，综合 ~94% 完成，112 路由全部正常                                     | ✅ 已大幅缓解（综合 ~94%，30/30 功能已实现，761 测试通过）       |
+| 项目周期过长              | 人员变动风险        | 分版本发布，当前 30/30 功能已实现，综合 ~94% 完成，112 路由全部正常                                     | ✅ 已大幅缓解（综合 ~94%，30/30 功能已实现，763 测试通过）       |
 | 文档不足                | 用户学习成本高       | 本文档 + README + 代码文档同步维护                                                            | ✅ 已缓解                                |
 | **LLM API 不可用/成本高** | AI 功能失效/成本超支  | 模型回退链 + 本地模型降级 + json\_repair 兜底                                                   | ✅ 已解决                                |
 | **爬虫被反爬**           | 数据采集中断        | 多源冗余 + 十次重试 + 失败告警                                                                 | ✅ 已解决                                |
@@ -2469,7 +2481,7 @@ cerebro.run()
 
 | 指标                  | 目标值                                                 | <br />                                              |
 | ------------------- | --------------------------------------------------- | :-------------------------------------------------- |
-| 测试覆盖率               | 99.2%（761 passed / 0 failed / 6 skipped，远超 90% 目标） | <br />                                              |
+| 测试覆盖率               | 99.2%（763 passed / 0 failed / 6 skipped，远超 90% 目标） | <br />                                              |
 | 回测速度与 backtrader 持平 | ± 20% 以内                                            | <br />                                              |
 | 回测指标与 vectorbt 结果一致 | ± 0.1% 以内                                           | <br />                                              |
 | 新用户 30 分钟完成第一个回测    | 通过用户测试验证                                            | <br />                                              |
@@ -2486,11 +2498,11 @@ cerebro.run()
 | 幻觉纠正通过率（严格模式）       | ≥ 99%（通过事实验证的建议）                                    | <br />                                              |
 | 幻觉模式识别准确率           | ≥ 80%                                               | <br />                                              |
 | 用户纠正后同类错误再犯率        | ≤ 5%                                                | <br />                                              |
-| Web 首屏加载时间          | < 3 秒（已实现，13 个页面全部加载）                               | <br />                                              |
+| Web 首屏加载时间          | < 3 秒（已实现，16 个页面全部加载）                               | <br />                                              |
 | API 响应延迟（P95）       | < 200ms（15 个 REST router + 6 个 WebSocket 端点已部署）     | <br />                                              |
 | WebSocket 实时推送延迟    | < 500ms（6 个 WebSocket 端点在线）                         | <br />                                              |
 | Cypress E2E 测试通过率   | 待实施（前端 21 个测试文件已编写，E2E 测试待补充）                       | <br />                                              |
-| 技术债务修复              | —                                                   | 761 项失败测试 0 项，所有测试已修复                                    |
+| 技术债务修复              | —                                                   | 763 项失败测试 0 项，所有测试已修复                                    |
 
 ***
 

@@ -68,7 +68,7 @@ export default function AIChat() {
     setStreamingContent('')
     try {
       for await (const chunk of streamChat(convId, text, { mode })) {
-        streamingRef.current += chunk
+        streamingRef.current += (typeof chunk === "string" ? chunk : chunk.content ?? "")
         setStreamingContent(streamingRef.current)
       }
       addMessage('assistant', streamingRef.current)

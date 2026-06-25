@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""F028 AI 对话 API 路由 — 自然语言交互"""
+"""F028 AI ?? API ?? ? ??????
+
+??? AIService ?? AI ??
+? AIService ?????????? ChatAgent ???
+???????????
+"""
 
 from __future__ import annotations
 
@@ -12,69 +17,84 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from stockquant.ai.chat_agent import ChatAgent
-from stockquant.ai.chat_memory import ChatMemory
-from stockquant.ai.chat_tools import (
-    query_market_data,
-    generate_chart_json,
-    trigger_backtest,
-    search_news,
-)
-from stockquant.ai.sentiment import SentimentAnalyzer
-from stockquant.api.routers.settings import _settings, _decrypt_value
 from stockquant.api.schemas import ChatRequest, SaveMessageRequest, GenerateStrategyRequest
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 logger = logging.getLogger("stockquant.ai")
 
-# 全局 AI 实例
-_chat_agent: Optional[ChatAgent] = None
-_chat_memory: Optional[ChatMemory] = None
+# ------------------------------------------------------------------
+# ?????
+# ------------------------------------------------------------------
+
+SYSTEM_PROMPT = """?? StockQuant ???????????? A ????
+???????????????????????"""
+
+MODE_SYSTEM_PROMPTS: dict[str, str] = {
+    "general": SYSTEM_PROMPT,
+    "strategy": SYSTEM_PROMPT + """
+
+??????????????????????????????????
+??????????????????????""",
+    "analysis": SYSTEM_PROMPT + """
+
+???????????????????????????????
+??????????????????????????""",
+    "monitor": SYSTEM_PROMPT + """
+
+??????????????????????????????
+?????????""",
+    "decision": SYSTEM_PROMPT + """
+
+???????????????????????????
+???????????????????????????""",
+}
 
 
-def _get_chat_agent() -> ChatAgent:
-    global _chat_agent
-    if _chat_agent is None:
-        model = _settings.get("ai.model", "gpt-4o")
-        api_key_raw = _settings.get("ai.api_key", "")
-        api_base_raw = _settings.get("ai.api_base", "")
-        db_url = _settings.get("database.url")
-        # 解密敏感值（settings 存储的是 Fernet 加密后的值）
-        api_key = _decrypt_value(api_key_raw) if api_key_raw else ""
-        api_base = _decrypt_value(api_base_raw) if api_base_raw else ""
-        _chat_agent = ChatAgent(
-            model=model,
-            api_key=api_key if api_key else None,
-            base_url=api_base if api_base else None,
-            db_url=db_url,  # 传入 db_url 使内部 ChatMemory 生效，消息持久化到数据库
-        )
-    return _chat_agent
+def _system_prompt_for_mode(mode: str) -> str:
+    return MODE_SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPT)
 
 
-def _get_chat_memory() -> ChatMemory:
-    global _chat_memory
-    if _chat_memory is None:
-        _chat_memory = ChatMemory()
-    return _chat_memory
+# ------------------------------------------------------------------
+# ?? ChatAgent ???? AIService ???????
+# ------------------------------------------------------------------
+
+def _get_fallback_agent():
+    """?????? ChatAgent??????"""
+    from stockquant.ai.chat_agent import ChatAgent
+    from stockquant.api.routers.settings import _settings, _decrypt_value
+    model = _settings.get("ai.model", "gpt-4o")
+    api_key_raw = _settings.get("ai.api_key", "")
+    api_base_raw = _settings.get("ai.api_base", "")
+    api_key = _decrypt_value(api_key_raw) if api_key_raw else ""
+    api_base = _decrypt_value(api_base_raw) if api_base_raw else ""
+    return ChatAgent(model=model, api_key=api_key if api_key else None, base_url=api_base if api_base else None)
 
 
-@router.get("/sentiment", summary="社交媒体情绪分析")
-async def sentiment_analysis(symbol: str = Query("sh600519", description="股票代码")):
-    """分析指定股票的市场情绪。
+# ------------------------------------------------------------------
+# ???? app.state ?? AIService
+# ------------------------------------------------------------------
 
-    基于 search_news 结果 + SentimentAnalyzer 进行情感分析。
-    未来可接入外部社交媒体 API（微博、雪球、东方财富等）
-    """
-    # 初始化 SentimentAnalyzer（使用增强版关键词规则，自动降级）
-    sentiment_analyzer = SentimentAnalyzer(method="auto")
+def _ai_service():
+    from stockquant.api.main import app
+    return getattr(app, "state", {}).get("ai_service")
 
+
+# ====================================================================
+# ??
+# ====================================================================
+
+@router.get("/sentiment", summary="????????")
+async def sentiment_analysis(symbol: str = Query("sh600519", description="????")):
+    """????????????"""
     try:
-        # 搜索相关新闻
+        from stockquant.ai.sentiment import SentimentAnalyzer
+        from stockquant.ai.chat_tools import search_news
+        sentiment_analyzer = SentimentAnalyzer(method="auto")
+
         news_result = search_news(symbol, limit=10)
         news_data = json.loads(news_result) if isinstance(news_result, str) else news_result
 
-        # 收集所有文本用于分析
         all_texts: List[str] = []
         headlines: List[str] = []
 
@@ -101,87 +121,107 @@ async def sentiment_analysis(symbol: str = Query("sh600519", description="股票
                     all_texts.append(item)
                     headlines.append(item)
 
-        # 使用 SentimentAnalyzer 分析每条新闻
         individual_scores: List[float] = []
-        for text in all_texts[:10]:  # 限制分析数量
+        for text in all_texts[:10]:
             result = sentiment_analyzer.analyze([text])
             individual_scores.append(result.score)
 
-        # 计算综合情绪分数（平均分转换为 0-100）
         if individual_scores:
             avg_score = sum(individual_scores) / len(individual_scores)
-            # 从 -1~1 映射到 0~100，中心为 50
             sentiment_score = max(0, min(100, int(50 + avg_score * 50)))
         else:
             sentiment_score = 50
             individual_scores = [0.0]
 
-        # 情绪趋势（基于计算出的分数，加一点随机波动模拟7天历史）
         base_score = sentiment_score
         trend = [max(0, min(100, base_score + random.randint(-10, 10))) for _ in range(7)]
 
-        # 提取话题标签（高频词）
         all_text_combined = " ".join(all_texts)
         word_freq = Counter(all_text_combined.split())
-        # 过滤掉短词和无意义词
-        stop_words = {"的", "了", "是", "在", "和", "与", "或", "等", "为", "有", "这", "那", "中", "于", "上", "下", "将", "被", "把", "到", "从", "以", "及", "其", "而", "但", "却", "又", "可", "也"}
+        stop_words = {"?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "??", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??"}
         topics = [w for w, _ in word_freq.most_common(10) if len(w) >= 2 and w not in stop_words][:5]
 
-        # 情绪总结
         if sentiment_score >= 70:
-            summary = f"近期市场情绪偏乐观，{symbol} 相关新闻以正面消息为主。"
+            summary = f"??????????{symbol} ????????????"
         elif sentiment_score <= 30:
-            summary = f"近期市场情绪偏谨慎，{symbol} 相关新闻存在一定负面因素，建议关注风险。"
+            summary = f"??????????{symbol} ????????????????????"
         else:
-            summary = f"近期市场情绪中性，{symbol} 利好与利空消息交织，需结合技术面综合判断。"
+            summary = f"?????????{symbol} ?????????????????????"
 
         return {
             "symbol": symbol,
             "score": sentiment_score,
             "trend": trend,
-            "topics": topics if topics else ["市场动态", "板块轮动", "资金流向"],
+            "topics": topics if topics else ["????", "????", "????"],
             "summary": summary,
             "news_count": len(headlines),
             "avg_confidence": round(sum(s.abs() for s in individual_scores) / len(individual_scores), 2) if individual_scores else 0,
         }
     except Exception as exc:
-        logger.error("情绪分析失败: %s", exc)
+        logger.error("??????: %s", exc)
         return {
             "symbol": symbol,
             "score": 50,
             "trend": [50] * 7,
             "topics": [],
-            "summary": "暂无情绪数据",
+            "summary": "??????",
             "news_count": 0,
             "avg_confidence": 0,
         }
 
 
-@router.post("/chat/complete")
-def chat(payload: ChatRequest) -> Dict[str, Any]:
-    """发送消息获取 AI 回复（非流式）。"""
+@router.post("/chat/complete", summary="AI ???????")
+def chat_complete(payload: ChatRequest) -> Dict[str, Any]:
+    """?????? AI ????????"""
     message = payload.message
     conversation_id = payload.conversation_id
     mode = payload.mode
-    agent = _get_chat_agent()
-    reply = agent.chat(message, conversation_id=conversation_id, mode=mode)
-    raw_messages = agent.get_conversation(conversation_id, limit=10)
 
-    # 兼容 dict 和 object 两种格式
+    # ???? AIService
+    ai_svc = _ai_service()
+    reply = ""
+    if ai_svc and ai_svc.is_configured:
+        try:
+            system_prompt = _system_prompt_for_mode(mode)
+            reply = ai_svc.chat(message, system_prompt=system_prompt)
+        except Exception as e:
+            logger.error("AIService chat failed, fallback: %s", e)
+
+    # ????? ChatAgent
+    if not reply:
+        try:
+            agent = _get_fallback_agent()
+            reply = agent.chat(message, conversation_id=conversation_id, mode=mode)
+        except Exception as e:
+            logger.error("Fallback ChatAgent failed: %s", e)
+            reply = f"AI ????: {e}"
+
+    # ???????
+    try:
+        from stockquant.persistence.repository import save_chat_message
+        db_url = None
+        try:
+            from stockquant.config import get_config
+            db_url = get_config().database.url
+        except Exception:
+            pass
+        if db_url:
+            save_chat_message(engine_url=db_url, conversation_id=conversation_id, role="user", content=message)
+            save_chat_message(engine_url=db_url, conversation_id=conversation_id, role="assistant", content=reply)
+    except Exception:
+        pass
+
+    # ????
     history = []
-    for m in raw_messages:
-        if isinstance(m, dict):
-            history.append({
-                "role": m.get("role", ""),
-                "content": m.get("content", ""),
-                "timestamp": m.get("timestamp", "") if isinstance(m.get("timestamp"), str) else str(m.get("timestamp", "")),
-            })
-        else:
-            history.append({
-                "role": getattr(m, "role", ""),
-                "content": getattr(m, "content", ""),
-                "timestamp": getattr(m, "timestamp", "").isoformat() if hasattr(getattr(m, "timestamp", None), "isoformat") else str(getattr(m, "timestamp", "")),
-            })
+    if db_url:
+        try:
+            from stockquant.persistence.repository import get_chat_messages
+            raw = get_chat_messages(db_url, conversation_id, limit=10)
+            history = raw
+        except Exception:
+            pass
+    elif ai_svc:
+        history = ai_svc.get_history(limit=10)
 
     return {
         "conversation_id": conversation_id,
@@ -190,17 +230,69 @@ def chat(payload: ChatRequest) -> Dict[str, Any]:
     }
 
 
-@router.post("/chat")
+@router.post("/chat", summary="AI ????")
 def chat_stream(payload: ChatRequest) -> StreamingResponse:
-    """流式对话（SSE 兼容）。"""
+    """?????SSE ????"""
     message = payload.message
     conversation_id = payload.conversation_id
     mode = payload.mode
-    agent = _get_chat_agent()
+    system_prompt = _system_prompt_for_mode(mode)
 
     def event_generator():
-        for event in agent.chat_stream(message, conversation_id, mode=mode):
-            yield event
+        reply = ""
+        # ???????
+        try:
+            from stockquant.persistence.repository import save_chat_message
+            db_url = None
+            try:
+                from stockquant.config import get_config
+                db_url = get_config().database.url
+            except Exception:
+                pass
+            if db_url:
+                save_chat_message(engine_url=db_url, conversation_id=conversation_id, role="user", content=message)
+        except Exception:
+            pass
+
+        # ???? AIService
+        ai_svc = _ai_service()
+        if ai_svc and ai_svc.is_configured:
+            try:
+                full_reply = ai_svc.chat(message, system_prompt=system_prompt)
+                reply = full_reply
+                # ?? yield SSE ??
+                if full_reply:
+                    evt = {"type": "token", "content": full_reply}
+                    yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
+            except Exception as e:
+                error_msg = f"AI ????: {e}"
+                evt = {"type": "error", "content": error_msg}
+                yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
+                reply = error_msg
+        else:
+            # ????? ChatAgent
+            try:
+                agent = _get_fallback_agent()
+                for chunk in agent.chat_stream(message, conversation_id, mode=mode):
+                    evt = {"type": "token", "content": chunk}
+                    yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
+                    reply += chunk
+            except Exception as e:
+                error_msg = f"AI ????: {e}"
+                evt = {"type": "error", "content": error_msg}
+                yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
+                reply = error_msg
+
+        # ???????
+        if reply:
+            try:
+                if db_url:
+                    save_chat_message(engine_url=db_url, conversation_id=conversation_id, role="assistant", content=reply)
+            except Exception:
+                pass
+
+        evt = {"type": "done"}
+        yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -209,184 +301,216 @@ def chat_stream(payload: ChatRequest) -> StreamingResponse:
     )
 
 
-@router.get("/conversations")
+@router.get("/conversations", summary="??????")
 def list_conversations() -> Dict[str, Any]:
-    """列出所有会话（从数据库读取）。"""
+    """???????????????"""
     try:
         from stockquant.persistence.repository import list_chat_sessions
-        db_url = _settings.get("database.url")
-        sessions = list_chat_sessions(db_url)
-        return {"conversations": sessions}
-    except Exception:
-        # 降级：返回空列表
-        return {"conversations": []}
+        db_url = None
+        try:
+            from stockquant.config import get_config
+            db_url = get_config().database.url
+        except Exception:
+            pass
+        if db_url:
+            sessions = list_chat_sessions(db_url)
+            return {"conversations": sessions}
+    except Exception as e:
+        logger.warning("list_conversations failed: %s", e)
+    return {"conversations": []}
 
 
-@router.get("/conversation/{conversation_id}")
+@router.get("/conversation/{conversation_id}", summary="??????")
 def get_conversation(conversation_id: str, limit: int = 50) -> Dict[str, Any]:
-    """获取会话历史（从数据库读取）。"""
+    """???????????????"""
     try:
         from stockquant.persistence.repository import get_chat_messages
-        db_url = _settings.get("database.url")
-        messages = get_chat_messages(db_url, conversation_id, limit=limit)
-        return {"conversation_id": conversation_id, "messages": messages}
-    except Exception:
-        return {"conversation_id": conversation_id, "messages": []}
+        db_url = None
+        try:
+            from stockquant.config import get_config
+            db_url = get_config().database.url
+        except Exception:
+            pass
+        if db_url:
+            messages = get_chat_messages(db_url, conversation_id, limit=limit)
+            return {"conversation_id": conversation_id, "messages": messages}
+    except Exception as e:
+        logger.warning("get_conversation failed: %s", e)
+    return {"conversation_id": conversation_id, "messages": []}
 
 
-@router.post("/conversation/{conversation_id}/message")
+@router.post("/conversation/{conversation_id}/message", summary="??????")
 def save_message(
     conversation_id: str,
     payload: SaveMessageRequest,
 ) -> Dict[str, Any]:
-    """保存单条消息到数据库（不触发 AI 回复）。"""
+    """?????????????? AI ????"""
     role = payload.role
     content = payload.content
     try:
-        from stockquant.persistence.repository import save_chat_message
-        db_url = _settings.get("database.url")
-        from datetime import datetime
-        msg_id = save_chat_message(
-            engine_url=db_url,
-            conversation_id=conversation_id,
-            role=role,
-            content=content,
-        )
-        return {"saved": True, "id": msg_id}
-    except Exception:
-        return {"saved": False, "id": None}
+        db_url = None
+        try:
+            from stockquant.config import get_config
+            db_url = get_config().database.url
+        except Exception:
+            pass
+        if db_url:
+            from stockquant.persistence.repository import save_chat_message
+            msg_id = save_chat_message(
+                engine_url=db_url,
+                conversation_id=conversation_id,
+                role=role,
+                content=content,
+            )
+            return {"saved": True, "id": msg_id}
+    except Exception as e:
+        logger.error("save_message failed: %s", e)
+    return {"saved": False, "id": None}
 
 
-@router.delete("/conversation/{conversation_id}")
+@router.delete("/conversation/{conversation_id}", summary="????")
 def clear_conversation(conversation_id: str) -> Dict[str, Any]:
-    """清空会话（从数据库删除）。"""
+    """?????????????"""
     try:
-        from stockquant.persistence.repository import delete_chat_messages
-        db_url = _settings.get("database.url")
-        delete_chat_messages(db_url, conversation_id)
-        return {"cleared": True}
-    except Exception:
-        return {"cleared": False}
+        db_url = None
+        try:
+            from stockquant.config import get_config
+            db_url = get_config().database.url
+        except Exception:
+            pass
+        if db_url:
+            from stockquant.persistence.repository import delete_chat_messages
+            delete_chat_messages(db_url, conversation_id)
+            return {"cleared": True}
+    except Exception as e:
+        logger.error("clear_conversation failed: %s", e)
+    return {"cleared": False}
 
 
-@router.post("/tools/query_market_data")
+@router.post("/tools/query_market_data", summary="??????")
 def tool_query_market_data(symbol: str, days: int = 30) -> Dict[str, Any]:
-    """查询市场数据。"""
-    result = query_market_data(symbol, days=days)
-    return json.loads(result) if isinstance(result, str) else result
+    """???????"""
+    try:
+        from stockquant.ai.chat_tools import query_market_data
+        result = query_market_data(symbol, days=days)
+        return json.loads(result) if isinstance(result, str) else result
+    except Exception as e:
+        logger.error("query_market_data failed: %s", e)
+        return {"error": str(e), "data": []}
 
 
-@router.post("/tools/search_news")
+@router.post("/tools/search_news", summary="????")
 def tool_search_news(symbol: str, limit: int = 5) -> Dict[str, Any]:
-    """搜索新闻。"""
-    result = search_news(symbol, limit=limit)
-    return json.loads(result) if isinstance(result, str) else result
+    """?????"""
+    try:
+        from stockquant.ai.chat_tools import search_news
+        result = search_news(symbol, limit=limit)
+        return json.loads(result) if isinstance(result, str) else result
+    except Exception as e:
+        logger.error("search_news failed: %s", e)
+        return {"error": str(e), "news": []}
 
 
-@router.post("/analyze-backtest/{backtest_id}", summary="AI 解读回测结果")
+@router.post("/analyze-backtest/{backtest_id}", summary="AI ??????")
 async def analyze_backtest(backtest_id: str):
-    """AI 解读回测结果 — 返回结构化分析（策略概述 / 过拟合风险 / Alpha来源 / 改进建议）"""
+    """AI ?????? ? ???????????? / ????? / Alpha?? / ??????"""
     from stockquant.api.routers.backtest import _tasks
 
     task = _tasks.get(backtest_id)
     if not task:
-        raise HTTPException(status_code=404, detail=f"回测任务 {backtest_id} 不存在")
+        raise HTTPException(status_code=404, detail=f"???? {backtest_id} ???")
 
     metrics = task.get("metrics", {})
-    strategy_name = task.get("strategy_name", "未知策略")
+    strategy_name = task.get("strategy_name", "????")
 
-    # 如果有 LLM，尝试用 AI 分析
-    agent = _get_chat_agent()
-    if agent and task.get("status") == "completed" and metrics:
-        # 构造分析 Prompt
-        key_metrics = {
-            k: v for k, v in metrics.items()
-            if k in [
-                "Annualized Return", "Max Drawdown", "Sharpe Ratio", "Sortino Ratio",
-                "Calmar Ratio", "Win Rate", "Total Trades", "Profit Factor",
-                "SQN (System Quality Number)", "Alpha", "Beta", "VaR (95%)",
-                "CVaR (95%)", "Volatility (Annual)", "Avg Drawdown",
-                "Longest Win Streak", "Longest Loss Streak",
-            ] and v is not None
-        }
-        prompt = f"""请分析以下回测结果，返回严格 JSON 格式（无 markdown 标记）。
+    if task.get("status") == "completed" and metrics:
+        # ???? AIService
+        ai_svc = _ai_service()
+        if ai_svc and ai_svc.is_configured:
+            key_metrics = {
+                k: v for k, v in metrics.items()
+                if k in [
+                    "Annualized Return", "Max Drawdown", "Sharpe Ratio", "Sortino Ratio",
+                    "Calmar Ratio", "Win Rate", "Total Trades", "Profit Factor",
+                    "SQN (System Quality Number)", "Alpha", "Beta", "VaR (95%)",
+                    "CVaR (95%)", "Volatility (Annual)", "Avg Drawdown",
+                    "Longest Win Streak", "Longest Loss Streak",
+                ] and v is not None
+            }
+            prompt = f"""?????????????? JSON ???? markdown ????
 
-策略: {strategy_name}
-关键指标: {json.dumps(key_metrics, ensure_ascii=False, default=str)}
+??: {strategy_name}
+????: {json.dumps(key_metrics, ensure_ascii=False, default=str)}
 
-请返回以下 JSON:
+????? JSON:
 {{
-  "summary": "2-3句话的策略表现概述",
-  "overfitRisk": "过拟合风险评估：低/中/高，附理由",
-  "alphaDecomposition": "Alpha来源分解：超额收益来自哪些因素",
-  "suggestions": ["具体可操作的改进建议1", "改进建议2", "改进建议3"]
+  "summary": "2-3?????????",
+  "overfitRisk": "????????? / ? / ?????",
+  "alphaDecomposition": "Alpha???????????????",
+  "suggestions": ["??????????1", "????2", "????3"]
 }}
 
-注意：只返回 JSON，不要其他文字。"""
-        try:
-            reply = agent.chat(prompt, conversation_id=f"backtest_analysis_{backtest_id}")
-            # 清理 markdown 包裹
-            clean = reply.strip()
-            if clean.startswith("```"):
-                clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
-            if clean.endswith("```"):
-                clean = clean[:-3]
-            clean = clean.strip()
-            parsed = json.loads(clean)
-            return {"insight": parsed}
-        except (json.JSONDecodeError, Exception) as e:
-            logger.warning("AI 结构化分析失败，回退到模板: %s", e)
+?????? JSON????????"""
+            try:
+                reply = ai_svc.chat(prompt)
+                clean = reply.strip()
+                if clean.startswith("```"):
+                    clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+                if clean.endswith("```"):
+                    clean = clean[:-3]
+                clean = clean.strip()
+                parsed = json.loads(clean)
+                return {"insight": parsed}
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning("AI ?????????????: %s", e)
 
-    # Fallback: 模板解读
+    # Fallback: ????
     ann_ret = metrics.get("Annualized Return", 0)
     max_dd = metrics.get("Max Drawdown", 0)
     sharpe = metrics.get("Sharpe Ratio", 0)
     win_rate = metrics.get("Win Rate", 0)
     total_trades = metrics.get("Total Trades", 0)
 
-    # 过拟合风险判断
     if total_trades and total_trades < 30:
-        overfit = "高 — 交易次数过少（<30），统计显著性不足，容易过拟合参数"
+        overfit = "? ? ???????<30?????????????????"
     elif sharpe and sharpe > 3:
-        overfit = "中 — 夏普比率异常高，可能存在过拟合，建议样本外验证"
+        overfit = "? ? ???????????????????????"
     elif total_trades and total_trades > 200 and (sharpe or 0) < 1.5:
-        overfit = "低 — 交易次数充足且收益合理"
+        overfit = "? ? ???????????"
     else:
-        overfit = "中 — 需要进一步样本外测试验证"
+        overfit = "? ? ????????????"
 
-    # Alpha 来源
     alpha = metrics.get("Alpha", 0)
     beta = metrics.get("Beta", 0)
     if alpha and alpha > 0:
-        alpha_src = f"策略 Alpha 为 {alpha*100:.1f}%，超额收益主要来自选股能力而非市场 Beta 暴露（Beta={beta:.2f}）"
+        alpha_src = f"?? Alpha ? {alpha*100:.1f}%????????????????? Beta ???Beta={beta:.2f}?"
     elif alpha and alpha < 0:
-        alpha_src = f"策略 Alpha 为 {alpha*100:.1f}%，跑输基准，需审视信号有效性"
+        alpha_src = f"?? Alpha ? {alpha*100:.1f}%??????????????"
     else:
-        alpha_src = "Alpha 数据不足，无法分解"
+        alpha_src = "Alpha ?????????"
 
-    # 改进建议
     suggestions = []
     if max_dd and abs(max_dd) > 0.2:
-        suggestions.append("最大回撤偏大，建议增加止损条件或降低单票仓位上限")
+        suggestions.append("????????????????????????")
     if win_rate and win_rate < 0.4 and total_trades and total_trades > 20:
-        suggestions.append("胜率较低，考虑增加信号过滤条件（如成交量确认、多周期共振）")
+        suggestions.append("?????????????????????????????")
     if sharpe and sharpe < 0.5:
-        suggestions.append("夏普比率偏低，建议优化持仓周期或加入动态仓位管理")
+        suggestions.append("????????????????????????")
     if total_trades and total_trades < 30:
-        suggestions.append("交易次数过少，考虑放宽信号阈值或扩展回测时间范围")
+        suggestions.append("????????????????????????")
     if not suggestions:
         suggestions = [
-            "策略整体表现稳健，可考虑在不同市场环境下进行样本外验证",
-            "尝试调整参数范围进行优化，确认策略鲁棒性",
-            "如需进一步提升收益，可研究加入多因子信号融合",
+            "???????????????????????????",
+            "????????????????????",
+            "??????????????????????",
         ]
 
     return {
         "insight": {
             "summary": (
-                f"策略「{strategy_name}」年化收益率 {ann_ret*100:.1f}%，"
-                f"最大回撤 {abs(max_dd)*100:.1f}%，夏普比率 {sharpe:.2f}，"
-                f"胜率 {win_rate*100:.1f}%，共 {total_trades} 笔交易。"
+                f"???{strategy_name}?????? {ann_ret*100:.1f}%?"
+                f"????{abs(max_dd)*100:.1f}%?????{sharpe:.2f}?"
+                f"?? {win_rate*100:.1f}%?? {total_trades} ????"
             ),
             "overfitRisk": overfit,
             "alphaDecomposition": alpha_src,
@@ -395,41 +519,67 @@ async def analyze_backtest(backtest_id: str):
     }
 
 
-@router.post("/strategy/generate", summary="AI 生成策略代码")
+@router.post("/strategy/generate", summary="AI ??????")
 async def generate_strategy(payload: GenerateStrategyRequest) -> Dict[str, Any]:
-    """AI 生成量化交易策略代码。
+    """AI ???????????
     
-    请求体:
-        description: str — 策略描述（自然语言）
-        strategy_type: str — 策略类型（可选）: "trend", "mean_reversion", "momentum", "arbitrage"
+    ???:
+        description: str ? ??????????
+        strategy_type: str ? ????????: "trend", "mean_reversion", "momentum", "arbitrage"
     """
     description = payload.description
     strategy_type = payload.strategy_type
     
     if not description.strip():
-        raise HTTPException(status_code=400, detail="策略描述不能为空")
+        raise HTTPException(status_code=400, detail="????????")
     
-    agent = _get_chat_agent()
+    # ???? AIService
+    ai_svc = _ai_service()
+    reply = ""
+    if ai_svc and ai_svc.is_configured:
+        try:
+            prompt = f"""????????????????????????????????????????? Python??? Cerebro ????
+
+????: {description}
+????: {strategy_type}
+
+??:
+1. ??? CerebroStrategy ??
+2. ?? on_bar(candle) ??????K?
+3. ????/??????
+4. ??????????
+5. ????????
+6. ????????????
+
+????? Python ??????????"""
+            reply = ai_svc.chat(prompt)
+        except Exception as e:
+            logger.error("Strategy generation failed: %s", e)
+
+    # ????? ChatAgent
+    if not reply:
+        try:
+            agent = _get_fallback_agent()
+            prompt = f"""????????????????????????????????????????? Python??? Cerebro ????
+
+????: {description}
+????: {strategy_type}
+
+??:
+1. ??? CerebroStrategy ??
+2. ?? on_bar(candle) ??????K?
+3. ????/??????
+4. ??????????
+5. ????????
+6. ????????????
+
+????? Python ??????????"""
+            reply = agent.chat(prompt, conversation_id="strategy_gen")
+        except Exception as e:
+            logger.error("Strategy generation fallback failed: %s", e)
+            reply = ""
     
-    # 调用 AI 生成策略代码
-    prompt = f"""你是一个专业的量化交易策略开发者。请根据以下描述生成一个完整的双因子策略代码（使用 Python，基于 Cerebro 框架）。
-
-策略描述: {description}
-策略类型: {strategy_type}
-
-要求:
-1. 继承自 CerebroStrategy 基类
-2. 实现 on_bar(candle) 方法处理每根K线
-3. 包含买入/卖出信号逻辑
-4. 包含必要的参数和配置
-5. 代码要完整可运行
-6. 添加详细注释说明策略逻辑
-
-请直接返回 Python 代码，不要其他解释。"""
-
-    reply = agent.chat(prompt, conversation_id="strategy_gen")
-    
-    # 提取代码块
+    # ?????
     code = reply
     if "```python" in reply:
         code = reply.split("```python")[1].split("```")[0].strip()
@@ -437,14 +587,14 @@ async def generate_strategy(payload: GenerateStrategyRequest) -> Dict[str, Any]:
         code = reply.split("```")[1].split("```")[0].strip()
     
     strategy_names = {
-        "trend": "趋势跟踪策略",
-        "mean_reversion": "均值回归策略", 
-        "momentum": "动量策略",
-        "arbitrage": "套利策略",
+        "trend": "??????",
+        "mean_reversion": "??????", 
+        "momentum": "????",
+        "arbitrage": "????",
     }
     
     return {
         "code": code,
-        "name": strategy_names.get(strategy_type, "自定义策略"),
+        "name": strategy_names.get(strategy_type, "?????"),
         "description": description,
     }

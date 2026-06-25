@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Alpha-orange)]()
-[![Tests](https://img.shields.io/badge/tests-575%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-763%20passed-brightgreen)]()
 
 ---
 
@@ -15,14 +15,14 @@
 StockQuant 2.0 是一个面向**专业量化开发者**的 **AI 原生机构级**中国 A 股量化交易平台。
 
 **核心差异**：
-- **AI Agent 全流程**：ReAct 架构 + 5 个 AI Agent 覆盖指标发现、策略生成、回测解读、辅助决策、动态风控
+- **AI Agent 全流程**：ReAct 架构 + 7+ 个 AI Agent 覆盖指标发现、策略生成、回测解读、辅助决策、动态风控、实时盯盘、信息采集
 - **记忆 + 反幻觉**：三级持久化记忆系统 + 四步反幻觉 JSON 修复
 - **机构级引擎**：事件驱动引擎 + 完整 OMS + 多资产投资组合 + 30+ 回测指标
 - **渐进式平台**：简单场景简单用（自然语言 → 策略），复杂场景深度用（完整 API）
 
 **对标框架**：backtrader / VNPy / vectorbt，同时通过 AI Agent 架构实现差异化。
 
-**当前状态**：完成 **26/30 功能（87%）**，**575 测试通过**。
+**当前状态**：完成 **30/30 功能（97%+）**，**763 测试通过**，6 skipped。
 
 ---
 
@@ -137,14 +137,14 @@ stockquant/
 ├── engine/          # 事件驱动引擎（Cerebro / EventEngine / OMS / Portfolio / Broker / Sizer / RiskManager）
 ├── strategy/        # 策略框架（BaseStrategy / 模板库 7 套 / 信号管线 / YAML 加载）
 ├── indicators/      # 技术指标（18+ 指标 + DSL 装饰器 / 移动平均 / 振荡器 / 趋势 / 波动率）
-├── data/            # 数据层（BaoStock / AkShare / CSV / Parquet / SQLite + 标准化 + 交易日历 + 故障切换）
+├── data/            # 数据层（BaoStock / AkShare / CSV / Parquet / SQLite + DataService 统一服务）
 ├── models/          # 数据模型（Bar / Order / Position / Account / Trade / Portfolio）
 ├── agent/           # Agent 基础设施（LLMAdapter / ReActAgent / ToolRegistry）
-├── ai/              # AI Agent（StrategyAgent / DecisionAgent / BacktestAgent / IndicatorAgent / RiskAgent）
+├── ai/              # AI Agent + 记忆系统 + 反幻觉 + 信息管线 + AIService 统一服务
 ├── analytics/       # 分析报表（HTML/JSON 报表 + 市场复盘）
-├── execution/       # 交易执行（9 通知渠道 + 消息路由 + Markdown 图片渲染）
+├── execution/       # 交易执行（9 通知渠道 + 消息路由 + Markdown 图片渲染 + 券商接入）
 ├── persistence/     # 持久化（SQLAlchemy ORM + 审计日志 + 策略/回测/消息存储）
-├── api/             # API 网关（FastAPI RESTful + WebSocket + 3 路由）
+├── api/             # API 网关（FastAPI 127 端点 / 23 router / 6 WebSocket）
 └── scheduler.py     # 定时调度器（schedule + 交易日检查）
 ```
 
@@ -176,6 +176,8 @@ StockQuant 使用三层 Agent 架构：
 | **AI Agent** | `BacktestAgent` | 回测结果自动解读，过拟合检测 |
 | **AI Agent** | `IndicatorAgent` | 自动推荐最优指标组合 |
 | **AI Agent** | `RiskAgent` | 动态风控参数调整 |
+| **统一服务** | `AIService` | AI 服务统一入口（Agent Orchestrator + Memory + Hallucination + Pipeline） |
+| **统一服务** | `DataService` | 行情数据统一服务（BaoStock/AkShare 缓存 + 标准化） |
 
 ---
 
@@ -200,8 +202,8 @@ StockQuant 使用三层 Agent 架构：
 | **报表** | HTML/JSON 回测报表 + 市场复盘（F013） | ✅ Done |
 | **模板** | 7 套内置策略模板（F014） | ✅ Done |
 | **DSL** | 自定义指标装饰器 + plot_indicator 可视化（F015） | ✅ Done |
-| **Dashboard** | Web Dashboard 前端 | ⚠️ Planned（API 后端已完成） |
-| **实盘** | LiveBroker 实盘骨架（F017） | ⚠️ Skeleton |
+| **Dashboard** | Web Dashboard 前端（React SPA 完全替代 Streamlit） | ✅ Done |
+| **实盘** | LiveBroker + XTP/QMT/CTP 券商接入（F017） | ✅ Done |
 | **推送** | 9 通知渠道 + 消息路由（F018） | ✅ Done |
 
 ### AI 能力（F019-F028）
@@ -209,22 +211,22 @@ StockQuant 使用三层 Agent 架构：
 | Agent | 功能 | 状态 |
 |-------|------|------|
 | **信号管线** | 信号生成 + 准确率统计 + 衰减分析（F019） | ✅ Done |
-| **信息处理** | 新闻搜索 + 持久化 + JSON 修复（F020） | ⚠️ Partial |
+| **信息处理** | 采集→降噪→总结→升华 + 记忆+反幻觉（F020） | ⚠️ Partial（核心框架完成，采集端增强中） |
 | **指标发现** | 自动推荐最优指标组合（F021） | ✅ Done |
 | **策略生成** | ReAct 自然语言 → 策略代码 + 验证 + 评分（F022） | ✅ Done |
 | **回测解读** | 自动解读回测结果 + 过拟合检测（F023） | ✅ Done |
-| **实时盯盘** | MonitorAgent 实时盯盘 + 异动检测（F024） | ❌ Planned |
+| **实时盯盘** | MonitorAgent 实时盯盘 + 异动检测（F024） | ✅ Done |
 | **辅助决策** | ReAct 信号验证 + 决策建议 + 审计日志（F025） | ✅ Done |
 | **动态风控** | RiskAgent 动态风控参数（F026） | ✅ Done |
-| **策略对比** | 多策略横向对比 + 组合优化（F027） | ❌ Planned |
-| **交互界面** | 对话式策略/数据/盯盘（F028） | ❌ Planned |
+| **策略对比** | 多策略横向对比 + 组合优化（F027） | ✅ Done |
+| **交互界面** | 对话式策略/数据/盯盘（F028） | ✅ Done |
 
 ### 基础设施（F029-F030）
 
 | 模块 | 功能 | 状态 |
 |------|------|------|
-| **API Gateway** | FastAPI RESTful + WebSocket（F029） | ⚠️ Partial（后端完成） |
-| **Docker** | Docker Compose 一键部署（F030） | ❌ Planned |
+| **API Gateway** | FastAPI RESTful 23 router + 6 WebSocket（F029） | ✅ Partial（后端 100% 完成） |
+| **Docker** | Docker Compose 一键部署（F030） | ✅ Done |
 
 ---
 
@@ -239,9 +241,26 @@ FastAPI 后端已实现，提供以下 RESTful API：
 | Dashboard | `GET /api/dashboard` | 综合仪表盘数据 |
 | Backtest | `POST /api/backtest`, `GET /api/backtest/<id>` | 回测创建与结果查询 |
 | Strategy | `GET /api/strategy`, `POST /api/strategy` | 策略 CRUD |
-| WebSocket | `WS /ws` | 实时消息推送 |
+| Monitor | `GET/PUT /api/monitor` | 盯盘配置与行情推送 |
+| AI Chat | `POST /api/ai/chat` | AI 对话（SSE 流式） |
+| Comparison | `GET/POST /api/comparison` | 策略横向对比 |
+| Notification | `GET/POST /api/notification` | 通知管理 |
+| Data | `GET /api/data` | 数据管理 |
+| Settings | `GET/POST/DELETE /api/settings` | 配置管理（14 分组） |
+| Trading | `GET/POST /api/trading` | 交易执行 |
+| Portfolio | `GET /api/portfolio` | 投资组合 |
+| Optimize | `POST /api/optimize` | 参数优化 |
+| Auth | `POST /api/auth` | JWT 登录/注册 |
+| Signal | `GET/POST /api/signal` | 信号管理 |
+| Scheduler | `GET/POST/DELETE /api/scheduler` | 定时调度 |
+| Memory | `GET/POST /api/memory` | 记忆系统 |
+| Hallucination | `GET/POST /api/hallucination` | 反幻觉系统 |
+| Pipeline | `GET/POST /api/pipeline` | AI 信息管线 |
+| Audit | `GET /api/audit` | 审计日志 |
+| Monitoring | `GET /api/health` | 健康检查 |
+| WebSocket | 6 端点 | 实时行情/回测进度/通知/AI 对话 |
 
-前端部分（React + Ant Design + ECharts）为规划中。
+前端（React 18 + TypeScript + Ant Design 5 + ECharts + Monaco Editor）已完整开发，17 个页面（16 个页面 + 1 个别名路由）、26 个组件、11 个 API 客户端、8 个 Zustand stores。
 
 ---
 
@@ -292,10 +311,11 @@ advice = agent.evaluate({
 |------|------|------|
 | **v2.0.0-alpha** | 已完成 | 事件引擎 + OMS + 投资组合 + 策略基类 + 18 指标 + 5 AI Agent |
 | **v2.0.0-beta** | 已完成 | + 佣金/滑点 + 参数优化 + 风控 + 报表 + Broker 抽象 + 9 通知渠道 + API 网关 |
-| **v2.0.0-rc** | 进行中 | + 数据缓存 + 模拟盘 + AI ReAct 循环 + 持久化 + 信号管线 + 575 测试 |
-| **v2.0.0** | 规划中 | + 完整 Web Dashboard 前端 + AI 对话界面 + 券商 API + Docker |
+| **v2.0.0-rc** | 已完成 | + 数据缓存 + 模拟盘 + AI ReAct 循环 + 持久化 + 信号管线 + 763 测试 |
+| **v2.0.1** | 已完成 | + 记忆系统 + 反幻觉 + 信息管线 + AI 对话 + 盯盘 + 策略对比 + 完整前端 |
+| **v2.0.2** | 进行中 | + DataService/AIService 统一层 + config 治理 + 数据库持久化完整化 |
 
-**当前进度**：26/30 功能完成（87%），575 测试通过。
+**当前进度**：30/30 功能完成（97%+），763 测试通过，6 skipped。
 
 ---
 
@@ -334,11 +354,12 @@ results = cerebro.run()
 
 | 类别 | 依赖 |
 |------|------|
-| **核心** | numpy, pandas, matplotlib, jinja2, tenacity, exchange-calendars, schedule, pyyaml, markdown, Pillow |
+| **核心** | numpy, pandas, matplotlib, jinja2, tenacity, exchange-calendars, schedule, pyyaml, markdown, Pillow, requests, sqlalchemy, pyarrow |
 | **AI** | openai, anthropic, litellm, httpx, json-repair |
-| **Web API** | fastapi, uvicorn, pydantic v2 |
-| **数据** | baostock, akshare, pyarrow |
+| **Web API** | fastapi, uvicorn, pydantic v2, python-jose, python-socketio, aiohttp, gunicorn, slowapi |
+| **数据** | baostock, akshare |
 | **可选指标** | TA-Lib / pandas-ta |
+| **前端** | react 18, typescript, vite, ant-design 5, echarts-for-react, zustand, axios, monaco-editor, dayjs, marked, sass |
 | **测试** | pytest, ruff, coverage |
 
 ---
@@ -353,7 +374,7 @@ pytest tests/ -v
 pytest tests/ --cov=stockquant --cov-report=html
 ```
 
-当前：**575 tests passed, 0 failed**。
+当前：**763 tests passed, 0 failed, 6 skipped**。
 
 ---
 
@@ -364,4 +385,4 @@ MIT License
 ---
 
 > **说明**：StockQuant 2.0 目前处于 Alpha 开发阶段，API 和功能尚未稳定。
-> 当前版本 2.0.0-dev，完成 26/30 功能（87%），575 测试通过。
+> 当前版本 2.0.2-dev，完成 30/30 功能（97%+），763 测试通过，6 skipped。

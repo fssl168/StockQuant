@@ -251,9 +251,9 @@ export default function Monitor() {
     try {
       const end = new Date().toISOString().slice(0, 10)
       const start = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)
-      const result = await dataApi.fetchKline(symbol, 'alphafeed', start, end) as any
-      // 后端返回 { data: [...] }，提取嵌套数组
-      setKlineData(Array.isArray(result?.data) ? result.data : (Array.isArray(result) ? result : []))
+      const result = await dataApi.fetchKline(symbol, 'alphafeed', start, end)
+      const rawData = result?.data ?? result
+      setKlineData(Array.isArray(rawData) ? rawData : [])
     } catch {
       setKlineData([])
     } finally {

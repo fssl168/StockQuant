@@ -1,5 +1,14 @@
-import client from './client'
+﻿import client from './client'
 import type { DataSourceConfig, CacheStats } from '@/types'
+
+export interface DataHealthEntry {
+  provider: string
+  name: string
+  enabled: boolean
+  healthy: boolean
+  last_check: string
+  error: string
+}
 
 export const dataApi = {
   sources: () =>
@@ -12,10 +21,10 @@ export const dataApi = {
     client.delete('/api/data/cache') as Promise<{ success: boolean }>,
   fetchKline: (symbol: string, source: string, start: string, end: string) =>
     client.get(`/api/data/kline?symbol=${symbol}&source=${source}&start=${start}&end=${end}`) as Promise<{
-      symbol: string; start: string; end: string; data: any[]; error?: string;
+      symbol: string; start: string; end: string; data: any[]; source?: string; cached?: boolean; error?: string;
     }>,
   collect: (data: { symbol: string; source: string; start: string; end: string }) =>
     client.post('/api/data/collect', data) as Promise<{ success: boolean }>,
   health: () =>
-    client.get('/api/data/health') as Promise<Record<string, { healthy: boolean }>>,
+    client.get('/api/data/health') as Promise<DataHealthEntry[]>,
 }

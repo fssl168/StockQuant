@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """F029 FastAPI 应用入口"""
 
 from __future__ import annotations
@@ -317,6 +317,7 @@ def create_app() -> FastAPI:
         data_svc = DataService()
         app.state.data_service = data_svc
         logger.info("DataService 已初始化")
+        data.set_data_service(data_svc)
     except Exception as e:
         logger.warning("DataService 初始化失败（非致命）: %s", e)
         app.state.data_service = None

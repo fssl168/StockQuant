@@ -20,13 +20,11 @@ export default function Data() {
     dataApi.health()
       .then((res: any) => {
         // client 响应拦截器返回 axios response（数据在 .data）；后端返回数组，按 provider 转 map
-        const arr = res && typeof res === 'object' && 'data' in res ? res.data : res
+        const arr = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data)) ? res.data : []
         const map: Record<string, { healthy: boolean }> = {}
-        if (Array.isArray(arr)) {
-          arr.forEach((p: any) => {
-            if (p?.provider) map[p.provider] = { healthy: !!p.healthy }
-          })
-        }
+        arr.forEach((p: any) => {
+          if (p?.provider) map[p.provider] = { healthy: !!p.healthy }
+        })
         setHealthData(map)
       })
       .catch(() => setHealthData({}))
@@ -119,9 +117,8 @@ export default function Data() {
     const end = klineDates[1].format('YYYY-MM-DD')
     dataApi.fetchKline(klineSymbol, 'alphafeed', start, end)
       .then((data) => {
-        if (data && (data as any).data) {
-          setKlineResult((data as any).data)
-        } else if (Array.isArray(data) && data.length > 0) {
+        const rawData = data?.data ?? data
+        if (Array.isArray(rawData) && rawData.length > 0) {
           setKlineResult({ dates: data.map((_: any, i: number) => dayjs().subtract(i, 'day').format('YYYY-MM-DD')), data: data })
         } else {
           setKlineError('未查询到数据')
