@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Add unique index to KlineData table
 
 Revision ID: 002_kline_unique_index

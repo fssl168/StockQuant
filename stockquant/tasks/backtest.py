@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """回测任务 - Celery 实现
 
 通过 Cerebro 引擎执行真实回测，支持 BaoStock / CSV 数据源。

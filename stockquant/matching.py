@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """MatchingEngine - 统一的订单撮合引擎
 
 用于回测和实盘的订单撮合逻辑统一：

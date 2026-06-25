@@ -16,9 +16,7 @@ from stockquant.ai.news_searcher import NewsSearcher
 from stockquant.ai.signal_fusion import SignalFusion, SourceSignal, SignalDirection
 from stockquant.api.deps import get_current_user, get_required_user
 from stockquant.api.schemas import UserToken
-from stockquant.api.routers.settings import build_data_feed
 from stockquant.api.websocket import ws_manager
-from stockquant.data import DataFetcherManager
 from stockquant.persistence.redis_client import get_watchlist as get_watchlist_redis, add_to_watchlist as add_to_watchlist_redis, remove_from_watchlist as remove_from_watchlist_redis
 from stockquant.persistence.persistent_store import MonitorAlertStore
 
@@ -42,6 +40,22 @@ def set_alert_storage(alert_store: MonitorAlertStore | None):
         _alerts = alert_store
 
 
+# Unified data service reference (set by main.py)
+_data_service = None
+
+
+def set_data_service(ds):
+    _data_service = ds
+
+
+class _DataServiceFetcher:
+    def __init__(self, data_service):
+        self._ds = data_service
+
+    def fetch(self, symbol, days=60):
+        return self._ds.fetch(symbol, days=days)
+
+
 def _load_watchlist_from_redis():
     """从 Redis 加载自选股列表"""
     global _watchlist
@@ -58,24 +72,15 @@ def _get_agent() -> MonitorAgent:
     if _agent is None:
         with _agent_lock:
             if _agent is None:
-                # 创建数据源管理器并注册多个数据源（按优先级降序）
-                fetcher_manager = DataFetcherManager()
-                feed = build_data_feed(symbols=[], timeframe="1d", start_date="", end_date="")
-                fetcher_manager.register_fetcher(
-                    feed,
-                    priority=1,
-                    health_check=lambda: True  # BaoStock 需要登录，成功登录后返回 True
-                )
-                # AkShare 作为 fallback
-                from stockquant.data.providers import AkShareFeed
-                fetcher_manager.register_fetcher(
-                    AkShareFeed(symbols=[], timeframe="1d"),
-                    priority=0,
-                    health_check=lambda: True
-                )
+                # 通过统一 DataService 获取行情（替代旧版 DataFetcherManager）
+                if _data_service is None:
+                    from stockquant.data.service import DataService
+                    fetcher = _DataServiceFetcher(DataService())
+                else:
+                    fetcher = _DataServiceFetcher(_data_service)
 
                 _agent = MonitorAgent(
-                    fetcher_manager=fetcher_manager,
+                    fetcher_manager=fetcher,
                     news_searcher=NewsSearcher(),
                     threshold=0.5,
                 )

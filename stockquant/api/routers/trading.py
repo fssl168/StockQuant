@@ -142,6 +142,13 @@ _pending_limit_orders: dict[str, Order] = {}
 # 订单审计日志（API 层额外记录）
 _orders_audit: dict[str, dict] = {}
 
+# Unified data service reference (set by main.py)
+_data_service = None
+
+
+def set_data_service(ds):
+    _data_service = ds
+
 
 def set_storage(pending_orders_storage: dict, orders_audit_storage: dict):
     global _pending_limit_orders, _orders_audit
@@ -355,13 +362,14 @@ def _get_cached_price(symbol: str) -> float | None:
 
 
 def _get_latest_bar(symbol: str) -> BarData | None:
-    """获取标的最新日线 BarData"""
+    """get latest daily BarData via unified DataService layer"""
     try:
-        from stockquant.data.providers.alphafeed_feed import AlphaFeedFeed
-        feed = AlphaFeedFeed(symbols=[symbol], timeframe="1d")
-        feed.start()
-        df = feed.get_dataframe()
-        feed.stop()
+        ds = _data_service
+        if ds is None:
+            from stockquant.data.service import DataService
+            ds = DataService()
+        result = ds.get_kline(symbol, timeframe="1d", start="", end="")
+        df = result.data
         if df is not None and not df.empty:
             row = df.iloc[-1]
             return BarData(
@@ -375,7 +383,7 @@ def _get_latest_bar(symbol: str) -> BarData | None:
                 turnover=float(row["turnover"] if "turnover" in df.columns else 0),
             )
     except Exception as e:
-        logger.warning(f"获取最新行情失败: {symbol}, {e}")
+        logger.warning(f"get latest bar failed: {symbol}, {e}")
     return None
 
 

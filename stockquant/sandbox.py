@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Strategy Sandbox - 策略代码安全沙箱
 
 功能：

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """回测 API 路由 - 已集成 Celery"""
 
 from __future__ import annotations

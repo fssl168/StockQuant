@@ -1,4 +1,4 @@
-﻿"""Initial migration - create all tables
+"""Initial migration - create all tables
 
 Revision ID: 001_initial
 Revises: 

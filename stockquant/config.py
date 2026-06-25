@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """StockQuant Config Management - unified layer
 
 Config priority: env vars > .env file > defaults

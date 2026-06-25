@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """F020 信息采集阶段"""
 
 from __future__ import annotations

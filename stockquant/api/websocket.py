@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """F029 WebSocket 连接管理器 — 实时推送"""
 
 from __future__ import annotations

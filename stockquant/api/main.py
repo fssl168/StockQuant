@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """F029 FastAPI 应用入口"""
 
 from __future__ import annotations
@@ -318,6 +318,9 @@ def create_app() -> FastAPI:
         app.state.data_service = data_svc
         logger.info("DataService 已初始化")
         data.set_data_service(data_svc)
+        from stockquant.api.routers import settings as _settings_router; _settings_router.set_data_service(data_svc)
+        monitor.set_data_service(data_svc)
+        trading.set_data_service(data_svc)
     except Exception as e:
         logger.warning("DataService 初始化失败（非致命）: %s", e)
         app.state.data_service = None

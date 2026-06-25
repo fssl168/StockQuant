@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """JSONB 字段迁移脚本
 
 将 BacktestResult 的 JSON 字段从 Text 转换为 JSONB 类型。

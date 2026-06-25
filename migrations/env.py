@@ -1,4 +1,4 @@
-﻿from logging.config import fileConfig
+from logging.config import fileConfig
 import os
 import sys
 from sqlalchemy import engine_from_config
@@ -17,7 +17,7 @@ from stockquant.config import get_config
 config = context.config
 
 # Override sqlalchemy.url from config if available
-db_url = get_config().get("database", {}).get("url", "sqlite:///./stockquant.db")
+db_url = get_config().database.url
 if db_url:
     config.set_main_option("sqlalchemy.url", db_url)
 

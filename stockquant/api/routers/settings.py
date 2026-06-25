@@ -809,3 +809,10 @@ def build_data_feed_with_fallback(symbols: list[str], timeframe: str, start_date
     )
 
     return feed
+
+# Unified data service reference (set by main.py)
+_data_service: object | None = None
+
+def set_data_service(svc):
+    global _data_service
+    _data_service = svc

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """DataService - unified data service layer"""
 
 from __future__ import annotations
@@ -68,6 +68,8 @@ class KlineResult:
                 "low": round(float(row.get("low", 0)), 2),
                 "close": round(float(row.get("close", 0)), 2),
                 "volume": int(row.get("volume", 0)),
+                "turnover": round(float(row.get("turnover", 0)), 2),
+                "amount": round(float(row.get("amount", row.get("turnover", 0))), 2),
             })
         return rows
 
