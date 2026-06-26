@@ -7,7 +7,7 @@ export interface DashboardMetrics {
   backtestCount: number
   annualizedReturn: number
   maxDrawdown: number
-  sharpe_ratio: number
+  sharpeRatio: number
   volatility: number
 }
 

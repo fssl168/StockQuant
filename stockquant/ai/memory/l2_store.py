@@ -39,7 +39,6 @@ class L2Store:
         try:
             from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
             from sqlalchemy.orm import sessionmaker
-            from stockquant.persistence.models import Base
 
             # 确保 URL 使用 asyncpg 驱动
             url = self._db_url
@@ -450,7 +449,7 @@ class L2Store:
             "content": row.content,
             "metadata": json.loads(row.metadata_json) if row.metadata_json else {},
             "timestamp": row.timestamp,
-            "expires_at": row.expires_at,
+            "expiresAt": row.expires_at,
             "confidence": row.confidence,
         }
 

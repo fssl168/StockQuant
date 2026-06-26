@@ -2,9 +2,7 @@
 """持仓数据模型 — F003 Portfolio"""
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass

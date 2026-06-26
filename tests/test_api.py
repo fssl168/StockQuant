@@ -71,7 +71,7 @@ class TestBacktestCRUD:
         resp = client.post("/api/backtest", json=payload, headers=self._auth_headers())
         assert resp.status_code == 200
         data = resp.json()
-        assert "task_id" in data
+        assert "taskId" in data
         assert data["status"] in ("queued", "running")
 
     def test_list_backtests_empty(self, client):
@@ -90,13 +90,13 @@ class TestBacktestCRUD:
             "end_date": "2024-12-31",
         }
         submit = client.post("/api/backtest", json=payload, headers=self._auth_headers())
-        task_id = submit.json()["task_id"]
+        task_id = submit.json()["taskId"]
 
         resp = client.get("/api/backtest", headers=self._auth_headers())
         items = resp.json()
         assert len(items) >= 1
         # 找到刚创建的任务
-        found = [t for t in items if t["task_id"] == task_id]
+        found = [t for t in items if t["taskId"] == task_id]
         assert len(found) == 1
         assert found[0]["status"] in ("queued", "running", "completed")
 
@@ -109,15 +109,15 @@ class TestBacktestCRUD:
             "end_date": "2024-12-31",
         }
         submit = client.post("/api/backtest", json=payload, headers=self._auth_headers())
-        task_id = submit.json()["task_id"]
+        task_id = submit.json()["taskId"]
 
         resp = client.get(f"/api/backtest/{task_id}", headers=self._auth_headers())
         assert resp.status_code == 200
         data = resp.json()
-        assert data["task_id"] == task_id
+        assert data["taskId"] == task_id
         assert "metrics" in data
         assert "trades" in data
-        assert "equity_curve" in data
+        assert "equityCurve" in data
 
     def test_get_backtest_not_found(self, client):
         """不存在的任务返回 404"""
@@ -133,7 +133,7 @@ class TestBacktestCRUD:
             "end_date": "2024-12-31",
         }
         submit = client.post("/api/backtest", json=payload, headers=self._auth_headers())
-        task_id = submit.json()["task_id"]
+        task_id = submit.json()["taskId"]
 
         # 确认存在
         assert client.get(f"/api/backtest/{task_id}", headers=self._auth_headers()).status_code == 200
@@ -275,11 +275,11 @@ class TestDashboardMetrics:
         resp = client.get("/api/dashboard/metrics", headers=self._auth_headers())
         assert resp.status_code == 200
         data = resp.json()
-        assert "total_equity" in data
+        assert "totalEquity" in data
         assert "sharpe" in data
-        assert "max_drawdown" in data
-        assert "total_trades" in data
-        assert isinstance(data["backtest_count"], int)
+        assert "maxDrawdown" in data
+        assert "totalTrades" in data
+        assert isinstance(data["backtestCount"], int)
 
     def test_metrics_after_completed_backtest(self, client):
         """完成回测后指标聚合"""
@@ -292,7 +292,7 @@ class TestDashboardMetrics:
         }
         auth_headers = self._auth_headers()
         submit = client.post("/api/backtest", json=payload, headers=auth_headers)
-        task_id = submit.json()["task_id"]
+        task_id = submit.json()["taskId"]
 
         # 直接操作 backtest router 的存储
         from stockquant.api.routers import backtest
@@ -307,9 +307,9 @@ class TestDashboardMetrics:
         resp = client.get("/api/dashboard/metrics", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["backtest_count"] >= 1
-        assert data["latest_backtest_status"] == "completed"
-        assert data["latest_backtest_return"] == "12.34%"
+        assert data["backtestCount"] >= 1
+        assert data["latestBacktestStatus"] == "completed"
+        assert data["latestBacktestReturn"] == "12.34%"
 
 
 # ========================================================================

@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """Prometheus 监控指标端点"""
 
-from __future__ import annotations
-
 import time
 import logging
 from typing import Dict

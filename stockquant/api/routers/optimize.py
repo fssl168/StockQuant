@@ -4,8 +4,6 @@
 已接入 Cerebro.optstrategy() 真实优化引擎。
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import uuid
@@ -251,7 +249,7 @@ async def submit_optimize(payload: dict) -> Dict[str, Any]:
     # 异步执行优化
     asyncio.create_task(_run_optimize(task_id, payload))
 
-    return {"task_id": task_id, "status": "running", "created_at": now}
+    return {"taskId": task_id, "status": "running", "createdAt": now}
 
 
 @router.get("/backtest/optimize/{task_id}", summary="查询优化状态/结果")
@@ -262,12 +260,12 @@ async def get_optimize_status(task_id: str):
         raise HTTPException(status_code=404, detail=f"优化任务 {task_id} 不存在")
 
     return {
-        "task_id": task["task_id"],
+        "taskId": task["task_id"],
         "status": task["status"],
         "progress": task["progress"],
         "results": task["results"],
-        "best_result": task["best_result"],
+        "bestResult": task["best_result"],
         "error": task.get("error"),
-        "created_at": task["created_at"],
-        "updated_at": task["updated_at"],
+        "createdAt": task["created_at"],
+        "updatedAt": task["updated_at"],
     }

@@ -13,11 +13,11 @@ describe('AI API', () => {
   })
 
   // ---- chat ----
-  it('aiApi.chat should call POST /api/ai/chat with conversation_id and message', async () => {
+  it('aiApi.chat should call POST /api/ai/chat with conversationId and message', async () => {
     const mockReply = { reply: 'Hello! How can I help?' }
     vi.mocked(client.post).mockResolvedValueOnce(mockReply)
     const result = await aiApi.chat('conv-1', 'hello')
-    expect(client.post).toHaveBeenCalledWith('/api/ai/chat', { conversation_id: 'conv-1', message: 'hello' })
+    expect(client.post).toHaveBeenCalledWith('/api/ai/chat', { conversationId: 'conv-1', message: 'hello' })
     expect(result).toEqual(mockReply)
   })
 

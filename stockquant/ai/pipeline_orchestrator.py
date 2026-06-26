@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .pipeline.collection import CollectionEvent, CollectionStage, RawArticle
+from .pipeline.collection import CollectionEvent, CollectionStage
 from .pipeline.denoise import DenoiseStage
 from .pipeline.summarize import SummarizeStage
 from .pipeline.elevate import ElevateStage

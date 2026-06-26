@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import timedelta
+from typing import Any, Dict, List
 
 from stockquant.ai.collectors.base import RawInfoItem
 

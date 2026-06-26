@@ -1,4 +1,4 @@
-﻿import { Card, Form, InputNumber, Slider, Space, Typography } from 'antd'
+import { Card, Form, InputNumber, Slider, Space, Typography } from 'antd'
 import { WalletOutlined } from '@ant-design/icons'
 import type { SettingEntry } from './types'
 
@@ -10,15 +10,15 @@ interface TradingSettingsProps {
 }
 
 const TRADING_COST_ITEMS: SettingEntry[] = [
-  { key: 'system.commission_rate', value: 0.00025, defaultValue: 0.00025, value_type: 'float', label: '佣金费率', min: 0, max: 0.003, step: 0.00001, scale: 100000, unit: '%', slider: true },
-  { key: 'system.min_commission', value: 5, defaultValue: 5, value_type: 'number', label: '最低佣金', min: 0, max: 50, step: 0.5 },
-  { key: 'system.stamp_tax_rate', value: 0.0005, defaultValue: 0.0005, value_type: 'float', label: '印花税率', min: 0, max: 0.01, step: 0.0001, scale: 10000, unit: '%', slider: true },
+  { key: 'system.commission_rate', value: 0.00025, defaultValue: 0.00025, valueType: 'float', label: '佣金费率', min: 0, max: 0.003, step: 0.00001, scale: 100000, unit: '%', slider: true },
+  { key: 'system.min_commission', value: 5, defaultValue: 5, valueType: 'number', label: '最低佣金', min: 0, max: 50, step: 0.5 },
+  { key: 'system.stamp_tax_rate', value: 0.0005, defaultValue: 0.0005, valueType: 'float', label: '印花税率', min: 0, max: 0.01, step: 0.0001, scale: 10000, unit: '%', slider: true },
 ]
 
 const EXECUTION_ITEMS: SettingEntry[] = [
-  { key: 'system.slippage', value: 0, defaultValue: 0, value_type: 'float', label: '滑点', min: 0, max: 1, step: 0.01, scale: 100, unit: '分', slider: true },
-  { key: 'system.lot_size', value: 100, defaultValue: 100, value_type: 'number', label: '最小交易单位', min: 100, max: 1000, step: 100 },
-  { key: 'system.price_limit_ratio', value: 0.1, defaultValue: 0.1, value_type: 'float', label: '涨跌停比例', min: 0.05, max: 0.3, step: 0.01, scale: 100, unit: '%', slider: true },
+  { key: 'system.slippage', value: 0, defaultValue: 0, valueType: 'float', label: '滑点', min: 0, max: 1, step: 0.01, scale: 100, unit: '分', slider: true },
+  { key: 'system.lot_size', value: 100, defaultValue: 100, valueType: 'number', label: '最小交易单位', min: 100, max: 1000, step: 100 },
+  { key: 'system.price_limit_ratio', value: 0.1, defaultValue: 0.1, valueType: 'float', label: '涨跌停比例', min: 0.05, max: 0.3, step: 0.01, scale: 100, unit: '%', slider: true },
 ]
 
 function isVisible(item: SettingEntry, allValues: Record<string, unknown>): boolean {
@@ -27,7 +27,7 @@ function isVisible(item: SettingEntry, allValues: Record<string, unknown>): bool
 }
 
 function renderField(item: SettingEntry, value: unknown, onChange: (v: unknown) => void) {
-  if (item.value_type === 'float' && item.slider) {
+  if (item.valueType === 'float' && item.slider) {
     return (
       <Space direction="vertical" style={{ width: '100%' }}>
         <Slider value={(value as number) * (item.scale ?? 1)} min={0} max={(item.max ?? 1) * (item.scale ?? 1)} onChange={(v) => onChange(v / (item.scale ?? 1))} tooltip={{ formatter: (v) => v ? `${(v * (item.scale ?? 1)).toFixed(2)}${item.unit ?? ''}` : '' }} />

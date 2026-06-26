@@ -20,13 +20,13 @@ describe('Dashboard API', () => {
   // ---- metrics ----
   it('dashboardApi.metrics should call GET /api/dashboard/metrics', async () => {
     const mockData = {
-      total_assets: 1234567,
-      today_pnl: 12345,
-      position_count: 5,
-      backtest_count: 10,
-      annualized_return: 0.15,
-      max_drawdown: 0.08,
-      sharpe_ratio: 1.5,
+      totalAssets: 1234567,
+      todayPnl: 12345,
+      positionCount: 5,
+      backtestCount: 10,
+      annualizedReturn: 0.15,
+      maxDrawdown: 0.08,
+      sharpeRatio: 1.5,
       volatility: 0.2,
     }
     vi.mocked(client.get).mockResolvedValueOnce(mockData)
@@ -65,7 +65,7 @@ describe('Dashboard API', () => {
   })
 
   it('dashboardApi.recentBacktests should return backtest list', async () => {
-    const mockList = [{ task_id: 't1', status: 'completed', strategy_name: 'test' }]
+    const mockList = [{ taskId: 't1', status: 'completed', strategyName: 'test' }]
     vi.mocked(client.get).mockResolvedValueOnce(mockList)
     const result = await dashboardApi.recentBacktests()
     expect(result).toEqual(mockList)

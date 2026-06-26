@@ -11,8 +11,8 @@ vi.mock('@/api/dashboard', () => ({
   backtestApi: {
     get: vi.fn(() =>
       Promise.resolve({
-        task_id: 'test-backtest-id',
-        strategy_name: 'Test Strategy',
+        taskId: 'test-backtest-id',
+        strategyName: 'Test Strategy',
         status: 'completed',
         metrics: {
           'Annualized Return': 0.15,
@@ -24,7 +24,7 @@ vi.mock('@/api/dashboard', () => ({
           'Total Trades': 42,
           'SQN (System Quality Number)': 2.1,
         },
-        equity_curve: [1000000, 1050000, 1020000, 1080000],
+        equityCurve: [1000000, 1050000, 1020000, 1080000],
         trades: [],
         error: null,
       })

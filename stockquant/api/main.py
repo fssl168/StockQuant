@@ -18,10 +18,8 @@ except ImportError:
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
-USE_RATE_LIMIT = False
-
 from stockquant.api.routers import backtest, strategy, dashboard, monitor, ai_chat, comparison, notification, data, settings, trading, portfolio, optimize
-from stockquant.data.service import DataService, KlineResult
+from stockquant.data.service import DataService
 from stockquant.ai.service import AIService
 from stockquant.api.routers import auth as auth_router
 from stockquant.api.routers import signal as signal_router
@@ -32,11 +30,7 @@ from stockquant.api.routers import memory as memory_router
 from stockquant.api.routers import hallucination as hallucination_router
 from stockquant.api.routers import pipeline as pipeline_router
 from stockquant.api.websocket import ws_manager
-from stockquant.config import get_config, reload_config
-
-_APP_VERSION = "2.0.0-dev"
-
-logger = logging.getLogger("stockquant.api")
+from stockquant.config import get_config
 
 # ------------------------------------------------------------------
 # 持久化存储（使用数据库）
@@ -47,16 +41,19 @@ from stockquant.persistence.persistent_store import (
     CollectTaskStore,
     OptimizeTaskStore,
     ComparisonHistoryStore,
-    PendingOrderStore,
     OrderAuditStore,
 )
+
+USE_RATE_LIMIT = False
+_APP_VERSION = "2.0.0-dev"
+logger = logging.getLogger("stockquant.api")
 
 _backtest_tasks: dict = BacktestTaskStore()  # task_id -> task dict
 _strategies: dict = StrategyStore()  # strategy_id -> strategy dict
 _collect_tasks: dict = CollectTaskStore()  # task_id -> task dict
 _optimize_tasks: dict = OptimizeTaskStore()  # task_id -> task dict
 _comparison_history: list = ComparisonHistoryStore()  # strategy comparison history
-_pending_limit_orders: dict = PendingOrderStore()  # order_id -> Order
+_pending_limit_orders: dict = {}  # order_id -> Order (in-memory only)
 _orders_audit: dict = OrderAuditStore()  # order_id -> audit dict
 _startup_time: float = time.time()
 
@@ -171,7 +168,6 @@ def create_app() -> FastAPI:
             await websocket.send_json({"type": "connected", "data": {"channel": "monitor"}})
 
             import asyncio
-            from datetime import time as dt_time
 
             async def _push_quotes():
                 """后台任务：每 5 秒推送自选股行情"""
@@ -309,7 +305,7 @@ def create_app() -> FastAPI:
     logger.info("StockQuant API 网关启动")
 
     # 加载 YAML 配置
-    config = get_config()
+    get_config()
     logger.info("应用配置已加载")
 
     # --- Unified Data Service ---
@@ -318,7 +314,8 @@ def create_app() -> FastAPI:
         app.state.data_service = data_svc
         logger.info("DataService 已初始化")
         data.set_data_service(data_svc)
-        from stockquant.api.routers import settings as _settings_router; _settings_router.set_data_service(data_svc)
+        from stockquant.api.routers import settings as _settings_router
+        _settings_router.set_data_service(data_svc)
         monitor.set_data_service(data_svc)
         trading.set_data_service(data_svc)
     except Exception as e:

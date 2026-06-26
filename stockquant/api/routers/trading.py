@@ -8,8 +8,6 @@
 - 费用模型使用 engine 的 CommissionInfo
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os
@@ -17,6 +15,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -27,7 +26,6 @@ from stockquant.engine.broker import PaperBroker, LiveBroker
 from stockquant.engine.commission import CommissionInfo
 from stockquant.engine.risk import RiskManager
 from stockquant.ai.risk_agent import RiskAgent
-from stockquant.models.account import Account
 from stockquant.models.bar import BarData
 from stockquant.models.order import Order, OrderSide, OrderType
 from stockquant.events import EventType as OrderStatus
@@ -509,16 +507,16 @@ async def get_account() -> Dict[str, Any]:
     total_equity = acc.total_equity
     today_pnl = acc.unrealized_pnl
     return {
-        "total_equity": round(total_equity, 2),
+        "totalEquity": round(total_equity, 2),
         "cash": round(acc.cash, 2),
-        "frozen_cash": round(acc.cash - acc.available_cash, 2),
-        "market_value": round(market_value, 2),
-        "available_cash": round(acc.available_cash, 2),
-        "daily_pnl": round(today_pnl, 2),
-        "daily_pnl_pct": round(today_pnl / _initial_cash * 100, 2) if _initial_cash > 0 else 0,
-        "position_value": round(market_value, 2),  # 保留向后兼容
-        "today_pnl": round(today_pnl, 2),          # 保留向后兼容
-        "broker_mode": "paper",
+        "frozenCash": round(acc.cash - acc.available_cash, 2),
+        "marketValue": round(market_value, 2),
+        "availableCash": round(acc.available_cash, 2),
+        "dailyPnl": round(today_pnl, 2),
+        "dailyPnlPct": round(today_pnl / _initial_cash * 100, 2) if _initial_cash > 0 else 0,
+        "positionValue": round(market_value, 2),  # 保留向后兼容
+        "todayPnl": round(today_pnl, 2),          # 保留向后兼容
+        "brokerMode": "paper",
     }
 
 
@@ -575,7 +573,7 @@ async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get
 
     # 记录审计日志
     _orders_audit[order_id] = {
-        "order_id": order_id,
+        "orderId": order_id,
         "id": order_id,  # 前端 rowKey="id" 期望
         "symbol": symbol,
         "side": side.upper(),
@@ -583,8 +581,8 @@ async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get
         "price": exec_price,
         "quantity": quantity,
         "status": "SUBMITTED",
-        "created_at": now,
-        "updated_at": now,
+        "createdAt": now,
+        "updatedAt": now,
     }
 
     # 记录幂等性键
@@ -602,12 +600,12 @@ async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get
             if needed_cash > _portfolio.account.available_cash:
                 order.update_status(OrderStatus.ORDER_REJECTED.value)
                 _orders_audit[order_id]["status"] = "REJECTED"
-                _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+                _orders_audit[order_id]["updatedAt"] = datetime.now().isoformat()
                 raise HTTPException(status_code=400, detail="可用资金不足")
 
         _pending_limit_orders[order_id] = order
         _orders_audit[order_id]["status"] = "SUBMITTED"
-        _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+        _orders_audit[order_id]["updatedAt"] = datetime.now().isoformat()
         logger.info(f"LIMIT 订单已挂单: {order_id} {side} {symbol} x{quantity} @ {exec_price}")
         result = _orders_audit[order_id]
         if idempotency_key:
@@ -625,15 +623,16 @@ async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get
     )
     if not risk_valid:
         _orders_audit[order_id]["status"] = "RISK_REJECTED"
-        _orders_audit[order_id]["risk_reason"] = risk_reason
-        _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+        _orders_audit[order_id]["riskReason"] = risk_reason
+        _orders_audit[order_id]["updatedAt"] = datetime.now().isoformat()
 
         # 记录到风控事件表
         try:
             from stockquant.api.routers.auth import _get_db_url
-            from stockquant.persistence.repository import save_risk_event
+            from stockquant.persistence.repository_v2 import Repository
+            _repo = Repository.instance()
             db_url = _get_db_url()
-            save_risk_event(
+            _repo.save_risk_event(
                 engine_url=db_url,
                 user_id="",
                 event_type="ORDER_RISK_REJECTED",
@@ -658,7 +657,7 @@ async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get
         if needed_cash > _portfolio.account.available_cash:
             order.update_status(OrderStatus.ORDER_REJECTED.value)
             _orders_audit[order_id]["status"] = "REJECTED"
-            _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+            _orders_audit[order_id]["updatedAt"] = datetime.now().isoformat()
             raise HTTPException(status_code=400, detail="可用资金不足")
 
     trade = _paper_broker.place_order(order, bar)
@@ -666,7 +665,7 @@ async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get
     if trade is None:
         # 订单被拒绝（涨跌停等）
         _orders_audit[order_id]["status"] = "REJECTED"
-        _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+        _orders_audit[order_id]["updatedAt"] = datetime.now().isoformat()
         result = _orders_audit[order_id]
         if idempotency_key:
             _store_idempotency(idempotency_key, result)
@@ -677,9 +676,9 @@ async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get
 
     # 更新审计日志
     _orders_audit[order_id]["status"] = "FILLED"
-    _orders_audit[order_id]["filled_price"] = trade.price
-    _orders_audit[order_id]["filled_at"] = now
-    _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+    _orders_audit[order_id]["filledPrice"] = trade.price
+    _orders_audit[order_id]["filledAt"] = now
+    _orders_audit[order_id]["updatedAt"] = datetime.now().isoformat()
 
     # 持久化交易状态（崩溃恢复）
     _persist_trading_state()
@@ -699,10 +698,10 @@ async def cancel_order(order_id: str, _user: UserToken = Depends(get_trader_user
         order = _pending_limit_orders.pop(order_id)
         _paper_broker.cancel_order(order)
         _orders_audit[order_id]["status"] = "CANCELLED"
-        _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
+        _orders_audit[order_id]["updatedAt"] = datetime.now().isoformat()
         _persist_trading_state()
         logger.info(f"挂单已撤销: {order_id}")
-        return {"success": True, "order_id": order_id, "status": "CANCELLED"}
+        return {"success": True, "orderId": order_id, "status": "CANCELLED"}
 
     # 其次从审计日志查找未成交订单
     if order_id not in _orders_audit:
@@ -713,10 +712,10 @@ async def cancel_order(order_id: str, _user: UserToken = Depends(get_trader_user
         raise HTTPException(status_code=400, detail=f"订单状态 {audit['status']} 不可撤单")
 
     audit["status"] = "CANCELLED"
-    audit["updated_at"] = datetime.now().isoformat()
+    audit["updatedAt"] = datetime.now().isoformat()
     _persist_trading_state()
     logger.info(f"订单已撤销: {order_id}")
-    return {"success": True, "order_id": order_id, "status": "CANCELLED"}
+    return {"success": True, "orderId": order_id, "status": "CANCELLED"}
 
 
 @router.get("/trading/positions", summary="持仓列表")
@@ -737,9 +736,9 @@ async def get_positions():
             "shares": pos.quantity,
             "cost": round(pos.cost_price, 2),
             "price": round(pos.current_price, 2),
-            "market_value": round(pos.market_value, 2),
+            "marketValue": round(pos.market_value, 2),
             "pnl": round(pos.pnl, 2),
-            "pnl_pct": round((pos.current_price - pos.cost_price) / pos.cost_price * 100, 2)
+            "pnlPct": round((pos.current_price - pos.cost_price) / pos.cost_price * 100, 2)
                         if pos.cost_price > 0 else 0,
         })
     return result
@@ -753,8 +752,8 @@ async def get_trades():
         ts = datetime.fromtimestamp(trade.timestamp).isoformat() if trade.timestamp else None
         result.append({
             "id": trade.trade_id,          # 前端 rowKey="id" 期望
-            "trade_id": trade.trade_id,    # 保留：向后兼容
-            "order_id": trade.order_id,
+            "tradeId": trade.trade_id,     # 保留：向后兼容
+            "orderId": trade.order_id,
             "symbol": trade.symbol,
             "side": trade.side,
             "price": trade.price,
@@ -762,9 +761,9 @@ async def get_trades():
             "amount": round(trade.price * trade.quantity, 2),
             "commission": trade.commission,
             "timestamp": ts,               # 前端 dataIndex="timestamp" 期望
-            "filled_at": ts,               # 保留：向后兼容
+            "filledAt": ts,                # 保留：向后兼容
         })
-    return sorted(result, key=lambda t: t.get("filled_at", "") or "", reverse=True)
+    return sorted(result, key=lambda t: t.get("filledAt", "") or "", reverse=True)
 
 
 @router.get("/trading/orders", summary="订单列表")
@@ -776,7 +775,7 @@ async def get_orders(_user: UserToken = Depends(get_current_user)) -> List[Dict[
         if order_id not in _orders_audit:
             now = datetime.now().isoformat()
             _orders_audit[order_id] = {
-                "order_id": order_id,
+                "orderId": order_id,
                 "id": order_id,  # 前端 rowKey="id" 期望
                 "symbol": order.symbol,
                 "side": order.side.value,
@@ -784,14 +783,14 @@ async def get_orders(_user: UserToken = Depends(get_current_user)) -> List[Dict[
                 "price": order.price,
                 "quantity": order.quantity,
                 "status": "SUBMITTED",
-                "created_at": now,
-                "updated_at": now,
+                "createdAt": now,
+                "updatedAt": now,
             }
             result.append(_orders_audit[order_id])
     # 为已有订单补充 id 字段（向后兼容）
     for order in result:
         if "id" not in order:
-            order["id"] = order.get("order_id", "")
+            order["id"] = order.get("orderId", "")
     return result
 
 
@@ -811,8 +810,8 @@ async def get_account_status(_user: UserToken = Depends(get_current_user)) -> Ac
         positions = broker.get_positions()
         return {
             "connected": True,
-            "broker_type": broker_type,
-            "broker_name": broker_name,
+            "brokerType": broker_type,
+            "brokerName": broker_name,
             "balance": balance,
             "positions": positions,
         }
@@ -827,8 +826,8 @@ async def get_account_status(_user: UserToken = Depends(get_current_user)) -> Ac
         )
         return {
             "connected": False,
-            "broker_type": broker_type,
-            "broker_name": broker_name,
+            "brokerType": broker_type,
+            "brokerName": broker_name,
             "message": message,
             "balance": broker.get_balance() if hasattr(broker, "get_balance") else {"live": False, "api": broker_type, "cash": 0, "frozen": 0, "equity": 0},
         }
@@ -842,23 +841,24 @@ async def get_account_status(_user: UserToken = Depends(get_current_user)) -> Ac
 async def get_risk_status(_user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
     """获取当前风控状态和历史事件。"""
     from stockquant.api.routers.auth import _get_db_url
-    from stockquant.persistence.repository import list_risk_events
+    from stockquant.persistence.repository_v2 import Repository
+    _repo = Repository.instance()
 
     db_url = _get_db_url()
-    events = list_risk_events(db_url, user_id="", limit=20)
+    events = _repo.list_risk_events(db_url, user_id="", limit=20)
     return {
         "halted": _risk_manager.is_halted,
-        "halt_reason": _risk_manager._halt_reason if _risk_manager._halted else "",
+        "haltReason": _risk_manager._halt_reason if _risk_manager._halted else "",
         "config": {
-            "max_position_pct": _risk_manager._max_position_pct,
-            "max_buy_amount": _risk_manager._max_buy_amount,
-            "max_total_position_pct": _risk_manager._max_total_position_pct,
-            "max_daily_loss_pct": _risk_manager._max_daily_loss_pct,
-            "max_drawdown_pct": _risk_manager._max_drawdown_pct,
-            "max_orders_per_minute": _risk_manager._max_orders_per_minute,
-            "global_circuit_breaker_pct": _risk_manager._global_circuit_breaker_pct,
+            "maxPositionPct": _risk_manager._max_position_pct,
+            "maxBuyAmount": _risk_manager._max_buy_amount,
+            "maxTotalPositionPct": _risk_manager._max_total_position_pct,
+            "maxDailyLossPct": _risk_manager._max_daily_loss_pct,
+            "maxDrawdownPct": _risk_manager._max_drawdown_pct,
+            "maxOrdersPerMinute": _risk_manager._max_orders_per_minute,
+            "globalCircuitBreakerPct": _risk_manager._global_circuit_breaker_pct,
         },
-        "recent_events": events,
+        "recentEvents": events,
     }
 
 
@@ -870,9 +870,10 @@ async def resume_trading(_user: UserToken = Depends(get_admin_user)) -> Dict[str
     # 记录到风控事件表
     try:
         from stockquant.api.routers.auth import _get_db_url
-        from stockquant.persistence.repository import save_risk_event
+        from stockquant.persistence.repository_v2 import Repository
+        _repo = Repository.instance()
         db_url = _get_db_url()
-        save_risk_event(
+        _repo.save_risk_event(
             engine_url=db_url,
             user_id="",
             event_type="TRADE_RESUMED",

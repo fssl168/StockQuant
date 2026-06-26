@@ -7,7 +7,7 @@ interface SettingEntry {
   key: string
   value: unknown
   defaultValue: unknown
-  value_type: string
+  valueType: string
   label: string
   description: string
   secret: boolean
@@ -28,15 +28,15 @@ const isVisible = (item: SettingEntry, allValues: Record<string, unknown>): bool
 }
 
 const EVOLUTION_ITEMS: SettingEntry[] = [
-  { key: 'evolution.enabled', value: false, defaultValue: false, value_type: 'boolean', label: '启用进化', description: '开启 AI 策略自动进化', secret: false },
-  { key: 'evolution.llm_provider', value: 'openai', defaultValue: 'openai', value_type: 'select', label: '进化 LLM', description: '策略进化专用模型', secret: false, options: [{ value: 'openai', label: 'OpenAI' }, { value: 'anthropic', label: 'Anthropic' }, { value: 'custom', label: '自定义' }] },
-  { key: 'evolution.llm_model', value: 'gpt-4o', defaultValue: 'gpt-4o', value_type: 'string', label: '进化模型', description: '', secret: false, when: { field: 'evolution.llm_provider', values: ['openai', 'custom'] } },
-  { key: 'evolution.anthropic_model', value: 'claude-3-opus', defaultValue: 'claude-3-opus', value_type: 'string', label: '进化模型', description: 'Claude 模型名称', secret: false, when: { field: 'evolution.llm_provider', values: ['anthropic'] } },
-  { key: 'evolution.api_key', value: '', defaultValue: '', value_type: 'password', label: 'API Key', description: '进化 LLM API 密钥', secret: true },
-  { key: 'evolution.api_base', value: '', defaultValue: '', value_type: 'string', label: 'API Base URL', description: '自定义 API 地址（留空用官方默认）', secret: false },
-  { key: 'evolution.llm_temperature', value: 0.5, defaultValue: 0.5, value_type: 'float', label: '进化温度', description: '生成温度 (0-2)', secret: false, min: 0, max: 2, step: 0.1, scale: 10, slider: true },
-  { key: 'evolution.max_tokens', value: 4096, defaultValue: 4096, value_type: 'number', label: 'Max Tokens', description: '单次最大生成 token 数', secret: false, min: 256, max: 128000, step: 256 },
-  { key: 'evolution.llm_retry', value: 3, defaultValue: 3, value_type: 'number', label: '重试次数', description: '进化失败重试次数', secret: false, min: 0, max: 10, step: 1 },
+  { key: 'evolution.enabled', value: false, defaultValue: false, valueType: 'boolean', label: '启用进化', description: '开启 AI 策略自动进化', secret: false },
+  { key: 'evolution.llm_provider', value: 'openai', defaultValue: 'openai', valueType: 'select', label: '进化 LLM', description: '策略进化专用模型', secret: false, options: [{ value: 'openai', label: 'OpenAI' }, { value: 'anthropic', label: 'Anthropic' }, { value: 'custom', label: '自定义' }] },
+  { key: 'evolution.llm_model', value: 'gpt-4o', defaultValue: 'gpt-4o', valueType: 'string', label: '进化模型', description: '', secret: false, when: { field: 'evolution.llm_provider', values: ['openai', 'custom'] } },
+  { key: 'evolution.anthropic_model', value: 'claude-3-opus', defaultValue: 'claude-3-opus', valueType: 'string', label: '进化模型', description: 'Claude 模型名称', secret: false, when: { field: 'evolution.llm_provider', values: ['anthropic'] } },
+  { key: 'evolution.api_key', value: '', defaultValue: '', valueType: 'password', label: 'API Key', description: '进化 LLM API 密钥', secret: true },
+  { key: 'evolution.api_base', value: '', defaultValue: '', valueType: 'string', label: 'API Base URL', description: '自定义 API 地址（留空用官方默认）', secret: false },
+  { key: 'evolution.llm_temperature', value: 0.5, defaultValue: 0.5, valueType: 'float', label: '进化温度', description: '生成温度 (0-2)', secret: false, min: 0, max: 2, step: 0.1, scale: 10, slider: true },
+  { key: 'evolution.max_tokens', value: 4096, defaultValue: 4096, valueType: 'number', label: 'Max Tokens', description: '单次最大生成 token 数', secret: false, min: 256, max: 128000, step: 256 },
+  { key: 'evolution.llm_retry', value: 3, defaultValue: 3, valueType: 'number', label: '重试次数', description: '进化失败重试次数', secret: false, min: 0, max: 10, step: 1 },
 ]
 
 interface AgentTogglesProps {
@@ -55,7 +55,7 @@ export default function AgentToggles({ values, onChange }: AgentTogglesProps) {
   const renderControl = (item: SettingEntry) => {
     const val = getVal(item.key, item.defaultValue)
 
-    switch (item.value_type) {
+    switch (item.valueType) {
       case 'boolean':
         return <Switch checked={val as boolean} onChange={(v) => onChange(item.key, v)} size="small" />
       case 'select':

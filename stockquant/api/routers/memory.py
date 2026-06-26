@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """F020 记忆系统 API — /api/memory"""
 
-from __future__ import annotations
-
 import logging
 from typing import Any, Dict, List, Optional
 

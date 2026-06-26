@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """F029 审计日志路由 — /api/audit"""
 
-from __future__ import annotations
-
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -23,11 +21,12 @@ async def list_audit_logs(
     """获取操作审计日志（仅 ADMIN 可查全部）。"""
     try:
         from stockquant.api.routers.auth import _get_db_url
-        from stockquant.persistence.repository import list_op_audit_logs
+        from stockquant.persistence.repository_v2 import Repository
+        _repo = Repository.instance()
 
         db_url = _get_db_url()
         user_id = _user.get("sub", "anonymous")
-        logs = list_op_audit_logs(db_url, user_id=user_id, limit=limit)
+        logs = _repo.list_op_audit_logs(db_url, user_id=user_id, limit=limit)
         return logs
     except Exception as e:
         logger.error("Failed to load audit logs: %s", e)
@@ -48,13 +47,14 @@ async def list_all_audit_logs(
 
     try:
         from stockquant.api.routers.auth import _get_db_url
-        from stockquant.persistence.repository import list_op_audit_logs
+        from stockquant.persistence.repository_v2 import Repository
+        _repo = Repository.instance()
 
         db_url = _get_db_url()
         # ADMIN 可查全部用户日志（user_id=None 时不限制）
-        logs = list_op_audit_logs(db_url, user_id=user_id, limit=limit)
+        logs = _repo.list_op_audit_logs(db_url, user_id=user_id, limit=limit)
         if resource_type:
-            logs = [l for l in logs if l.get("resource_type") == resource_type]
+            logs = [log for log in logs if log.get("resourceType") == resource_type]
         return logs[:limit]
     except Exception as e:
         logger.error("Failed to load audit logs: %s", e)

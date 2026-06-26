@@ -335,7 +335,7 @@ class SignalManager:
                 remaining.append(s)
 
         # 更新内部状态
-        current = set(id(s) for s in self._signals)
+        set(id(s) for s in self._signals)
         self._signals = [s for s in self._signals if id(s) in remaining or s not in active]
         self._signals.extend(remaining)
 
@@ -383,7 +383,7 @@ class SignalManager:
         if self._conflict_resolution == "aggressive":
             for s in reversed(active):
                 if s.side != SignalSide.HOLD and s.source.value.startswith("ai_"):
-                    self._log("resolved", s, f"Aggressive: AI signal overruled traditional")
+                    self._log("resolved", s, "Aggressive: AI signal overruled traditional")
                     return s
 
         # 默认：取最高优先级信号

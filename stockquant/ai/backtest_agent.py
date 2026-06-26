@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List
 
 logger = logging.getLogger("stockquant.ai")
 
@@ -66,7 +66,7 @@ class BacktestAgent:
             equity = r.get("equity_curve", [])
 
             # 单策略解读
-            summary = self._generate_summary(strategy_name, metrics, trades, equity)
+            self._generate_summary(strategy_name, metrics, trades, equity)
             issues = self._identify_issues(metrics)
             suggestions = self._generate_suggestions(metrics, issues)
             dimensions = self._multi_dimension_analysis(metrics, trades)
@@ -133,11 +133,11 @@ class BacktestAgent:
         try:
             ann_val = float(ann_return.replace("%", "")) / 100 if "%" in str(ann_return) else float(ann_return)
             if ann_val > 0.20:
-                lines.append(f"  ✅ 年化收益表现优秀，超过 20% 的基准要求。")
+                lines.append("  ✅ 年化收益表现优秀，超过 20% 的基准要求。")
             elif ann_val > 0:
-                lines.append(f"  ⚠️ 年化收益为正但偏低，建议优化参数或考虑其他策略。")
+                lines.append("  ⚠️ 年化收益为正但偏低，建议优化参数或考虑其他策略。")
             else:
-                lines.append(f"  ❌ 年化收益为负，策略需要大幅改进。")
+                lines.append("  ❌ 年化收益为负，策略需要大幅改进。")
         except (ValueError, TypeError):
             pass
 
@@ -281,8 +281,8 @@ class BacktestAgent:
         ann_return = metrics.get("Annualized Return", "N/A")
         max_dd = metrics.get("Max Drawdown", "N/A")
         sharpe = metrics.get("Sharpe Ratio", "N/A")
-        sortino = metrics.get("Sortino Ratio", "N/A")
-        calmar = metrics.get("Calmar Ratio", "N/A")
+        metrics.get("Sortino Ratio", "N/A")
+        metrics.get("Calmar Ratio", "N/A")
         win_rate = metrics.get("Win Rate", "N/A")
         profit_factor = metrics.get("Profit Factor", "N/A")
         total_trades = metrics.get("Total Trades", 0)

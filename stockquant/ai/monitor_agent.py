@@ -334,8 +334,7 @@ class MonitorAgent:
     def _try_push_notification(self, signal: MonitorSignal) -> None:
         """尝试通过消息路由器推送通知。"""
         try:
-            from stockquant.execution.notifier.router import Message, MessageRouter, Priority
-            from stockquant.execution.notifier.base import Notifier
+            from stockquant.execution.notifier.router import Message, Priority
 
             # 检查是否已配置 MessageRouter
             router = getattr(self, "_router", None)

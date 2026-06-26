@@ -5,20 +5,12 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 import numpy as np
 
 from stockquant.agent.tool_registry import tool
 from stockquant.ai.json_utils import robust_json_parse
-from stockquant.ai.models import (
-    DecisionAdvice,
-    MarketEnvResult,
-    PositionEvaluation,
-    RiskAssessment,
-    SentimentResult,
-    SignalVerification,
-)
 
 logger = logging.getLogger("stockquant.agent")
 
@@ -58,7 +50,7 @@ def _make_verify_signal(fetcher_manager: Any) -> Any:
                 }, ensure_ascii=False)
 
             closes = df["close"].values.astype(float)
-            volumes = df["volume"].values.astype(float) if "volume" in df.columns else np.ones(len(closes))
+            df["volume"].values.astype(float) if "volume" in df.columns else np.ones(len(closes))
 
             # MA 趋势判断
             ma5 = np.mean(closes[-5:])

@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 """F030 调度器路由 — 定时任务管理"""
 
-from __future__ import annotations
-
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -14,7 +12,6 @@ from stockquant.api.deps import get_current_user, get_required_user
 from stockquant.api.schemas import (
     MessageResponse,
     SchedulerStatusResponse,
-    TaskInfoResponse,
     UserToken,
 )
 from stockquant.persistence.persistent_store import SchedulerStore
@@ -83,8 +80,8 @@ async def list_tasks(_user: UserToken = Depends(get_current_user)) -> Dict[str, 
         task = sched._tasks.get(name)
         tasks.append({
             "name": name,
-            "cron_expr": task.cron_expression if task else "",
-            "is_running": task.is_running if task else False,
+            "cronExpr": task.cron_expression if task else "",
+            "isRunning": task.is_running if task else False,
         })
     # 合并数据库中的任务（可能已删除但 DB 未清理）
     if _scheduler_store is not None:
@@ -93,9 +90,9 @@ async def list_tasks(_user: UserToken = Depends(get_current_user)) -> Dict[str, 
             if t and t.get("name") not in [x["name"] for x in tasks]:
                 tasks.append({
                     "name": t.get("name", ""),
-                    "cron_expr": t.get("cron_expression", ""),
-                    "is_running": False,
-                    "from_db": True,
+                    "cronExpr": t.get("cron_expression", ""),
+                    "isRunning": False,
+                    "fromDb": True,
                 })
             db_task_ids.add(t.get("id", ""))
     return tasks

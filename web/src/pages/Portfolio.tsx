@@ -57,7 +57,7 @@ export default function Portfolio() {
             { label: 'VaR (95%)', value: rm.var95 ? `¥${rm.var95.toLocaleString()}` : '—', color: 'var(--color-danger)' },
             { label: '波动率', value: rm.volatility ? `${(rm.volatility * 100).toFixed(1)}%` : '—' },
             { label: '夏普比率', value: rm.sharpe ? rm.sharpe.toFixed(2) : '—', color: 'var(--color-success)' },
-            { label: '最大回撤', value: rm.max_drawdown ? `${(rm.max_drawdown * 100).toFixed(1)}%` : '—', color: 'var(--color-danger)' },
+            { label: '最大回撤', value: rm.maxDrawdown ? `${(rm.maxDrawdown * 100).toFixed(1)}%` : '—', color: 'var(--color-danger)' },
             { label: 'Beta', value: rm.beta ? rm.beta.toFixed(2) : '—' },
             { label: 'Alpha', value: rm.alpha ? `${(rm.alpha * 100).toFixed(1)}%` : '—', color: 'var(--color-success)' },
           ])

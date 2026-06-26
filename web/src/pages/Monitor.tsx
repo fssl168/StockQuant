@@ -63,10 +63,10 @@ export default function Monitor() {
   // F026: 动态风控
   const [riskControl, setRiskControl] = useState<{
     environment: 'calm' | 'volatile' | 'extreme'
-    max_position_pct: number
-    max_daily_loss_pct: number
-    max_drawdown_pct: number
-  }>({ environment: 'calm', max_position_pct: 0.8, max_daily_loss_pct: 0.03, max_drawdown_pct: 0.1 })
+    maxPositionPct: number
+    maxDailyLossPct: number
+    maxDrawdownPct: number
+  }>({ environment: 'calm', maxPositionPct: 0.8, maxDailyLossPct: 0.03, maxDrawdownPct: 0.1 })
 
   // F026: 加载动态风控数据
   useEffect(() => {
@@ -76,9 +76,9 @@ export default function Monitor() {
         if (data.environment) {
           setRiskControl({
             environment: data.environment,
-            max_position_pct: data.max_position_pct ?? 0.8,
-            max_daily_loss_pct: data.max_daily_loss_pct ?? 0.03,
-            max_drawdown_pct: data.max_drawdown_pct ?? 0.1,
+            maxPositionPct: data.maxPositionPct ?? 0.8,
+            maxDailyLossPct: data.maxDailyLossPct ?? 0.03,
+            maxDrawdownPct: data.maxDrawdownPct ?? 0.1,
           })
         }
       })
@@ -500,15 +500,15 @@ export default function Monitor() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={{ fontSize: 12 }}>最大持仓比例</Text>
-                <Text style={{ fontSize: 12, fontFamily: 'var(--font-mono)' }}>{(riskControl.max_position_pct * 100).toFixed(0)}%</Text>
+                <Text style={{ fontSize: 12, fontFamily: 'var(--font-mono)' }}>{(riskControl.maxPositionPct * 100).toFixed(0)}%</Text>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={{ fontSize: 12 }}>最大日损失</Text>
-                <Text style={{ fontSize: 12, fontFamily: 'var(--font-mono)' }}>{(riskControl.max_daily_loss_pct * 100).toFixed(1)}%</Text>
+                <Text style={{ fontSize: 12, fontFamily: 'var(--font-mono)' }}>{(riskControl.maxDailyLossPct * 100).toFixed(1)}%</Text>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={{ fontSize: 12 }}>最大回撤</Text>
-                <Text style={{ fontSize: 12, fontFamily: 'var(--font-mono)' }}>{(riskControl.max_drawdown_pct * 100).toFixed(1)}%</Text>
+                <Text style={{ fontSize: 12, fontFamily: 'var(--font-mono)' }}>{(riskControl.maxDrawdownPct * 100).toFixed(1)}%</Text>
               </div>
             </Space>
           </Card>

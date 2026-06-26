@@ -17,7 +17,7 @@ MARKET_CALENDARS = {
 }
 
 if TYPE_CHECKING:
-    import exchange_calendars as xcals
+    pass
 
 
 class TradingCalendar:

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { backtestApi, type BacktestTask } from '@/api/backtest'
 
 interface BacktestSubmitResult {
-  task_id: string
+  taskId: string
   status: string
   createdAt?: string
 }

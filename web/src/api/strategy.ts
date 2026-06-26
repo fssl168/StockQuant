@@ -153,7 +153,7 @@ class Momentum(BaseStrategy):
 export const strategyApi = {
   list: () =>
     client.get('/api/strategy') as Promise<Strategy[]>,
-  create: (data: Omit<Strategy, 'id' | 'created_at' | 'updated_at'>) =>
+  create: (data: Omit<Strategy, 'id' | 'createdAt' | 'updatedAt'>) =>
     client.post('/api/strategy', data) as Promise<Strategy>,
   get: (id: string) =>
     client.get(`/api/strategy/${id}`) as Promise<Strategy>,

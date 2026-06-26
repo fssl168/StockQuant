@@ -13,13 +13,13 @@ function authFetch(url: string, options?: RequestInit): Promise<Response> {
 }
 
 interface PipelineTask {
-  task_id: string
+  taskId: string
   status: string
-  created_at: string
-  completed_at?: string
+  createdAt: string
+  completedAt?: string
   symbols?: string[]
   sources?: string[]
-  articles_count?: number
+  articlesCount?: number
   result?: Record<string, unknown>
   error?: string
 }
@@ -63,7 +63,7 @@ export default function AIPipelinePage() {
         return
       }
       const data = await resp.json()
-      message.success(`管线任务已启动: ${data.task_id}`)
+      message.success(`管线任务已启动: ${data.taskId}`)
       fetchTasks()
     } catch (e) {
       message.error('运行失败')
@@ -77,7 +77,7 @@ export default function AIPipelinePage() {
   }[status] || 'default')
 
   const taskColumns = [
-    { title: '任务ID', dataIndex: 'task_id', key: 'task_id', width: 140 },
+    { title: '任务ID', dataIndex: 'taskId', key: 'taskId', width: 140 },
     {
       title: '状态',
       dataIndex: 'status',
@@ -91,8 +91,8 @@ export default function AIPipelinePage() {
       key: 'symbols',
       render: (v: string[]) => v?.join(', ') || '-',
     },
-    { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 160, render: (v: string) => new Date(v).toLocaleString('zh-CN') },
-    { title: '完成时间', dataIndex: 'completed_at', key: 'completed_at', width: 160, render: (v: string) => v ? new Date(v).toLocaleString('zh-CN') : '-' },
+    { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 160, render: (v: string) => new Date(v).toLocaleString('zh-CN') },
+    { title: '完成时间', dataIndex: 'completedAt', key: 'completedAt', width: 160, render: (v: string) => v ? new Date(v).toLocaleString('zh-CN') : '-' },
     {
       title: '操作',
       key: 'action',
@@ -135,7 +135,7 @@ export default function AIPipelinePage() {
             <Table
               dataSource={tasks}
               columns={taskColumns}
-              rowKey={(r) => r.task_id}
+              rowKey={(r) => r.taskId}
               size="small"
               pagination={{ pageSize: 10 }}
               scroll={{ x: 800 }}
@@ -145,7 +145,7 @@ export default function AIPipelinePage() {
       </Row>
 
       {selectedTask && (
-        <Card size="small" title={`任务详情: ${selectedTask.task_id}`} style={{ marginTop: 8 }}>
+        <Card size="small" title={`任务详情: ${selectedTask.taskId}`} style={{ marginTop: 8 }}>
           <pre style={{ maxHeight: 400, overflow: 'auto', fontSize: 12 }}>
             {JSON.stringify(selectedTask, null, 2)}
           </pre>

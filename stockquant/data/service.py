@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from pathlib import Path
@@ -11,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from stockquant.config import DataProvider, get_config
+from stockquant.config import DataProvider
 from stockquant.data.protocol import DataSourceResolver
 
 logger = logging.getLogger("stockquant.data.service")

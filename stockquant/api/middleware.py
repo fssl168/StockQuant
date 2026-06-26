@@ -6,14 +6,13 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import datetime
 from typing import Optional
 
-from fastapi import Request, Response
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response as StarletteResponse
 
-from stockquant.api.deps import decode_token, SECRET_KEY, ALGORITHM
+from stockquant.api.deps import decode_token
 
 logger = logging.getLogger("stockquant.middleware")
 

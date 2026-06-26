@@ -17,15 +17,12 @@ const { Title } = Typography
 export default function BacktestResult() {
   const { id } = useParams<{ id: string }>()
   interface BacktestTaskData {
-    task_id: string
+    taskId: string
     strategyName: string
-    strategy_name?: string
     status: string
     metrics: BacktestMetrics
     equityCurve: number[]
-    equity_curve?: number[]
     benchmarkEquityCurve?: number[]
-    benchmark_equity_curve?: number[]
     benchmark?: string
     dates?: string[]
     trades: Trade[]
@@ -131,9 +128,9 @@ export default function BacktestResult() {
   }
 
   // Access camelCase keys (snakeToCamel interceptor transforms them)
-  const equityData = (task.equityCurve ?? task.equity_curve ?? []) as number[]
+  const equityData = task.equityCurve ?? []
   const metrics = task.metrics as BacktestMetrics ?? {}
-  const benchmarkData = task.benchmarkEquityCurve ?? task.benchmark_equity_curve as number[] | undefined
+  const benchmarkData = task.benchmarkEquityCurve
 
   const BENCHMARK_LABELS: Record<string, string> = {
     hs300: '沪深300',
@@ -169,7 +166,7 @@ export default function BacktestResult() {
   ]
 
   const tradeRows = ((task.trades ?? task['trades']) as Trade[] ?? []).map((t: any) => ({
-    trade_id: t.trade_id ?? t.tradeId ?? '',
+    tradeId: t.tradeId ?? '',
     date: t.time ?? t.date ?? '',
     symbol: t.symbol ?? '',
     side: t.side ?? t.direction ?? '',
@@ -188,7 +185,7 @@ export default function BacktestResult() {
       </Link>
 
       <div style={{ display: 'flex', alignItems: 'start', gap: 12, marginBottom: 20 }}>
-        <Title level={4} style={{ margin: 0, flex: 1, fontSize: 16, fontWeight: 600 }}>{task.strategyName ?? task.strategy_name}</Title>
+        <Title level={4} style={{ margin: 0, flex: 1, fontSize: 16, fontWeight: 600 }}>{task.strategyName}</Title>
         <Dropdown
           menu={{ items: exportMenuItems, onClick: ({ key }) => exportReport(key as 'html' | 'pdf' | 'json') }}
         >

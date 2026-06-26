@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """F024 盯盘 API 路由 — 自选股管理 + 告警查询 + WebSocket 实时推送"""
 
-from __future__ import annotations
-
 import logging
 import os
 import threading
@@ -62,7 +60,7 @@ def _load_watchlist_from_redis():
     global _watchlist
     try:
         _watchlist = get_watchlist_redis()
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to load watchlist from Redis")
         _watchlist = []
 
@@ -98,9 +96,9 @@ def _signal_to_dict(signal: "MonitorSignal") -> Dict[str, Any]:
         "direction": signal.direction,
         "reason": signal.reason,
         "confidence": signal.confidence,
-        "signal_type": signal.signal_type,
+        "signalType": signal.signal_type,
         "timestamp": signal.timestamp.isoformat() if hasattr(signal.timestamp, "isoformat") else str(signal.timestamp),
-        "is_portfolio_hold": signal.is_portfolio_hold,
+        "isPortfolioHold": signal.is_portfolio_hold,
     }
 
 
@@ -123,7 +121,7 @@ def add_to_watchlist(symbols: list[str]) -> list[str]:
     # 持久化到 Redis
     try:
         add_to_watchlist_redis(symbols)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to save watchlist to Redis")
     return _watchlist
 
@@ -139,7 +137,7 @@ def remove_from_watchlist(symbols: list[str]) -> list[str]:
     # 持久化到 Redis
     try:
         remove_from_watchlist_redis(symbols)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to remove from watchlist in Redis")
     return _watchlist
 
@@ -197,9 +195,9 @@ def get_status(_user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
         agent = _get_agent()
         return {
             "watchlist": _watchlist,
-            "alerts_count": len(agent.get_alerts()),
-            "scan_count": agent.get_scan_count(),
-            "connections_count": ws_manager.get_connection_count("monitor"),
+            "alertsCount": len(agent.get_alerts()),
+            "scanCount": agent.get_scan_count(),
+            "connectionsCount": ws_manager.get_connection_count("monitor"),
             "running": agent._running,
         }
     except Exception as exc:
@@ -242,7 +240,7 @@ def get_fused_signals(symbols: Optional[List[str]] = None) -> Dict[str, Any]:
         agent = _get_agent()
         targets = symbols or _watchlist
         if not targets:
-            return {"fused_signals": [], "timestamp": ""}
+            return {"fusedSignals": [], "timestamp": ""}
 
         fused_results = []
         for symbol in targets:
@@ -285,7 +283,7 @@ def get_fused_signals(symbols: Optional[List[str]] = None) -> Dict[str, Any]:
 
         from datetime import datetime
         return {
-            "fused_signals": fused_results,
+            "fusedSignals": fused_results,
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as exc:
@@ -433,8 +431,8 @@ def get_sentiment_analysis(
         return {
             "symbol": symbol,
             "sentiment": sentiment_result,
-            "anomaly_detected": anomaly_detected,
-            "sentiment_history_length": len(sentiment_history),
+            "anomalyDetected": anomaly_detected,
+            "sentimentHistoryLength": len(sentiment_history),
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as exc:
@@ -470,10 +468,10 @@ def get_risk_control(_user=Depends(get_current_user)) -> Dict[str, Any]:
 
         return {
             "environment": environment,
-            "risk_level": risk_level,
-            "max_position_pct": max_position_pct,
-            "max_daily_loss_pct": max_daily_loss_pct,
-            "max_drawdown_pct": 0.15,
+            "riskLevel": risk_level,
+            "maxPositionPct": max_position_pct,
+            "maxDailyLossPct": max_daily_loss_pct,
+            "maxDrawdownPct": 0.15,
             "volatility": round(sigma, 6),
             "timestamp": datetime.now().isoformat(),
         }
@@ -482,10 +480,10 @@ def get_risk_control(_user=Depends(get_current_user)) -> Dict[str, Any]:
         # 降级返回默认值
         return {
             "environment": "volatile",
-            "risk_level": "medium",
-            "max_position_pct": 0.20,
-            "max_daily_loss_pct": 0.03,
-            "max_drawdown_pct": 0.15,
+            "riskLevel": "medium",
+            "maxPositionPct": 0.20,
+            "maxDailyLossPct": 0.03,
+            "maxDrawdownPct": 0.15,
             "volatility": 0.0,
             "timestamp": datetime.now().isoformat(),
         }

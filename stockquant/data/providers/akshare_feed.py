@@ -74,7 +74,6 @@ class AkShareFeed(DataFeed):
         """按需加载单个标的的数据"""
         if symbol in self._dataframes and not self._dataframes[symbol].empty:
             return  # 已加载，直接返回
-        from datetime import timedelta
         if days > 0:
             end_date = datetime.now().strftime("%Y%m%d")
             start_date = (datetime.now() - timedelta(days=days + 30)).strftime("%Y%m%d")
@@ -101,7 +100,7 @@ class AkShareFeed(DataFeed):
     def _fetch_all(self):
         """拉取所有标的的数据"""
         try:
-            import akshare as ak
+            import akshare as ak  # noqa: F401
         except ImportError:
             logger.error(
                 "akshare package not installed. "

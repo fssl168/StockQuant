@@ -553,7 +553,7 @@ class LLMAdapter:
         从 messages 中提取市场数据，调用 LocalRuleEngine 生成决策。
         """
         try:
-            from stockquant.ai.local_rule_engine import LocalRuleEngine, SignalType
+            from stockquant.ai.local_rule_engine import LocalRuleEngine
 
             engine = LocalRuleEngine()
 

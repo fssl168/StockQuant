@@ -6,7 +6,7 @@ from __future__ import annotations
 import numpy as np
 from typing import Callable, List
 
-from stockquant.indicators.base import Indicator, IndicatorProxy
+from stockquant.indicators.base import IndicatorProxy
 
 
 def indicator(func: Callable) -> Callable:

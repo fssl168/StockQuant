@@ -9,17 +9,11 @@
 
 import logging
 import itertools
-import time
-import uuid
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Type, TYPE_CHECKING
 
 from stockquant.models.base import Event, EventType
-from stockquant.models.bar import BarData
-from stockquant.models.order import Order, OrderSide, OrderType
-from stockquant.events import EventType as OrderStatus
-from stockquant.models.account import Account
 from stockquant.models.position import Position
 from stockquant.models.trade import TradeData
 from stockquant.models.portfolio import Portfolio
@@ -27,6 +21,7 @@ from stockquant.models.portfolio import Portfolio
 if TYPE_CHECKING:
     from stockquant.engine.commission import CommissionInfo
     from stockquant.engine.broker import Broker
+    from stockquant.engine.risk import RiskManager
     from stockquant.data.feed import DataFeed
 
 from stockquant.strategy.base import BaseStrategy
@@ -525,7 +520,6 @@ class Cerebro:
         3. 窗口滚动，重复步骤 1-2
         4. 汇总所有窗口的结果，取测试集表现最优的参数
         """
-        from stockquant.data import DataFeed
 
         # 获取数据长度
         if not self._data_feeds:
@@ -653,7 +647,6 @@ class Cerebro:
     def _slice_feed(self, feed: "DataFeed", start: int, end: int) -> "DataFeed":
         """切片数据源（仅取 start:end 范围）"""
         import tempfile
-        import os
         from stockquant.data.providers.csv_feed import CSVFeed
 
         # 获取完整 DataFrame，切片后写入临时文件
@@ -686,7 +679,6 @@ class Cerebro:
         """运行单组参数回测（用于并行优化）"""
         try:
             # 创建独立引擎实例
-            from copy import deepcopy
 
             temp_cerebro = Cerebro(
                 cash=self._cash,

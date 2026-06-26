@@ -1,13 +1,25 @@
 # -*- coding: utf-8 -*-
-"""F029 Pydantic 数据模型 — 请求/响应类型定义"""
+"""F029 Pydantic 数据模型 — 请求/响应类型定义
 
-from __future__ import annotations
+所有模型自动生成 camelCase alias（通过 to_camel alias_generator），
+同时支持 snake_case（populate_by_name=True）。
+"""
 
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
+
+
+class BaseSchemaModel(BaseModel):
+    """所有 API schema 的基类 — 自动 camelCase alias + snake_case 兼容"""
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        alias_generator=to_camel,
+    )
 
 
 # ====================================================================
@@ -28,7 +40,7 @@ class SlippageType(str, Enum):
     NONE = "none"
 
 
-class BacktestRequest(BaseModel):
+class BacktestRequest(BaseSchemaModel):
     """提交回测任务的请求"""
 
     strategy_name: str = Field(..., description="策略名称", examples=["双均线交叉"])
@@ -41,7 +53,7 @@ class BacktestRequest(BaseModel):
     slippage_type: SlippageType = Field(default=SlippageType.NONE, description="滑点类型")
 
 
-class BacktestResult(BaseModel):
+class BacktestResult(BaseSchemaModel):
     """回测任务结果"""
 
     task_id: str
@@ -57,7 +69,7 @@ class BacktestResult(BaseModel):
 # 策略相关
 # ====================================================================
 
-class StrategyCreate(BaseModel):
+class StrategyCreate(BaseSchemaModel):
     """创建策略的请求"""
 
     name: str = Field(..., description="策略名称", min_length=1, max_length=200)
@@ -65,7 +77,7 @@ class StrategyCreate(BaseModel):
     description: str = Field(default="", description="策略描述", max_length=1000)
 
 
-class StrategyInfo(BaseModel):
+class StrategyInfo(BaseSchemaModel):
     """策略信息"""
 
     id: str
@@ -80,7 +92,7 @@ class StrategyInfo(BaseModel):
 # 数据源相关
 # ====================================================================
 
-class DataSourceConfig(BaseModel):
+class DataSourceConfig(BaseSchemaModel):
     """数据源配置"""
 
     name: str = Field(..., description="数据源名称", examples=["BaoStock"])
@@ -94,7 +106,7 @@ class DataSourceConfig(BaseModel):
 # Dashboard 相关
 # ====================================================================
 
-class DashboardMetrics(BaseModel):
+class DashboardMetrics(BaseSchemaModel):
     """仪表盘核心指标"""
 
     total_equity: float = 0.0
@@ -111,7 +123,7 @@ class DashboardMetrics(BaseModel):
 # 通用响应
 # ====================================================================
 
-class HealthResponse(BaseModel):
+class HealthResponse(BaseSchemaModel):
     """健康检查响应"""
 
     status: str = "ok"
@@ -119,21 +131,21 @@ class HealthResponse(BaseModel):
     uptime: float = 0.0
 
 
-class TaskResponse(BaseModel):
+class TaskResponse(BaseSchemaModel):
     """通用任务响应"""
 
     task_id: str
     status: str
 
 
-class MessageResponse(BaseModel):
+class MessageResponse(BaseSchemaModel):
     """通用消息响应"""
 
     success: bool = True
     message: str = ""
 
 
-class WebSocketMessage(BaseModel):
+class WebSocketMessage(BaseSchemaModel):
     """WebSocket 消息格式"""
 
     type: str  # progress | metrics | trade | alert | quote
@@ -146,7 +158,7 @@ class WebSocketMessage(BaseModel):
 # AI 对话相关
 # ====================================================================
 
-class AIChatRequest(BaseModel):
+class AIChatRequest(BaseSchemaModel):
     """AI 对话请求"""
 
     message: str = Field(..., description="用户消息", min_length=1)
@@ -157,7 +169,7 @@ class AIChatRequest(BaseModel):
 # 用户认证
 # ====================================================================
 
-class UserToken(BaseModel):
+class UserToken(BaseSchemaModel):
     """JWT 声明结构（解码后的 token payload）"""
 
     sub: str = Field(..., description="用户标识", examples=["user-001"])
@@ -165,13 +177,13 @@ class UserToken(BaseModel):
     role: str = Field(..., description="主角色", examples=["ADMIN"])
 
 
-class TokenRefreshRequest(BaseModel):
+class TokenRefreshRequest(BaseSchemaModel):
     """刷新 token 请求"""
 
     refresh_token: str = Field(..., description="当前有效 token", min_length=1)
 
 
-class TokenRefreshResponse(BaseModel):
+class TokenRefreshResponse(BaseSchemaModel):
     """Token 刷新响应"""
 
     access_token: str
@@ -185,7 +197,7 @@ class UserInfoResponse(UserToken):
     roles: List[str]
 
 
-class RegisterRequest(BaseModel):
+class RegisterRequest(BaseSchemaModel):
     """用户注册请求"""
 
     username: str = Field(..., description="用户名", min_length=3, max_length=50)
@@ -197,7 +209,7 @@ class RegisterRequest(BaseModel):
 # 通知
 # ====================================================================
 
-class NotificationItem(BaseModel):
+class NotificationItem(BaseSchemaModel):
     """通知项"""
 
     id: str = ""
@@ -212,7 +224,7 @@ class NotificationItem(BaseModel):
 # 盯盘
 # ====================================================================
 
-class MonitorAlertItem(BaseModel):
+class MonitorAlertItem(BaseSchemaModel):
     """盯盘告警项"""
 
     id: str = ""
@@ -225,7 +237,7 @@ class MonitorAlertItem(BaseModel):
     created_at: str = ""
 
 
-class MonitorStatusResponse(BaseModel):
+class MonitorStatusResponse(BaseSchemaModel):
     """盯盘状态响应"""
 
     running: bool = False
@@ -234,21 +246,21 @@ class MonitorStatusResponse(BaseModel):
     threshold: float = 0.5
 
 
-class PremarketBriefingResponse(BaseModel):
+class PremarketBriefingResponse(BaseSchemaModel):
     """盘前简报响应"""
 
     date: str = ""
     signals: List[Dict[str, Any]] = Field(default_factory=list)
 
 
-class PostmarketSummaryResponse(BaseModel):
+class PostmarketSummaryResponse(BaseSchemaModel):
     """盘后摘要响应"""
 
     date: str = ""
     summary: str = ""
 
 
-class SentimentAnalysisResponse(BaseModel):
+class SentimentAnalysisResponse(BaseSchemaModel):
     """情绪分析响应"""
 
     symbol: str = ""
@@ -256,7 +268,7 @@ class SentimentAnalysisResponse(BaseModel):
     score: float = 0.0
 
 
-class RiskControlResponse(BaseModel):
+class RiskControlResponse(BaseSchemaModel):
     """风控参数响应"""
 
     max_position_pct: float = 0.3
@@ -269,7 +281,7 @@ class RiskControlResponse(BaseModel):
 # 交易
 # ====================================================================
 
-class OrderCreateRequest(BaseModel):
+class OrderCreateRequest(BaseSchemaModel):
     """下单请求"""
 
     symbol: str = Field(..., description="标的代码", examples=["sh600519"])
@@ -279,7 +291,7 @@ class OrderCreateRequest(BaseModel):
     quantity: int = Field(..., description="数量", ge=1)
 
 
-class OrderResponse(BaseModel):
+class OrderResponse(BaseSchemaModel):
     """下单结果响应"""
 
     order_id: str
@@ -290,7 +302,7 @@ class OrderResponse(BaseModel):
     quantity: int = 0
 
 
-class PositionItem(BaseModel):
+class PositionItem(BaseSchemaModel):
     """持仓项"""
 
     symbol: str = ""
@@ -302,7 +314,7 @@ class PositionItem(BaseModel):
     unrealized_pnl: float = 0.0
 
 
-class TradeItem(BaseModel):
+class TradeItem(BaseSchemaModel):
     """成交项"""
 
     trade_id: str = ""
@@ -314,7 +326,7 @@ class TradeItem(BaseModel):
     timestamp: str = ""
 
 
-class OrderListItem(BaseModel):
+class OrderListItem(BaseSchemaModel):
     """订单列表项"""
 
     order_id: str = ""
@@ -328,7 +340,7 @@ class OrderListItem(BaseModel):
     created_at: str = ""
 
 
-class AccountSummaryResponse(BaseModel):
+class AccountSummaryResponse(BaseSchemaModel):
     """账户摘要"""
 
     total_equity: float = 0.0
@@ -342,7 +354,7 @@ class AccountSummaryResponse(BaseModel):
 # 策略对比
 # ====================================================================
 
-class ComparisonRequest(BaseModel):
+class ComparisonRequest(BaseSchemaModel):
     """策略对比请求"""
 
     strategy_ids: List[str] = Field(..., description="策略 ID 列表", min_length=2)
@@ -351,7 +363,7 @@ class ComparisonRequest(BaseModel):
     end_date: str = Field(default="2024-12-31", description="结束日期")
 
 
-class ComparisonHistoryEntry(BaseModel):
+class ComparisonHistoryEntry(BaseSchemaModel):
     """对比历史记录"""
 
     id: str = ""
@@ -360,7 +372,7 @@ class ComparisonHistoryEntry(BaseModel):
     created_at: str = ""
 
 
-class ComparisonResult(BaseModel):
+class ComparisonResult(BaseSchemaModel):
     """对比结果"""
 
     comparison_id: str = ""
@@ -368,7 +380,7 @@ class ComparisonResult(BaseModel):
     recommendation: str = ""
 
 
-class OptimizationResult(BaseModel):
+class OptimizationResult(BaseSchemaModel):
     """组合优化结果"""
 
     portfolio: Dict[str, Any] = Field(default_factory=dict)
@@ -379,7 +391,7 @@ class OptimizationResult(BaseModel):
 # 信号管线
 # ====================================================================
 
-class SignalAddRequest(BaseModel):
+class SignalAddRequest(BaseSchemaModel):
     """添加信号请求"""
 
     symbol: str = Field(..., description="标的", examples=["sh600519"])
@@ -392,7 +404,7 @@ class SignalAddRequest(BaseModel):
 # 数据管理
 # ====================================================================
 
-class DataSourceUpdateRequest(BaseModel):
+class DataSourceUpdateRequest(BaseSchemaModel):
     """数据源配置更新请求"""
 
     name: str = Field(..., description="数据源名称")
@@ -402,7 +414,7 @@ class DataSourceUpdateRequest(BaseModel):
     is_active: bool = True
 
 
-class CacheStatsResponse(BaseModel):
+class CacheStatsResponse(BaseSchemaModel):
     """缓存统计"""
 
     total_records: int = 0
@@ -415,7 +427,7 @@ class CacheStatsResponse(BaseModel):
 # 参数优化
 # ====================================================================
 
-class OptimizeRequest(BaseModel):
+class OptimizeRequest(BaseSchemaModel):
     """参数优化请求"""
 
     strategy_id: str = Field(..., description="策略 ID")
@@ -425,7 +437,7 @@ class OptimizeRequest(BaseModel):
     param_grid: Dict[str, Any] = Field(default_factory=dict, description="参数搜索空间")
 
 
-class OptimizeStatusResponse(BaseModel):
+class OptimizeStatusResponse(BaseSchemaModel):
     """优化任务状态"""
 
     task_id: str
@@ -438,7 +450,7 @@ class OptimizeStatusResponse(BaseModel):
 # 投资组合
 # ====================================================================
 
-class SectorAllocationItem(BaseModel):
+class SectorAllocationItem(BaseSchemaModel):
     """行业分配项"""
 
     sector: str = ""
@@ -446,7 +458,7 @@ class SectorAllocationItem(BaseModel):
     value: float = 0.0
 
 
-class PnlAnalysisResponse(BaseModel):
+class PnlAnalysisResponse(BaseSchemaModel):
     """盈亏分析"""
 
     total_pnl: float = 0.0
@@ -455,7 +467,7 @@ class PnlAnalysisResponse(BaseModel):
     profit_factor: float = 0.0
 
 
-class EquityCurveResponse(BaseModel):
+class EquityCurveResponse(BaseSchemaModel):
     """权益曲线"""
 
     points: List[List] = Field(default_factory=list, description="[[timestamp, equity], ...]")
@@ -463,7 +475,7 @@ class EquityCurveResponse(BaseModel):
     end_equity: float = 0.0
 
 
-class RiskMetricsResponse(BaseModel):
+class RiskMetricsResponse(BaseSchemaModel):
     """风控指标"""
 
     sharpe_ratio: float = 0.0
@@ -477,7 +489,7 @@ class RiskMetricsResponse(BaseModel):
 # 审计日志
 # ====================================================================
 
-class AuditLogItem(BaseModel):
+class AuditLogItem(BaseSchemaModel):
     """审计日志项"""
 
     id: int = 0
@@ -494,7 +506,7 @@ class AuditLogItem(BaseModel):
 # 调度器
 # ====================================================================
 
-class TaskInfoResponse(BaseModel):
+class TaskInfoResponse(BaseSchemaModel):
     """定时任务信息"""
 
     name: str = ""
@@ -503,7 +515,7 @@ class TaskInfoResponse(BaseModel):
     from_db: bool = False
 
 
-class SchedulerStatusResponse(BaseModel):
+class SchedulerStatusResponse(BaseSchemaModel):
     """调度器状态"""
 
     running: bool = False
@@ -515,7 +527,7 @@ class SchedulerStatusResponse(BaseModel):
 # AI 对话扩展
 # ====================================================================
 
-class ChatResponse(BaseModel):
+class ChatResponse(BaseSchemaModel):
     """AI 对话响应"""
 
     reply: str = ""
@@ -523,34 +535,34 @@ class ChatResponse(BaseModel):
     usage: Optional[Dict[str, Any]] = None
 
 
-class ConversationsListResponse(BaseModel):
+class ConversationsListResponse(BaseSchemaModel):
     """会话列表"""
 
     sessions: List[Dict[str, Any]] = Field(default_factory=list)
 
 
-class ConversationDetailResponse(BaseModel):
+class ConversationDetailResponse(BaseSchemaModel):
     """会话详情"""
 
     session_id: str = ""
     messages: List[Dict[str, Any]] = Field(default_factory=list)
 
 
-class MarketDataResponse(BaseModel):
+class MarketDataResponse(BaseSchemaModel):
     """市场数据查询结果"""
 
     symbol: str = ""
     data: List[Dict[str, Any]] = Field(default_factory=list)
 
 
-class NewsSearchResponse(BaseModel):
+class NewsSearchResponse(BaseSchemaModel):
     """新闻搜索结果"""
 
     keyword: str = ""
     results: List[Dict[str, Any]] = Field(default_factory=list)
 
 
-class StrategyGeneratedResponse(BaseModel):
+class StrategyGeneratedResponse(BaseSchemaModel):
     """生成的策略"""
 
     strategy_name: str = ""
@@ -562,7 +574,7 @@ class StrategyGeneratedResponse(BaseModel):
 # 仪表盘
 # ====================================================================
 
-class DashboardSignal(BaseModel):
+class DashboardSignal(BaseSchemaModel):
     """仪表盘信号项"""
 
     symbol: str = ""
@@ -576,19 +588,19 @@ class DashboardSignal(BaseModel):
 # 设置
 # ====================================================================
 
-class SettingsSaveRequest(BaseModel):
+class SettingsSaveRequest(BaseSchemaModel):
     """设置保存请求"""
 
     settings: Dict[str, Any] = Field(default_factory=dict, description="设置键值对")
 
 
-class SettingsResponse(BaseModel):
+class SettingsResponse(BaseSchemaModel):
     """设置响应"""
 
     settings: Dict[str, Any] = Field(default_factory=dict)
 
 
-class SourcesResponse(BaseModel):
+class SourcesResponse(BaseSchemaModel):
     """可用配置源响应"""
 
     sources: Dict[str, str] = Field(default_factory=dict, description="配置来源映射")
@@ -598,7 +610,7 @@ class SourcesResponse(BaseModel):
 # 扩展：回测（补充缺失字段）
 # ====================================================================
 
-class BacktestRequestExtended(BaseModel):
+class BacktestRequestExtended(BaseSchemaModel):
     """扩展回测请求（包含策略类和额外参数）"""
 
     strategy_name: str = Field(..., description="策略名称", examples=["双均线交叉"])
@@ -624,38 +636,38 @@ class BacktestRequestExtended(BaseModel):
 # ====================================================================
 
 
-class ChatRequest(BaseModel):
+class ChatRequest(BaseSchemaModel):
     """AI 对话请求"""
     message: str = Field(..., description="用户消息")
     conversation_id: str = Field(default="default", description="会话 ID")
     mode: str = Field(default="general", description="对话模式")
 
 
-class SaveMessageRequest(BaseModel):
+class SaveMessageRequest(BaseSchemaModel):
     """保存消息请求"""
     role: str = Field(default="user", description="角色")
     content: str = Field(..., description="消息内容")
 
 
-class GenerateStrategyRequest(BaseModel):
+class GenerateStrategyRequest(BaseSchemaModel):
     """生成策略请求"""
     description: str = Field(..., description="策略描述")
     strategy_type: str = Field(default="trend", description="策略类型")
 
 
-class ComparePaperBacktestRequest(BaseModel):
+class ComparePaperBacktestRequest(BaseSchemaModel):
     """模拟盘 vs 回测对比请求"""
     backtest_id: str = Field(..., description="回测任务 ID")
     paper_equity: List[float] = Field(default_factory=list, description="模拟盘权益曲线")
     backtest_equity: List[float] = Field(default_factory=list, description="回测权益曲线")
 
 
-class CompareStrategiesRequest(BaseModel):
+class CompareStrategiesRequest(BaseSchemaModel):
     """策略对比请求"""
     strategy_ids: List[str] = Field(..., description="回测任务 ID 列表", min_length=2)
 
 
-class PlaceOrderRequest(BaseModel):
+class PlaceOrderRequest(BaseSchemaModel):
     """下单请求"""
     symbol: str = Field(..., description="股票代码")
     side: str = Field(default="BUY", description="买卖方向")
@@ -665,17 +677,17 @@ class PlaceOrderRequest(BaseModel):
     idempotency_key: Optional[str] = Field(default=None, description="幂等键")
 
 
-class StartMonitoringRequest(BaseModel):
+class StartMonitoringRequest(BaseSchemaModel):
     """开始盯盘请求"""
     symbols: Optional[List[str]] = Field(default=None, description="监控标的")
 
 
-class UpdateDataRequest(BaseModel):
+class UpdateDataRequest(BaseSchemaModel):
     """更新数据源配置请求"""
     provider: str = Field(..., description="数据源名称")
 
 
-class CollectDataRequest(BaseModel):
+class CollectDataRequest(BaseSchemaModel):
     """采集数据请求"""
     symbol: str = Field(..., description="股票代码")
     source: str = Field(default="alphafeed", description="数据源")
@@ -683,7 +695,7 @@ class CollectDataRequest(BaseModel):
     end: str = Field(default="", description="结束日期")
 
 
-class AddSignalRequest(BaseModel):
+class AddSignalRequest(BaseSchemaModel):
     """添加信号请求"""
     symbol: str = Field(..., description="股票代码")
     side: str = Field(default="HOLD", description="方向")

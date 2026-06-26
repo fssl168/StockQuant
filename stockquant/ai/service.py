@@ -12,10 +12,10 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import Any, Dict, List
 
-from stockquant.config import AISettings, get_config, LLMProvider
-from stockquant.agent.llm_adapter import LLMAdapter, LLMResponse
+from stockquant.config import get_config, LLMProvider
+from stockquant.agent.llm_adapter import LLMAdapter
 
 logger = logging.getLogger("stockquant.ai.service")
 

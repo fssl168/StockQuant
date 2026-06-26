@@ -1,4 +1,4 @@
-﻿import { useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { Card, Form, Input, Switch, Select, InputNumber, Slider, Button, Space, Typography, message } from 'antd'
 import { SaveOutlined, DatabaseOutlined, LaptopOutlined, CloudServerOutlined } from '@ant-design/icons'
 import type { SettingEntry } from './types'
@@ -11,25 +11,25 @@ interface GeneralSettingsProps {
 }
 
 const DATABASE_ITEMS: SettingEntry[] = [
-  { key: 'database.url', value: '', defaultValue: '', value_type: 'password', label: '数据库URL', description: '连接字符串', secret: true },
-  { key: 'database.pool_size', value: 10, defaultValue: 10, value_type: 'number', label: '连接池大小', min: 1, max: 100, step: 1 },
-  { key: 'database.max_overflow', value: 20, defaultValue: 20, value_type: 'number', label: '最大溢出', min: 0, max: 100, step: 1 },
-  { key: 'database.pool_timeout', value: 30, defaultValue: 30, value_type: 'number', label: '超时时间', min: 1, max: 300, step: 1 },
-  { key: 'database.echo', value: false, defaultValue: false, value_type: 'boolean', label: 'SQL 日志' },
+  { key: 'database.url', value: '', defaultValue: '', valueType: 'password', label: '数据库URL', description: '连接字符串', secret: true },
+  { key: 'database.pool_size', value: 10, defaultValue: 10, valueType: 'number', label: '连接池大小', min: 1, max: 100, step: 1 },
+  { key: 'database.max_overflow', value: 20, defaultValue: 20, valueType: 'number', label: '最大溢出', min: 0, max: 100, step: 1 },
+  { key: 'database.pool_timeout', value: 30, defaultValue: 30, valueType: 'number', label: '超时时间', min: 1, max: 300, step: 1 },
+  { key: 'database.echo', value: false, defaultValue: false, valueType: 'boolean', label: 'SQL 日志' },
 ]
 
 const SYSTEM_ITEMS: SettingEntry[] = [
-  { key: 'trading.mode', value: 'simulator', defaultValue: 'simulator', value_type: 'select', label: '交易模式', options: [{ value: 'backtest', label: '回测模式' }, { value: 'simulator', label: '模拟实盘' }, { value: 'live', label: '实盘' }] },
-  { key: 'system.log_level', value: 'INFO', defaultValue: 'INFO', value_type: 'select', label: '日志级别', options: [{ value: 'DEBUG', label: 'DEBUG' }, { value: 'INFO', label: 'INFO' }, { value: 'WARNING', label: 'WARNING' }, { value: 'ERROR', label: 'ERROR' }] },
-  { key: 'system.web_port', value: 8000, defaultValue: 8000, value_type: 'number', label: 'Web 端口', min: 1, max: 65535, step: 1 },
-  { key: 'system.initial_capital', value: 1000000, defaultValue: 1000000, value_type: 'number', label: '初始资金', min: 10000, max: 1_000_000_000, step: 100000 },
+  { key: 'trading.mode', value: 'simulator', defaultValue: 'simulator', valueType: 'select', label: '交易模式', options: [{ value: 'backtest', label: '回测模式' }, { value: 'simulator', label: '模拟实盘' }, { value: 'live', label: '实盘' }] },
+  { key: 'system.log_level', value: 'INFO', defaultValue: 'INFO', valueType: 'select', label: '日志级别', options: [{ value: 'DEBUG', label: 'DEBUG' }, { value: 'INFO', label: 'INFO' }, { value: 'WARNING', label: 'WARNING' }, { value: 'ERROR', label: 'ERROR' }] },
+  { key: 'system.web_port', value: 8000, defaultValue: 8000, valueType: 'number', label: 'Web 端口', min: 1, max: 65535, step: 1 },
+  { key: 'system.initial_capital', value: 1000000, defaultValue: 1000000, valueType: 'number', label: '初始资金', min: 10000, max: 1_000_000_000, step: 100000 },
 ]
 
 const DATA_SOURCE_ITEMS: SettingEntry[] = [
-  { key: 'data_provider.source', value: 'alphafeed', defaultValue: 'alphafeed', value_type: 'select', label: '默认数据源', options: [{ value: 'alphafeed', label: 'AlphaFeed (推荐)' }, { value: 'baostock', label: 'BaoStock' }, { value: 'akshare', label: 'AkShare' }, { value: 'csv', label: 'CSV' }] },
-  { key: 'data_provider.alphafeed_key', value: '', defaultValue: '', value_type: 'password', label: 'AlphaFeed Key', secret: true, when: { field: 'data_provider.source', values: ['alphafeed'] } },
-  { key: 'data_provider.api_key', value: '', defaultValue: '', value_type: 'password', label: 'API Key', secret: true, when: { field: 'data_provider.source', values: ['akshare'] } },
-  { key: 'baostock.enabled', value: true, defaultValue: true, value_type: 'boolean', label: '启用 BaoStock', when: { field: 'data_provider.source', values: ['baostock'] } },
+  { key: 'data_provider.source', value: 'alphafeed', defaultValue: 'alphafeed', valueType: 'select', label: '默认数据源', options: [{ value: 'alphafeed', label: 'AlphaFeed (推荐)' }, { value: 'baostock', label: 'BaoStock' }, { value: 'akshare', label: 'AkShare' }, { value: 'csv', label: 'CSV' }] },
+  { key: 'data_provider.alphafeed_key', value: '', defaultValue: '', valueType: 'password', label: 'AlphaFeed Key', secret: true, when: { field: 'data_provider.source', values: ['alphafeed'] } },
+  { key: 'data_provider.api_key', value: '', defaultValue: '', valueType: 'password', label: 'API Key', secret: true, when: { field: 'data_provider.source', values: ['akshare'] } },
+  { key: 'baostock.enabled', value: true, defaultValue: true, valueType: 'boolean', label: '启用 BaoStock', when: { field: 'data_provider.source', values: ['baostock'] } },
 ]
 
 function isVisible(item: SettingEntry, allValues: Record<string, unknown>): boolean {
@@ -38,7 +38,7 @@ function isVisible(item: SettingEntry, allValues: Record<string, unknown>): bool
 }
 
 function renderField(item: SettingEntry, value: unknown, onChange: (v: unknown) => void) {
-  switch (item.value_type) {
+  switch (item.valueType) {
     case 'boolean':
       return <Switch checked={value as boolean} onChange={onChange} size="small" />
     case 'select':

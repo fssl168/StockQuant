@@ -9,18 +9,18 @@ import client from '@/api/client'
 const { Title, Text, Paragraph } = Typography
 
 interface BacktestItem {
-  task_id: string
-  strategy_name: string
+  taskId: string
+  strategyName: string
   status: string
   metrics: Record<string, number | string>
-  created_at: string
+  createdAt: string
 }
 
 interface ComparisonResult {
   strategies: Array<{
     name: string
     metrics: Record<string, number>
-    portfolio_weights?: Record<string, number>
+    portfolioWeights?: Record<string, number>
     recommendations?: string[]
   }>
   summary?: string
@@ -58,10 +58,10 @@ const METRIC_COLS = [
   },
   {
     title: '总收益率',
-    dataIndex: 'total_return',
-    key: 'total_return',
+    dataIndex: 'totalReturn',
+    key: 'totalReturn',
     width: 110,
-    sorter: (a: any, b: any) => (a.total_return || 0) - (b.total_return || 0),
+    sorter: (a: any, b: any) => (a.totalReturn || 0) - (b.totalReturn || 0),
     render: (v: number) => v != null ? (
       <Text style={{ color: v >= 0 ? '#10b981' : '#ef4444', fontFamily: 'var(--font-mono)' }}>
         {(v * 100).toFixed(2)}%
@@ -70,20 +70,20 @@ const METRIC_COLS = [
   },
   {
     title: '夏普比率',
-    dataIndex: 'sharpe_ratio',
-    key: 'sharpe_ratio',
+    dataIndex: 'sharpeRatio',
+    key: 'sharpeRatio',
     width: 90,
-    sorter: (a: any, b: any) => (a.sharpe_ratio || 0) - (b.sharpe_ratio || 0),
+    sorter: (a: any, b: any) => (a.sharpeRatio || 0) - (b.sharpeRatio || 0),
     render: (v: number) => v != null ? (
       <Text style={{ fontFamily: 'var(--font-mono)' }}>{v.toFixed(2)}</Text>
     ) : <Text type="secondary">-</Text>,
   },
   {
     title: '最大回撤',
-    dataIndex: 'max_drawdown',
-    key: 'max_drawdown',
+    dataIndex: 'maxDrawdown',
+    key: 'maxDrawdown',
     width: 110,
-    sorter: (a: any, b: any) => (a.max_drawdown || 0) - (b.max_drawdown || 0),
+    sorter: (a: any, b: any) => (a.maxDrawdown || 0) - (b.maxDrawdown || 0),
     render: (v: number) => v != null ? (
       <Text style={{ color: '#ef4444', fontFamily: 'var(--font-mono)' }}>
         {(v * 100).toFixed(2)}%
@@ -92,10 +92,10 @@ const METRIC_COLS = [
   },
   {
     title: '胜率',
-    dataIndex: 'win_rate',
-    key: 'win_rate',
+    dataIndex: 'winRate',
+    key: 'winRate',
     width: 90,
-    sorter: (a: any, b: any) => (a.win_rate || 0) - (b.win_rate || 0),
+    sorter: (a: any, b: any) => (a.winRate || 0) - (b.winRate || 0),
     render: (v: number) => v != null ? (
       <Text style={{ fontFamily: 'var(--font-mono)' }}>{(v * 100).toFixed(1)}%</Text>
     ) : <Text type="secondary">-</Text>,
@@ -111,8 +111,8 @@ const METRIC_COLS = [
   },
   {
     title: '交易次数',
-    dataIndex: 'total_trades',
-    key: 'total_trades',
+    dataIndex: 'totalTrades',
+    key: 'totalTrades',
     width: 90,
     render: (v: number) => v != null ? <Text style={{ fontFamily: 'var(--font-mono)' }}>{v}</Text> : <Text type="secondary">-</Text>,
   },
@@ -140,7 +140,7 @@ export default function Comparison() {
   }, [])
 
   const selectedBacktests = useMemo(
-    () => backtests.filter((b) => selectedIds.includes(b.task_id)),
+    () => backtests.filter((b) => selectedIds.includes(b.taskId)),
     [backtests, selectedIds],
   )
 
@@ -149,7 +149,7 @@ export default function Comparison() {
     setLoading(true)
     setChartLoading(true)
     try {
-      const res = await client.post('/api/comparison', { strategy_ids: selectedIds }) as any
+      const res = await client.post('/api/comparison', { strategyIds: selectedIds }) as any
       // 拦截器返回裸数据，直接传给 setState
       setComparisonData(res)
     } catch (e) {
@@ -164,7 +164,7 @@ export default function Comparison() {
     if (selectedIds.length === backtests.length) {
       setSelectedIds([])
     } else {
-      setSelectedIds(backtests.map((b) => b.task_id))
+      setSelectedIds(backtests.map((b) => b.taskId))
     }
   }
 
@@ -178,7 +178,7 @@ export default function Comparison() {
     if (selectedIds.length < 2) return
     setOptimizeLoading(true)
     try {
-      const res = await client.post('/api/comparison/optimize', { strategy_ids: selectedIds }) as any
+      const res = await client.post('/api/comparison/optimize', { strategyIds: selectedIds }) as any
       setOptimizeResult(res)
     } catch (e) {
       console.error('组合优化请求失败:', e)
@@ -206,23 +206,23 @@ export default function Comparison() {
       return comparisonData.strategies.map((s) => ({
         name: s.name,
         metrics: {
-          total_return: s.metrics.total_return,
-          sharpe_ratio: s.metrics.sharpe_ratio,
-          max_drawdown: s.metrics.max_drawdown,
-          win_rate: s.metrics.win_rate,
-          profit_loss_ratio: s.metrics.profit_loss_ratio,
+          totalReturn: s.metrics.totalReturn,
+          sharpeRatio: s.metrics.sharpeRatio,
+          maxDrawdown: s.metrics.maxDrawdown,
+          winRate: s.metrics.winRate,
+          profitLossRatio: s.metrics.profitLossRatio,
         },
       }))
     }
     // Fallback: use selected backtests with their metrics
     return selectedBacktests.map((b) => ({
-      name: b.strategy_name,
+      name: b.strategyName,
       metrics: {
-        total_return: (b.metrics as any)['Annualized Return'],
-        sharpe_ratio: (b.metrics as any)['Sharpe Ratio'],
-        max_drawdown: (b.metrics as any)['Max Drawdown'],
-        win_rate: (b.metrics as any)['Win Rate'],
-        profit_loss_ratio: (b.metrics as any)['Profit/Loss Ratio'],
+        totalReturn: (b.metrics as any)['Annualized Return'],
+        sharpeRatio: (b.metrics as any)['Sharpe Ratio'],
+        maxDrawdown: (b.metrics as any)['Max Drawdown'],
+        winRate: (b.metrics as any)['Win Rate'],
+        profitLossRatio: (b.metrics as any)['Profit/Loss Ratio'],
       },
     }))
   }, [comparisonData, selectedBacktests])
@@ -233,26 +233,26 @@ export default function Comparison() {
       return comparisonData.strategies.map((s) => ({
         key: s.name,
         name: s.name,
-        total_return: s.metrics.total_return,
-        sharpe_ratio: s.metrics.sharpe_ratio,
-        max_drawdown: s.metrics.max_drawdown,
-        win_rate: s.metrics.win_rate,
+        totalReturn: s.metrics.totalReturn,
+        sharpeRatio: s.metrics.sharpeRatio,
+        maxDrawdown: s.metrics.maxDrawdown,
+        winRate: s.metrics.winRate,
         sqn: s.metrics.sqn,
-        total_trades: s.metrics.total_trades,
-        _portfolio_weights: s.portfolio_weights,
+        totalTrades: s.metrics.totalTrades,
+        _portfolioWeights: s.portfolioWeights,
         _recommendations: s.recommendations,
       }))
     }
     return selectedBacktests.map((b) => ({
-      key: b.task_id,
-      name: b.strategy_name,
-      total_return: (b.metrics as any)['Annualized Return'],
-      sharpe_ratio: (b.metrics as any)['Sharpe Ratio'],
-      max_drawdown: (b.metrics as any)['Max Drawdown'],
-      win_rate: (b.metrics as any)['Win Rate'],
+      key: b.taskId,
+      name: b.strategyName,
+      totalReturn: (b.metrics as any)['Annualized Return'],
+      sharpeRatio: (b.metrics as any)['Sharpe Ratio'],
+      maxDrawdown: (b.metrics as any)['Max Drawdown'],
+      winRate: (b.metrics as any)['Win Rate'],
       sqn: null,
-      total_trades: null,
-      _portfolio_weights: null,
+      totalTrades: null,
+      _portfolioWeights: null,
       _recommendations: null,
     }))
   }, [comparisonData, selectedBacktests])
@@ -337,16 +337,16 @@ export default function Comparison() {
               render: (_: any, r: any) => (
                 <Button
                   size="small"
-                  type={selectedIds.includes(r.task_id) ? 'primary' : 'default'}
-                  onClick={() => toggleSelect(r.task_id)}
-                  icon={selectedIds.includes(r.task_id) ? <CheckCircle size={12} weight="fill" /> : undefined}
+                  type={selectedIds.includes(r.taskId) ? 'primary' : 'default'}
+                  onClick={() => toggleSelect(r.taskId)}
+                  icon={selectedIds.includes(r.taskId) ? <CheckCircle size={12} weight="fill" /> : undefined}
                 >
-                  {selectedIds.includes(r.task_id) ? '已选' : '选择'}
+                  {selectedIds.includes(r.taskId) ? '已选' : '选择'}
                 </Button>
               ),
             },
           ]}
-          rowKey="task_id"
+          rowKey="taskId"
           pagination={{ pageSize: 10, size: 'small' }}
           size="small"
           rowSelection={undefined}
@@ -417,7 +417,7 @@ export default function Comparison() {
                   </Card>
 
                   {/* Portfolio weights */}
-                  {tableData.some((row) => row._portfolio_weights) && (
+                  {tableData.some((row) => row._portfolioWeights) && (
                     <Card
                       size="small"
                       title={<span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em' }}>投资组合权重</span>}
@@ -425,12 +425,12 @@ export default function Comparison() {
                       style={{ marginBottom: 16 }}
                     >
                       {tableData.map((row) => (
-                        row._portfolio_weights && (
+                        row._portfolioWeights && (
                           <div key={row.name} style={{ marginBottom: 12 }}>
                             <Text strong style={{ color: '#fafafa', fontSize: 12 }}>{row.name}</Text>
                             <Divider style={{ margin: '6px 0 8px' }} />
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                              {Object.entries(row._portfolio_weights as Record<string, number>).map(([symbol, weight]) => (
+                              {Object.entries(row._portfolioWeights as Record<string, number>).map(([symbol, weight]) => (
                                 <Tag key={symbol} color="blue" style={{ fontSize: 11 }}>
                                   {symbol}: {(weight * 100).toFixed(1)}%
                                 </Tag>
@@ -629,8 +629,8 @@ export default function Comparison() {
                         onChange={setLifecycleStrategyId}
                         style={{ minWidth: 200 }}
                         options={backtests.map((b) => ({
-                          value: b.task_id,
-                          label: b.strategy_name,
+                          value: b.taskId,
+                          label: b.strategyName,
                         }))}
                       />
                       <Button

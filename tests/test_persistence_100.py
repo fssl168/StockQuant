@@ -22,7 +22,6 @@ from stockquant.persistence.persistent_store import (
     NotificationStore,
     OptimizeTaskStore,
     OrderAuditStore,
-    PendingOrderStore,
     SchedulerStore,
     StrategyStore,
 )
@@ -209,32 +208,6 @@ def test_comparison_history_store():
 
 
 # =====================================================================
-# PendingOrderStore 测试
-# =====================================================================
-
-
-def test_pending_order_store():
-    db_url = _make_db_url()
-    init_db(db_url)
-
-    store = _fresh_store(PendingOrderStore, db_url)
-    oid = "order-001"
-    data = {"symbol": "sh600519", "type": "buy", "price": 1800.0, "quantity": 100, "status": "pending"}
-    store[oid] = data
-
-    assert store[oid] is not None
-    assert oid in store
-    assert len(store) == 1
-
-    # pop
-    popped = store.pop(oid)
-    assert popped is not None
-    assert oid not in store
-
-    _cleanup(db_url)
-
-
-# =====================================================================
 # OrderAuditStore 测试
 # =====================================================================
 
@@ -366,7 +339,6 @@ def test_all_stores_concurrent():
         "collect": _fresh_store(CollectTaskStore, db_url),
         "optimize": _fresh_store(OptimizeTaskStore, db_url),
         "comparison": _fresh_store(ComparisonHistoryStore, db_url),
-        "pending": _fresh_store(PendingOrderStore, db_url),
         "audit": _fresh_store(OrderAuditStore, db_url),
         "notification": _fresh_store(NotificationStore, db_url),
         "monitor": _fresh_store(MonitorAlertStore, db_url),
@@ -379,7 +351,6 @@ def test_all_stores_concurrent():
     stores["collect"]["c1"] = {"status": "running"}
     stores["optimize"]["o1"] = {"status": "done"}
     stores["comparison"].append({"strategy_ids": "s1,s2"})
-    stores["pending"]["p1"] = {"symbol": "sh600519"}
     stores["audit"]["a1"] = {"action": "buy"}
     stores["notification"].append({"id": "n1", "type": "info", "title": "t", "message": "m", "time": datetime.now().isoformat(), "read": False})
     stores["monitor"].append({"symbol": "sh600519"})
@@ -391,7 +362,6 @@ def test_all_stores_concurrent():
     assert len(stores["collect"]) >= 1
     assert len(stores["optimize"]) >= 1
     assert len(stores["comparison"]) >= 1
-    assert len(stores["pending"]) >= 1
     assert len(stores["audit"]) >= 1
     assert len(stores["notification"]) >= 1
     assert len(stores["monitor"]) >= 1
@@ -404,7 +374,6 @@ def test_all_stores_concurrent():
         "collect": _fresh_store(CollectTaskStore, db_url),
         "optimize": _fresh_store(OptimizeTaskStore, db_url),
         "comparison": _fresh_store(ComparisonHistoryStore, db_url),
-        "pending": _fresh_store(PendingOrderStore, db_url),
         "audit": _fresh_store(OrderAuditStore, db_url),
         "notification": _fresh_store(NotificationStore, db_url),
         "monitor": _fresh_store(MonitorAlertStore, db_url),
@@ -416,7 +385,6 @@ def test_all_stores_concurrent():
     assert len(new_stores["collect"]) >= 1
     assert len(new_stores["optimize"]) >= 1
     assert len(new_stores["comparison"]) >= 1
-    assert len(new_stores["pending"]) >= 1
     assert len(new_stores["audit"]) >= 1
     assert len(new_stores["notification"]) >= 1
     assert len(new_stores["monitor"]) >= 1

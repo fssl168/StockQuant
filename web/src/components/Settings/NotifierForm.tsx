@@ -7,7 +7,7 @@ interface SettingEntry {
   key: string
   value: unknown
   defaultValue: unknown
-  value_type: string
+  valueType: string
   label: string
   description: string
   secret: boolean
@@ -22,15 +22,15 @@ interface SettingEntry {
 }
 
 const NOTIFICATION_ITEMS: SettingEntry[] = [
-  { key: 'notification.dingtalk_webhook', value: '', defaultValue: '', value_type: 'password', label: 'DingTalk Webhook', description: '', secret: true },
-  { key: 'notification.wechat_webhook', value: '', defaultValue: '', value_type: 'password', label: '企业微信 Webhook', description: '', secret: true },
-  { key: 'notification.telegram_bot_token', value: '', defaultValue: '', value_type: 'password', label: 'Telegram Bot Token', description: '', secret: true },
-  { key: 'notification.feishu_webhook', value: '', defaultValue: '', value_type: 'password', label: '飞书 Webhook URL', description: '', secret: true },
-  { key: 'notification.discord_webhook', value: '', defaultValue: '', value_type: 'password', label: 'Discord Webhook URL', description: '', secret: true },
-  { key: 'notification.pushplus_token', value: '', defaultValue: '', value_type: 'password', label: 'PushPlus Token', description: '', secret: true },
-  { key: 'notification.serverchan_key', value: '', defaultValue: '', value_type: 'password', label: 'Server酱 SendKey', description: '', secret: true },
-  { key: 'notification.custom_webhook_url', value: '', defaultValue: '', value_type: 'password', label: '自定义 Webhook URL', description: '', secret: true },
-  { key: 'notification.email_enabled', value: false, defaultValue: false, value_type: 'boolean', label: '邮件通知', description: '启用邮件推送', secret: false },
+  { key: 'notification.dingtalk_webhook', value: '', defaultValue: '', valueType: 'password', label: 'DingTalk Webhook', description: '', secret: true },
+  { key: 'notification.wechat_webhook', value: '', defaultValue: '', valueType: 'password', label: '企业微信 Webhook', description: '', secret: true },
+  { key: 'notification.telegram_bot_token', value: '', defaultValue: '', valueType: 'password', label: 'Telegram Bot Token', description: '', secret: true },
+  { key: 'notification.feishu_webhook', value: '', defaultValue: '', valueType: 'password', label: '飞书 Webhook URL', description: '', secret: true },
+  { key: 'notification.discord_webhook', value: '', defaultValue: '', valueType: 'password', label: 'Discord Webhook URL', description: '', secret: true },
+  { key: 'notification.pushplus_token', value: '', defaultValue: '', valueType: 'password', label: 'PushPlus Token', description: '', secret: true },
+  { key: 'notification.serverchan_key', value: '', defaultValue: '', valueType: 'password', label: 'Server酱 SendKey', description: '', secret: true },
+  { key: 'notification.custom_webhook_url', value: '', defaultValue: '', valueType: 'password', label: '自定义 Webhook URL', description: '', secret: true },
+  { key: 'notification.email_enabled', value: false, defaultValue: false, valueType: 'boolean', label: '邮件通知', description: '启用邮件推送', secret: false },
 ]
 
 interface NotifierFormProps {
@@ -49,7 +49,7 @@ export default function NotifierForm({ values, onChange }: NotifierFormProps) {
   const renderControl = (item: SettingEntry) => {
     const val = getVal(item.key, item.defaultValue)
 
-    switch (item.value_type) {
+    switch (item.valueType) {
       case 'boolean':
         return <Switch checked={val as boolean} onChange={(v) => onChange(item.key, v)} size="small" />
       case 'password':

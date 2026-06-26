@@ -1,7 +1,7 @@
 import client from './client'
 
 export interface BacktestTask {
-  task_id: string
+  taskId: string
   status: string
   strategyName: string
   strategyCode: string
@@ -15,13 +15,13 @@ export interface BacktestTask {
   updatedAt: string
   metrics: Record<string, unknown>
   trades: unknown[]
-  equity_curve: unknown[]
+  equityCurve: unknown[]
   error: string | null
 }
 
 export const backtestApi = {
   list: () => client.get('/api/backtest') as Promise<BacktestTask[]>,
   get: (id: string) => client.get(`/api/backtest/${id}`) as Promise<BacktestTask>,
-  submit: (data: Omit<BacktestTask, 'task_id' | 'status' | 'created_at' | 'updated_at' | 'metrics' | 'trades' | 'error'>) =>
-    client.post('/api/backtest', data) as Promise<{ task_id: string; status: string }>,
+  submit: (data: Omit<BacktestTask, 'taskId' | 'status' | 'createdAt' | 'updatedAt' | 'metrics' | 'trades' | 'error'>) =>
+    client.post('/api/backtest', data) as Promise<{ taskId: string; status: string }>,
 }

@@ -36,7 +36,7 @@ vi.mock('@/api/data', () => ({
 // Mock client
 vi.mock('@/api/client', () => ({
   default: {
-    get: vi.fn(() => Promise.resolve({ data: { environment: 'calm', max_position_pct: 0.8, max_daily_loss_pct: 0.03, max_drawdown_pct: 0.1 } })),
+    get: vi.fn(() => Promise.resolve({ data: { environment: 'calm', maxPositionPct: 0.8, maxDailyLossPct: 0.03, maxDrawdownPct: 0.1 } })),
     put: vi.fn(() => Promise.resolve()),
     delete: vi.fn(() => Promise.resolve()),
   },

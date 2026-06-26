@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional
 
 from ..pipeline.collection import RawArticle
 
-from .checkpoints import CheckpointResult
 from .corrector import FiveStepCorrector
 from .modes import VerificationMode, get_checkpoints, get_threshold
 

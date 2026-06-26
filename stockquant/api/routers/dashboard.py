@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """F029 仪表盘路由 — 聚合指标"""
 
-from __future__ import annotations
-
 import logging
 
 from typing import Any, Dict, List

@@ -16,21 +16,21 @@ interface HallucinationRecord {
   id: string
   timestamp: string
   agent: string
-  input_summary: string
-  hallucination_type: string
-  detection_method: string
-  original_output: string
-  corrected_output: string
+  inputSummary: string
+  hallucinationType: string
+  detectionMethod: string
+  originalOutput: string
+  correctedOutput: string
   confidence: number
-  user_feedback: string
+  userFeedback: string
 }
 
 interface AnalysisResult {
-  type_distribution: Record<string, number>
-  high_frequency_triggers: { word: string; count: number }[]
-  agent_differences: Record<string, { count: number; top_types: Record<string, number>; avg_confidence: number }>
-  time_trend: Record<string, number>
-  total_count: number
+  typeDistribution: Record<string, number>
+  highFrequencyTriggers: { word: string; count: number }[]
+  agentDifferences: Record<string, { count: number; topTypes: Record<string, number>; avgConfidence: number }>
+  timeTrend: Record<string, number>
+  totalCount: number
 }
 
 type HType = 'fabricated_data' | 'unsupported_claim' | 'temporal_error' | 'source_confusion' | 'logical_fallacy' | 'omission'
@@ -92,15 +92,15 @@ export default function HallucinationPage() {
     },
     {
       title: '类型',
-      dataIndex: 'hallucination_type',
-      key: 'hallucination_type',
+      dataIndex: 'hallucinationType',
+      key: 'hallucinationType',
       width: 120,
       render: (t: HType) => <Tag color={typeColors[t]}>{typeLabels[t] || t}</Tag>,
     },
     {
       title: '输入摘要',
-      dataIndex: 'input_summary',
-      key: 'input_summary',
+      dataIndex: 'inputSummary',
+      key: 'inputSummary',
       ellipsis: true,
     },
     {
@@ -149,7 +149,7 @@ export default function HallucinationPage() {
             <Row gutter={16}>
               <Col span={12}>
                 <Card title="类型分布" size="small">
-                  {Object.entries(analysis.type_distribution).map(([k, v]) => (
+                  {Object.entries(analysis.typeDistribution).map(([k, v]) => (
                     <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <Tag color={typeColors[k as HType] || 'default'}>{typeLabels[k as HType] || k}</Tag>
                       <Text strong>{v}</Text>
@@ -159,7 +159,7 @@ export default function HallucinationPage() {
               </Col>
               <Col span={12}>
                 <Card title="高频触发词" size="small">
-                  {analysis.high_frequency_triggers.slice(0, 10).map((t, i) => (
+                  {analysis.highFrequencyTriggers.slice(0, 10).map((t, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                       <Text>{t.word}</Text>
                       <Text type="secondary">{t.count}次</Text>
@@ -170,12 +170,12 @@ export default function HallucinationPage() {
               <Col span={24}>
                 <Card title="Agent 差异" size="small">
                   <Table
-                    dataSource={Object.entries(analysis.agent_differences).map(([name, data]) => ({ name, ...data }))}
+                    dataSource={Object.entries(analysis.agentDifferences).map(([name, data]) => ({ name, ...data }))}
                     columns={[
                       { title: 'Agent', dataIndex: 'name', key: 'name' },
                       { title: '频次', dataIndex: 'count', key: 'count', width: 60 },
-                      { title: '平均置信度', dataIndex: 'avg_confidence', key: 'avg_confidence', width: 100, render: (v: number) => v.toFixed(2) },
-                      { title: '主要类型', dataIndex: 'top_types', key: 'top_types', render: (v: Record<string, number>) => Object.keys(v).map(k => <Tag key={k}>{k}</Tag>) },
+                      { title: '平均置信度', dataIndex: 'avgConfidence', key: 'avgConfidence', width: 100, render: (v: number) => v.toFixed(2) },
+                      { title: '主要类型', dataIndex: 'topTypes', key: 'topTypes', render: (v: Record<string, number>) => Object.keys(v).map(k => <Tag key={k}>{k}</Tag>) },
                     ]}
                     rowKey={(r) => r.name}
                     size="small"

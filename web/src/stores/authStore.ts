@@ -35,7 +35,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       })
       // 拦截器直接返回响应体裸数据（已 camelCase），无需再读 .data
       const data = res as any
-      const token = data.access_token || data.accessToken
+      const token = data.accessToken
       const user: User = data.user || { username, roles: [] }
       // 补全主角色
       user.role = user.roles?.[0]?.toUpperCase() || 'VIEWER'

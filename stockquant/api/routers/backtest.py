@@ -1,22 +1,18 @@
 # -*- coding: utf-8 -*-
 """回测 API 路由 - 已集成 Celery"""
 
-from __future__ import annotations
-
 import asyncio
-import concurrent.futures
 import logging
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from pydantic import BaseModel
 
-from stockquant.api.schemas import BacktestRequest, BacktestResult, MessageResponse, TaskResponse, UserToken
-from stockquant.api.deps import get_current_user, get_trader_user, get_admin_user
+from stockquant.api.schemas import BacktestRequest, BaseSchemaModel, MessageResponse, UserToken
+from stockquant.api.deps import get_current_user, get_trader_user
 from stockquant.persistence.persistent_store import BacktestTaskStore
 from stockquant.api.websocket import ws_manager
 
@@ -116,14 +112,13 @@ def _run_backtest_with_celery(task_id: str, payload: dict) -> None:
 
 def _run_backtest_sync(task_id: str, payload: dict) -> None:
     """同步执行回测（在线程池中运行）"""
-    from stockquant.engine.cerebro import Cerebro
     
     strategy_name = payload.get("strategy_name", "未命名策略")
     symbols = payload.get("symbols", [])
     start_date = payload.get("start_date", "2024-01-01")
     end_date = payload.get("end_date", "2024-12-31")
     initial_cash = payload.get("initial_cash", 1_000_000)
-    source_config = payload.get("source_config", {})
+    payload.get("source_config", {})
     
     logger.info("=== 回测开始 === task_id=%s, strategy=%s, symbols=%s, timeframe=1d, start=%s, end=%s, cash=%.0f",
                 task_id, strategy_name, symbols, start_date, end_date, initial_cash)
@@ -153,7 +148,7 @@ async def _run_backtest(task_id: str, payload: dict) -> None:
 
 # ============ API 端点 ============
 
-class BacktestResult(BaseModel):
+class BacktestResult(BaseSchemaModel):
     task_id: str
     status: str
     strategy_name: str
@@ -167,7 +162,7 @@ class BacktestResult(BaseModel):
     error: str = ""
 
 
-class TaskResponse(BaseModel):
+class TaskResponse(BaseSchemaModel):
     task_id: str
     status: str
     created_at: str
@@ -254,7 +249,7 @@ async def delete_backtest(task_id: str, _user: UserToken = Depends(get_trader_us
     
     del _tasks[task_id]
     logger.info(f"回测任务已删除 {task_id}")
-    return {"success": True, "task_id": task_id}
+    return {"success": True, "taskId": task_id}
 
 
 @router.get("/backtest/{task_id}/report", summary="导出回测报告")
@@ -288,7 +283,7 @@ async def get_backtest_report(
 @router.post("/backtest/compare-paper", summary="模拟盘vs回测对比")
 async def compare_paper_vs_backtest(payload: dict, _user: UserToken = Depends(get_trader_user)) -> Dict[str, Any]:
     """对比模拟盘实绩与回测结果"""
-    return {"message": "功能开发中", "backtest_id": payload.get("backtest_id", "")}
+    return {"message": "功能开发中", "backtestId": payload.get("backtest_id", "")}
 
 
 # ============ 旧版兼容 ============

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Optional
 
 import pandas as pd
@@ -200,7 +200,7 @@ class AlphaFeedFeed(DataFeed):
     def _fetch_all_akshare(self):
         """降级: 使用 AkShare 拉取数据"""
         try:
-            import akshare as ak
+            import akshare as ak  # noqa: F401
         except ImportError:
             logger.error("AlphaFeed 和 AkShare 均不可用，无法获取数据")
             for symbol in self._symbols:

@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from stockquant.ai.collectors.base import RawInfoItem
 from stockquant.ai.hallucination.pipeline import HallucinationPipeline
@@ -136,7 +136,7 @@ class PipelineOrchestrator:
             orch = get_orchestrator()
             # 尝试异步采集
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 # 已有事件循环，创建任务
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as pool:

@@ -4,14 +4,11 @@
 已实现 JSON 文件持久化 + .env 环境变量联动 + API Key 加密。
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -682,7 +679,7 @@ async def save_settings(payload: SettingsSaveRequest, _user: UserToken = Depends
 
     _save_settings_to_file()
     logger.info(f"配置已更新并持久化: {list(updates.keys())}")
-    return {"success": True, "updated_keys": list(updates.keys())}
+    return {"success": True, "updatedKeys": list(updates.keys())}
 
 
 @router.delete("/settings/{key:path}", response_model=dict, summary="恢复配置默认值")
@@ -741,13 +738,13 @@ async def get_settings_health(_user: UserToken = Depends(get_current_user)) -> D
             env_sourced.append(key)
 
     return {
-        "total_keys": len(_settings),
-        "default_keys": len(_DEFAULT_SETTINGS),
-        "overridden_keys": list(overridden_keys),
-        "env_sourced_keys": env_sourced,
-        "settings_file": str(_SETTINGS_FILE),
-        "settings_file_exists": _SETTINGS_FILE.exists(),
-        "encryption_available": _encryption_available,
+        "totalKeys": len(_settings),
+        "defaultKeys": len(_DEFAULT_SETTINGS),
+        "overriddenKeys": list(overridden_keys),
+        "envSourcedKeys": env_sourced,
+        "settingsFile": str(_SETTINGS_FILE),
+        "settingsFileExists": _SETTINGS_FILE.exists(),
+        "encryptionAvailable": _encryption_available,
     }
 
 

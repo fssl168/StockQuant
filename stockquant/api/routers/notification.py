@@ -1,23 +1,21 @@
 # -*- coding: utf-8 -*-
 """F029 通知推送路由 — 内存 + SQLite 持久化"""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
-from stockquant.api.deps import get_current_user, get_required_user, get_trader_user
+from stockquant.api.deps import get_current_user, get_trader_user
 from stockquant.api.schemas import UserToken
 from stockquant.api.websocket import ws_manager
 from stockquant.api.routers.settings import _settings, _decrypt_value
-from stockquant.persistence.models import Notification, init_db, get_engine
+from stockquant.persistence.models import Notification, get_engine
 from stockquant.persistence.persistent_store import NotificationStore
 
 logger = logging.getLogger("stockquant.api.notification")

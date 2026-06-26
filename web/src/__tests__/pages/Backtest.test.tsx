@@ -8,7 +8,7 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('@/stores/backtestStore', () => ({
   useBacktestStore: vi.fn((selector: any) => {
-    const state = { submitTask: vi.fn(() => Promise.resolve({ task_id: 'test-1' })) }
+    const state = { submitTask: vi.fn(() => Promise.resolve({ taskId: 'test-1' })) }
     return selector ? selector(state) : state
   }),
 }))

@@ -6,13 +6,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from stockquant.agent.tool_registry import tool
 from stockquant.ai.json_utils import robust_json_parse
 from stockquant.ai.models import (
-    ImprovementSuggestion,
-    StrategyIntent,
     StrategyScore,
     ValidationResult,
 )
@@ -164,7 +162,7 @@ def validate_strategy_code(code: str) -> str:
     # Level 2: 导入检查 — 确保只引用 stockquant 内部模块
     allowed_prefixes = ("stockquant", "numpy", "pandas", "datetime", "typing", "abc", "dataclasses", "logging")
     try:
-        tree = compile(code, "<strategy>", "exec")
+        compile(code, "<strategy>", "exec")
         # Simple check: look for import statements in the code
         for line in code.split("\n"):
             stripped = line.strip()

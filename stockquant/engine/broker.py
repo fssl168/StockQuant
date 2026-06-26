@@ -6,7 +6,6 @@ from __future__ import annotations
 import json
 import logging
 from abc import ABC, abstractmethod
-logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +15,8 @@ from stockquant.models.order import Order, OrderSide, OrderType
 from stockquant.events import EventType as OrderStatus, EventType
 from stockquant.models.bar import BarData
 from stockquant.models.trade import TradeData
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -628,7 +629,6 @@ class PaperBroker(Broker):
         Returns:
             对比结果字典，包含误差、差异分析
         """
-        import math
 
         if not backtest_equity or not paper_equity:
             return {"error": "No data to compare"}

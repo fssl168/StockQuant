@@ -262,7 +262,7 @@ export default function Dashboard() {
         <Table
           dataSource={tasks}
           columns={backtestColumns}
-          rowKey="task_id"
+          rowKey="taskId"
           pagination={false}
           size="small"
           scroll={{ x: 600 }}

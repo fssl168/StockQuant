@@ -4,7 +4,6 @@
 
 import json
 import logging
-import warnings
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -27,7 +26,6 @@ from stockquant.persistence.models import (
     OpAuditLog,
     Order,
     OrderAudit,
-    PendingOrder,
     PipelineTask,
     Position,
     RiskEvent,
@@ -41,21 +39,8 @@ from stockquant.persistence.models import (
 
 logger = logging.getLogger(__name__)
 
-# ── 废弃功能标记 ─────────────────────────────────────────────────────────
-
-def _warn_pending_order() -> None:
-    """PendingOrder 相关函数已废弃，统一使用 Order 模型"""
-    warnings.warn(
-        "PendingOrder 已废弃，功能并入 Order 模型。"
-        "请使用 save_order/get_order/list_orders/delete_order 替代。",
-        DeprecationWarning,
-        stacklevel=3,
-    )
-
-
 def _session_factory(engine_url: str):
     """Create a sessionmaker bound to the given engine URL."""
-    from sqlalchemy.orm import sessionmaker
     return sessionmaker(bind=get_engine(engine_url))
 
 
@@ -507,7 +492,7 @@ def get_chat_messages(
         return [
             {
                 "id": row.id,
-                "user_id": row.user_id,
+                "userId": row.user_id,
                 "role": row.role,
                 "content": row.content,
                 "timestamp": row.created_at.isoformat(),
@@ -574,9 +559,9 @@ def list_chat_sessions(
 
             result.append({
                 "id": row.session_id,
-                "user_id": user_id or "",
-                "created_at": row.latest_at.isoformat() if row.latest_at else None,
-                "message_count": row.message_count,
+                "userId": user_id or "",
+                "createdAt": row.latest_at.isoformat() if row.latest_at else None,
+                "messageCount": row.message_count,
                 "title": title,
             })
         return result
@@ -1079,107 +1064,6 @@ def delete_comparison_history(engine_url: str, user_id: Optional[str] = None, hi
         logger.info("Deleted comparison history id=%s user=%s", history_id, user_id)
         return True
 
-
-# ── 待处理订单持久化 (DEPRECATED — 请使用 Order 模型替代) ──
-
-def save_pending_order(engine_url: str, user_id: Optional[str] = None, order_id: str = "", symbol: str = "", type: str = "", price: float = 0.0, quantity: int = 0, status: str = "pending") -> None:
-    """[DEPRECATED] 保存或更新待处理订单 — 请使用 save_order 替代"""
-    _warn_pending_order()
-    """保存或更新待处理订单（按 user_id 存储）。"""
-    session_factory = _session_factory(engine_url)
-    effective_uid = user_id or ""
-
-    with session_factory() as session:
-        stmt = select(PendingOrder).where(PendingOrder.id == order_id, PendingOrder.user_id == effective_uid)
-        order = session.execute(stmt).scalars().first()
-        if order:
-            order.symbol = symbol
-            order.type = type
-            order.price = price
-            order.quantity = quantity
-            order.status = status
-        else:
-            order = PendingOrder(
-                id=order_id,
-                user_id=effective_uid,
-                symbol=symbol,
-                type=type,
-                price=price,
-                quantity=quantity,
-                status=status,
-                created_at=datetime.now(),
-            )
-            session.add(order)
-        session.commit()
-    logger.info("Saved pending order id=%s user=%s symbol=%s", order_id, user_id, symbol)
-
-
-def get_pending_order(engine_url: str, user_id: Optional[str] = None, order_id: str = "") -> Optional[Dict[str, Any]]:
-    """[DEPRECATED] 获取待处理订单 — 请使用 get_order 替代"""
-    _warn_pending_order()
-    """获取待处理订单（按 user_id 过滤）。"""
-    session_factory = _session_factory(engine_url)
-    effective_uid = user_id or ""
-
-    with session_factory() as session:
-        stmt = select(PendingOrder).where(PendingOrder.id == order_id, PendingOrder.user_id == effective_uid)
-        order = session.execute(stmt).scalars().first()
-        if order:
-            return {
-                "id": order.id,
-                "user_id": order.user_id,
-                "symbol": order.symbol,
-                "type": order.type,
-                "price": order.price,
-                "quantity": order.quantity,
-                "status": order.status,
-                "created_at": order.created_at.isoformat() if order.created_at else None,
-            }
-        return None
-
-
-def list_pending_orders(engine_url: str, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """[DEPRECATED] 获取待处理订单列表 — 请使用 list_orders 替代"""
-    _warn_pending_order()
-    """获取待处理订单列表（按 user_id 过滤）。"""
-    session_factory = _session_factory(engine_url)
-
-    with session_factory() as session:
-        stmt = select(PendingOrder).order_by(PendingOrder.created_at.desc())
-        if user_id is not None:
-            stmt = stmt.where(PendingOrder.user_id == user_id)
-        orders = session.execute(stmt).scalars().all()
-        return [
-            {
-                "id": o.id,
-                "user_id": o.user_id,
-                "symbol": o.symbol,
-                "type": o.type,
-                "price": o.price,
-                "quantity": o.quantity,
-                "status": o.status,
-                "created_at": o.created_at.isoformat() if o.created_at else None,
-            }
-            for o in orders
-        ]
-
-
-def delete_pending_order(engine_url: str, user_id: Optional[str] = None, order_id: str = "") -> bool:
-    """[DEPRECATED] 删除待处理订单 — 请使用 delete_order 替代"""
-    _warn_pending_order()
-    """删除待处理订单（需 user_id 验证）。"""
-    session_factory = _session_factory(engine_url)
-    effective_uid = user_id or ""
-
-    with session_factory() as session:
-        stmt = select(PendingOrder).where(PendingOrder.id == order_id, PendingOrder.user_id == effective_uid)
-        order = session.execute(stmt).scalars().first()
-        if order is None:
-            return False
-        session.delete(order)
-        session.commit()
-        logger.info("Deleted pending order id=%s user=%s", order_id, user_id)
-        return True
 
 
 # ── 订单审计持久化 ──
@@ -1804,15 +1688,15 @@ def list_op_audit_logs(engine_url: str, user_id: str, limit: int = 50) -> List[D
         return [
             {
                 "id": r.id,
-                "user_id": r.user_id,
+                "userId": r.user_id,
                 "action": r.action,
-                "resource_type": r.resource_type,
-                "resource_id": r.resource_id,
+                "resourceType": r.resource_type,
+                "resourceId": r.resource_id,
                 "detail": r.detail,
-                "ip_address": r.ip_address,
-                "user_agent": r.user_agent,
-                "status_code": r.status_code,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "ipAddress": r.ip_address,
+                "userAgent": r.user_agent,
+                "statusCode": r.status_code,
+                "createdAt": r.created_at.isoformat() if r.created_at else None,
             }
             for r in rows
         ]
@@ -2128,11 +2012,11 @@ def delete_pipeline_task(engine_url: str, user_id: Optional[str] = None, task_id
 def _pipeline_task_to_dict(task: PipelineTask) -> Dict[str, Any]:
     """ORM 行转字典"""
     d = {
-        "task_id": task.task_id,
-        "user_id": task.user_id,
+        "taskId": task.task_id,
+        "userId": task.user_id,
         "status": task.status,
-        "created_at": task.created_at.isoformat() if task.created_at else None,
-        "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+        "createdAt": task.created_at.isoformat() if task.created_at else None,
+        "completedAt": task.completed_at.isoformat() if task.completed_at else None,
     }
     if task.symbols:
         try:

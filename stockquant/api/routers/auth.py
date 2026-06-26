@@ -1,20 +1,19 @@
 # -*- coding: utf-8 -*-
 """F029 认证路由 — JWT 登录/注册"""
 
-from __future__ import annotations
-
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 
 from stockquant.api.deps import get_current_user
-from stockquant.persistence.repository import get_user as db_get_user, save_user as db_save_user
+from stockquant.persistence.repository_v2 import Repository
 
 router = APIRouter(tags=["auth"])
+
+_repo = Repository.instance()
 
 logger = logging.getLogger("stockquant.auth")
 
@@ -52,10 +51,10 @@ except ImportError:
 
 def _ensure_default_admin(db_url: str) -> None:
     """确保 admin 用户在数据库中已存在（首次启动自动创建）。"""
-    existing = db_get_user(db_url, "admin")
+    existing = _repo.get_user(db_url, "admin")
     if existing is None:
         try:
-            db_save_user(
+            _repo.save_user(
                 engine_url=db_url,
                 user_id="admin",
                 username="admin",
@@ -111,7 +110,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     _ensure_default_admin(db_url)
 
     # 优先从数据库查询
-    user_data = db_get_user(db_url, form_data.username)
+    user_data = _repo.get_user(db_url, form_data.username)
     if user_data:
         user = {
             "username": user_data["username"],
@@ -146,8 +145,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         "role": (roles[0] if roles else "viewer").upper(),
     })
     return {
-        "access_token": access_token,
-        "token_type": "bearer",
+        "accessToken": access_token,
+        "tokenType": "bearer",
         "user": {
             "username": user["username"],
             "roles": roles,
@@ -166,11 +165,10 @@ async def register(payload: dict):
         raise HTTPException(status_code=400, detail="用户名和密码不能为空")
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="密码长度至少6位")
-    if db_get_user(db_url, username) is not None:
+    if _repo.get_user(db_url, username) is not None:
         raise HTTPException(status_code=409, detail="用户名已存在")
 
-    import uuid
-    db_save_user(
+    _repo.save_user(
         engine_url=db_url,
         user_id=username,
         username=username,
@@ -187,7 +185,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     """获取当前登录用户信息 — 从数据库读取"""
     username = current_user.get("sub", "anonymous")
     db_url = _get_db_url()
-    user_data = db_get_user(db_url, username)
+    user_data = _repo.get_user(db_url, username)
     if user_data:
         roles = user_data.get("roles", '["user"]')
         if isinstance(roles, str):

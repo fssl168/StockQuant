@@ -7,7 +7,7 @@ interface SettingEntry {
   key: string
   value: unknown
   defaultValue: unknown
-  value_type: string
+  valueType: string
   label: string
   description: string
   secret: boolean
@@ -28,15 +28,15 @@ const isVisible = (item: SettingEntry, allValues: Record<string, unknown>): bool
 }
 
 const AI_MODEL_ITEMS: SettingEntry[] = [
-  { key: 'ai.provider', value: 'openai', defaultValue: 'openai', value_type: 'select', label: 'AI 模型', description: '主模型', secret: false, options: [{ value: 'openai', label: 'OpenAI' }, { value: 'anthropic', label: 'Anthropic' }, { value: 'custom', label: '自定义' }] },
-  { key: 'ai.model', value: 'gpt-4o', defaultValue: 'gpt-4o', value_type: 'string', label: '主模型', description: 'OpenAI / 兼容 API 模型名称', secret: false, when: { field: 'ai.provider', values: ['openai', 'custom'] } },
-  { key: 'ai.api_key', value: '', defaultValue: '', value_type: 'password', label: 'API Key', description: 'OpenAI / 兼容 API 密钥', secret: true },
-  { key: 'ai.api_base', value: '', defaultValue: '', value_type: 'string', label: 'API Base URL', description: '自定义 API 地址（留空用官方默认）', secret: false },
-  { key: 'ai.temperature', value: 0.7, defaultValue: 0.7, value_type: 'float', label: 'Temperature', description: '生成温度 (0-2)', secret: false, min: 0, max: 2, step: 0.1, scale: 10, slider: true },
-  { key: 'ai.max_tokens', value: 4096, defaultValue: 4096, value_type: 'number', label: 'Max Tokens', description: '单次最大生成 token 数', secret: false, min: 256, max: 128000, step: 256 },
-  { key: 'ai.anthropic_model', value: 'claude-sonnet-4-20250514', defaultValue: 'claude-sonnet-4-20250514', value_type: 'string', label: 'Anthropic 模型', description: 'Claude 模型名称', secret: false, when: { field: 'ai.provider', values: ['anthropic'] } },
-  { key: 'ai.anthropic_api_key', value: '', defaultValue: '', value_type: 'password', label: 'Anthropic API Key', description: 'Anthropic API 密钥', secret: true },
-  { key: 'ai.anthropic_api_base', value: '', defaultValue: '', value_type: 'string', label: 'Anthropic API Base', description: '自定义 Anthropic API 地址', secret: false },
+  { key: 'ai.provider', value: 'openai', defaultValue: 'openai', valueType: 'select', label: 'AI 模型', description: '主模型', secret: false, options: [{ value: 'openai', label: 'OpenAI' }, { value: 'anthropic', label: 'Anthropic' }, { value: 'custom', label: '自定义' }] },
+  { key: 'ai.model', value: 'gpt-4o', defaultValue: 'gpt-4o', valueType: 'string', label: '主模型', description: 'OpenAI / 兼容 API 模型名称', secret: false, when: { field: 'ai.provider', values: ['openai', 'custom'] } },
+  { key: 'ai.api_key', value: '', defaultValue: '', valueType: 'password', label: 'API Key', description: 'OpenAI / 兼容 API 密钥', secret: true },
+  { key: 'ai.api_base', value: '', defaultValue: '', valueType: 'string', label: 'API Base URL', description: '自定义 API 地址（留空用官方默认）', secret: false },
+  { key: 'ai.temperature', value: 0.7, defaultValue: 0.7, valueType: 'float', label: 'Temperature', description: '生成温度 (0-2)', secret: false, min: 0, max: 2, step: 0.1, scale: 10, slider: true },
+  { key: 'ai.max_tokens', value: 4096, defaultValue: 4096, valueType: 'number', label: 'Max Tokens', description: '单次最大生成 token 数', secret: false, min: 256, max: 128000, step: 256 },
+  { key: 'ai.anthropic_model', value: 'claude-sonnet-4-20250514', defaultValue: 'claude-sonnet-4-20250514', valueType: 'string', label: 'Anthropic 模型', description: 'Claude 模型名称', secret: false, when: { field: 'ai.provider', values: ['anthropic'] } },
+  { key: 'ai.anthropic_api_key', value: '', defaultValue: '', valueType: 'password', label: 'Anthropic API Key', description: 'Anthropic API 密钥', secret: true },
+  { key: 'ai.anthropic_api_base', value: '', defaultValue: '', valueType: 'string', label: 'Anthropic API Base', description: '自定义 Anthropic API 地址', secret: false },
 ]
 
 interface LLMConfigFormProps {
@@ -55,7 +55,7 @@ export default function LLMConfigForm({ values, onChange }: LLMConfigFormProps) 
   const renderControl = (item: SettingEntry) => {
     const val = getVal(item.key, item.defaultValue)
 
-    switch (item.value_type) {
+    switch (item.valueType) {
       case 'boolean':
         return <Switch checked={val as boolean} onChange={(v) => onChange(item.key, v)} size="small" />
       case 'select':

@@ -14,7 +14,7 @@ describe('Strategy API', () => {
 
   // ---- list ----
   it('strategyApi.list should call GET /strategy', async () => {
-    const mockList = [{ id: 's1', name: 'test', code: 'code', description: '', parameters: {}, created_at: '', updated_at: '' }]
+    const mockList = [{ id: 's1', name: 'test', code: 'code', description: '', parameters: {}, createdAt: '', updatedAt: '' }]
     vi.mocked(client.get).mockResolvedValueOnce(mockList)
     const result = await strategyApi.list()
     expect(client.get).toHaveBeenCalledWith('/strategy')
@@ -29,7 +29,7 @@ describe('Strategy API', () => {
 
   // ---- create ----
   it('strategyApi.create should call POST /strategy with data', async () => {
-    const mockCreated = { id: 's1', name: 'test', code: 'code', description: '', parameters: {}, created_at: '2024-01-01', updated_at: '2024-01-01' }
+    const mockCreated = { id: 's1', name: 'test', code: 'code', description: '', parameters: {}, createdAt: '2024-01-01', updatedAt: '2024-01-01' }
     vi.mocked(client.post).mockResolvedValueOnce(mockCreated)
     const payload = { name: 'test', code: 'code', description: '', parameters: {} }
     const result = await strategyApi.create(payload)
@@ -39,7 +39,7 @@ describe('Strategy API', () => {
 
   // ---- get ----
   it('strategyApi.get should call GET /strategy/:id', async () => {
-    const mockStrategy = { id: 's1', name: 'test', code: 'code', description: '', parameters: {}, created_at: '', updated_at: '' }
+    const mockStrategy = { id: 's1', name: 'test', code: 'code', description: '', parameters: {}, createdAt: '', updatedAt: '' }
     vi.mocked(client.get).mockResolvedValueOnce(mockStrategy)
     const result = await strategyApi.get('s1')
     expect(client.get).toHaveBeenCalledWith('/strategy/s1')
@@ -48,7 +48,7 @@ describe('Strategy API', () => {
 
   // ---- update ----
   it('strategyApi.update should call PUT /strategy/:id with partial data', async () => {
-    const mockUpdated = { id: 's1', name: 'updated', code: 'new code', description: '', parameters: {}, created_at: '', updated_at: '' }
+    const mockUpdated = { id: 's1', name: 'updated', code: 'new code', description: '', parameters: {}, createdAt: '', updatedAt: '' }
     vi.mocked(client.put).mockResolvedValueOnce(mockUpdated)
     const payload = { name: 'updated', code: 'new code' }
     const result = await strategyApi.update('s1', payload)

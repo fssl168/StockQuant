@@ -17,7 +17,6 @@ from stockquant.persistence.models import (
     ChatMessage,
     Notification,
     EquitySnapshot as EquitySnapshotModel,
-    PositionSnapshot,
     StrategyModel,
     get_engine,
 )
@@ -139,9 +138,12 @@ class Repository:
                       metrics: Optional[Dict] = None, equity_curve: Optional[List] = None,
                       trades_summary: Optional[List[Dict]] = None,
                       engine_url: Optional[str] = None) -> int:
-        if metrics is None: metrics = {}
-        if equity_curve is None: equity_curve = []
-        if trades_summary is None: trades_summary = []
+        if metrics is None:
+            metrics = {}
+        if equity_curve is None:
+            equity_curve = []
+        if trades_summary is None:
+            trades_summary = []
         url = self._get_engine_url(engine_url)
         sf = _session_factory(url)
         with sf() as session:

@@ -2,11 +2,9 @@
 """数据持久化 - SQLAlchemy ORM 模型 (多租户重构)"""
 
 
-import json
 import logging
 import os
-import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Any
 
 from sqlalchemy import (
@@ -20,14 +18,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
-    event,
     func,
-    text as _sqla_text,
 )
-from sqlalchemy.dialects.postgresql import JSONB as _JSONB
 from sqlalchemy.engine import Engine
-from sqlalchemy import text as sqlalchemy_text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 logger = logging.getLogger(__name__)
 
@@ -450,32 +444,6 @@ class ComparisonHistory(Base):
 
     __table_args__ = (
         Index("ix_comparison_user_id", "user_id"),
-    )
-
-
-# ── PendingOrder 已废弃，功能并入 Order 模型 ──
-# 保留空类用于兼容旧的 Alembic migration 依赖
-# 实际使用请改用 Order 模型（stockquant.persistence.models.Order）
-
-
-class PendingOrder(Base):
-    """[DEPRECATED] 待处理订单 — 已废弃，功能并入 Order 模型"""
-    __tablename__ = "pending_orders"
-    # 已废弃：所有操作通过 stockquant.persistence.models.Order 进行
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
-    symbol: Mapped[str] = mapped_column(String(16), nullable=False)
-    type: Mapped[str] = mapped_column(String(20), nullable=False)
-    price: Mapped[float] = mapped_column(Float, nullable=False)
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=func.now()
-    )
-
-    __table_args__ = (
-        Index("ix_pending_order_user_id", "user_id"),
     )
 
 

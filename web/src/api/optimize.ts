@@ -9,7 +9,7 @@ import { OptimizeConfig, OptimizeResult } from '../types'
  */
 export async function runOptimization(config: OptimizeConfig): Promise<string> {
   const data: any = await client.post('/api/backtest/optimize', config)
-  return data.task_id
+  return data.taskId
 }
 
 /**

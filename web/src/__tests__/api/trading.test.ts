@@ -86,9 +86,9 @@ describe('Trading API', () => {
         quantity: 100,
       })
       expect(order.status).toBe('SUBMITTED')
-      await tradingApi.cancelOrder((order as any).order_id)
+      await tradingApi.cancelOrder((order as any).orderId)
       const updatedOrders = await tradingApi.getOrders()
-      const updated = updatedOrders.find((o: Order) => (o as any).order_id === (order as any).order_id)
+      const updated = updatedOrders.find((o: Order) => (o as any).orderId === (order as any).orderId)
       expect(updated!.status).toBe('CANCELLED')
     })
 
@@ -100,8 +100,8 @@ describe('Trading API', () => {
         price: 1800,
         quantity: 100,
       })
-      await tradingApi.cancelOrder((order as any).order_id)
-      await expect(tradingApi.cancelOrder((order as any).order_id)).rejects.toThrow()
+      await tradingApi.cancelOrder((order as any).orderId)
+      await expect(tradingApi.cancelOrder((order as any).orderId)).rejects.toThrow()
     })
   })
 

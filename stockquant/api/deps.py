@@ -7,7 +7,7 @@ import os
 from enum import Enum
 from typing import Optional
 
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from stockquant.api.schemas import UserToken

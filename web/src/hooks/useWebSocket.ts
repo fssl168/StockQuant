@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 
 export interface WSMessage {
   type: string
-  task_id?: string
+  taskId?: string
   data: unknown
   timestamp: string
 }

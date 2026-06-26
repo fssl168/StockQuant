@@ -8,6 +8,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+import pandas as pd
 
 from stockquant.agent.tool_registry import tool
 
@@ -101,7 +102,6 @@ def generate_chart_json(
             })
 
         # 添加 EMA 线
-        ema10 = []
         if n >= 10:
             result = np.zeros(n)
             result[0] = closes[0]

@@ -4,8 +4,7 @@
 from __future__ import annotations
 
 import logging
-import os
-from typing import Dict, List, Optional, Set
+from typing import Dict, Optional, Set
 
 from fastapi import WebSocket
 from jose import jwt, JWTError
@@ -58,7 +57,7 @@ class WebSocketManager:
         if token:
             payload = _verify_token(token)
             if payload is None:
-                logger.warning(f"WebSocket 认证失败: 无效的 token")
+                logger.warning("WebSocket 认证失败: 无效的 token")
                 await websocket.close(code=4001, reason="Invalid token")
                 return False
             # 存储认证信息

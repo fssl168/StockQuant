@@ -78,5 +78,5 @@ class WeChatNotifier:
 
         content = f"[AI信号] {symbol} {'买入' if side == 'BUY' else '卖出'} 置信度:{confidence:.0%}"
         if reasoning:
-            content += f"\n推理: " + " | ".join(reasoning[:3])
+            content += "\n推理: " + " | ".join(reasoning[:3])
         return self.send(content)

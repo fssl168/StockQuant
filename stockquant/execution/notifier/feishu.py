@@ -108,7 +108,6 @@ class FeishuNotifier(Notifier):
         severity = alert_data.get("severity", "warning")
         action = alert_data.get("action", "")
 
-        emoji = "red_circle" if severity == "critical" else "large_orange_circle"
         title = f"风控告警: {symbol}"
         content = (
             f"**{rule}**\n\n"

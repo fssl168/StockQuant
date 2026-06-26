@@ -48,7 +48,6 @@ class L3Store:
         try:
             from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
             from sqlalchemy.orm import sessionmaker
-            from stockquant.persistence.models import Base
 
             # 确保 URL 使用 asyncpg 驱动
             url = self._db_url
@@ -90,7 +89,6 @@ class L3Store:
 
     async def _ensure_pgvector(self) -> None:
         """确保 pgvector 扩展已安装，并创建表结构和默认用户"""
-        import asyncio
         from stockquant.persistence.models import Base, UserModel
         from sqlalchemy import select
 
@@ -336,7 +334,7 @@ class L3Store:
         优先使用 pgvector 向量检索，降级为关键词匹配。
         """
         from stockquant.persistence.models import L3Memory
-        from sqlalchemy import select, func
+        from sqlalchemy import select
 
         async with self._session_factory() as session:
             if self._has_pgvector:
@@ -367,7 +365,6 @@ class L3Store:
 
     async def _search_vector(self, session, query: str, top_k: int) -> List[Dict[str, Any]]:
         """pgvector 向量检索（需要 Embedding 服务）"""
-        from stockquant.persistence.models import L3Memory
         from sqlalchemy import text
 
         # 尝试获取查询向量（如果有 embedding 服务）

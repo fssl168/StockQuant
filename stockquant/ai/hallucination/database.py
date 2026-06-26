@@ -10,12 +10,11 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from stockquant.persistence.models import (
-    Base,
     HallucinationRecord,
     get_engine,
     init_db,
 )
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 logger = logging.getLogger("stockquant.ai.hallucination.database")
 
@@ -118,11 +117,11 @@ class HallucinationDatabase:
 
         if not records:
             return {
-                "type_distribution": {},
-                "high_frequency_triggers": [],
-                "agent_differences": {},
-                "time_trend": {},
-                "total_count": 0,
+                "typeDistribution": {},
+                "highFrequencyTriggers": [],
+                "agentDifferences": {},
+                "timeTrend": {},
+                "totalCount": 0,
             }
 
         # 1. 类型分布
@@ -152,8 +151,8 @@ class HallucinationDatabase:
             avg_confidence = sum(r.confidence for r in agent_recs) / len(agent_recs)
             agent_stats[agent_name] = {
                 "count": len(agent_recs),
-                "top_types": dict(types.most_common(5)),
-                "avg_confidence": round(avg_confidence, 3),
+                "topTypes": dict(types.most_common(5)),
+                "avgConfidence": round(avg_confidence, 3),
             }
 
         # 4. 时间趋势（按天统计）
@@ -165,11 +164,11 @@ class HallucinationDatabase:
         time_trend = dict(sorted(day_counter.items()))
 
         return {
-            "type_distribution": type_distribution,
-            "high_frequency_triggers": high_frequency_triggers,
-            "agent_differences": agent_stats,
-            "time_trend": time_trend,
-            "total_count": len(records),
+            "typeDistribution": type_distribution,
+            "highFrequencyTriggers": high_frequency_triggers,
+            "agentDifferences": agent_stats,
+            "timeTrend": time_trend,
+            "totalCount": len(records),
         }
 
     def optimize_prompt(self) -> Dict[str, Any]:
@@ -187,7 +186,7 @@ class HallucinationDatabase:
         priority_agents: List[str] = []
 
         # 基于类型分布生成建议
-        type_dist = patterns.get("type_distribution", {})
+        type_dist = patterns.get("typeDistribution", {})
         for h_type, count in type_dist.items():
             if count >= 3:
                 suggestion = self._type_to_suggestion(h_type, count)
@@ -200,7 +199,7 @@ class HallucinationDatabase:
                 banned_patterns.append(banned)
 
         # 基于高频触发词生成建议
-        triggers = patterns.get("high_frequency_triggers", [])
+        triggers = patterns.get("highFrequencyTriggers", [])
         if triggers:
             top_words = ", ".join(t["word"] for t in triggers[:5])
             suggestions.append({
@@ -210,7 +209,7 @@ class HallucinationDatabase:
             })
 
         # 基于各 Agent 差异确定优先优化对象
-        agent_diff = patterns.get("agent_differences", {})
+        agent_diff = patterns.get("agentDifferences", {})
         for agent_name, stats in sorted(
             agent_diff.items(), key=lambda x: x[1].get("count", 0), reverse=True
         ):
@@ -219,7 +218,7 @@ class HallucinationDatabase:
                 suggestions.append({
                     "type": "agent_optimization",
                     "description": f"Agent '{agent_name}' 幻觉频次 {stats['count']}，"
-                                   f"主要类型: {list(stats.get('top_types', {}).keys())}",
+                                   f"主要类型: {list(stats.get('topTypes', {}).keys())}",
                     "priority": "high",
                 })
 
@@ -233,8 +232,8 @@ class HallucinationDatabase:
 
         return {
             "suggestions": suggestions,
-            "priority_agents": priority_agents,
-            "banned_patterns": banned_patterns,
+            "priorityAgents": priority_agents,
+            "bannedPatterns": banned_patterns,
         }
 
     @staticmethod
@@ -244,13 +243,13 @@ class HallucinationDatabase:
             "id": record.id,
             "timestamp": record.timestamp.isoformat() if record.timestamp else None,
             "agent": record.agent,
-            "input_summary": record.input_summary,
-            "hallucination_type": record.hallucination_type,
-            "detection_method": record.detection_method,
-            "original_output": record.original_output,
-            "corrected_output": record.corrected_output,
+            "inputSummary": record.input_summary,
+            "hallucinationType": record.hallucination_type,
+            "detectionMethod": record.detection_method,
+            "originalOutput": record.original_output,
+            "correctedOutput": record.corrected_output,
             "confidence": record.confidence,
-            "user_feedback": record.user_feedback,
+            "userFeedback": record.user_feedback,
         }
 
     @staticmethod
@@ -343,17 +342,17 @@ class HallucinationDatabase:
                 "emergency_mode": False,
             }
 
-        # 幻觉记录（verified 为 False 或 hallucination_type 非空）
+        # 幻觉记录（verified 为 False 或 hallucinationType 非空）
         hallucination_records = [
             r for r in recent
-            if r.get("hallucination_type") and r.get("verified", True) is False
+            if r.get("hallucinationType") and r.get("verified", True) is False
         ]
         n_hallucinations = len(hallucination_records)
 
         # 连续幻觉次数（从最近往前数）
         consecutive = 0
         for r in reversed(recent):
-            if r.get("hallucination_type") and r.get("verified", True) is False:
+            if r.get("hallucinationType") and r.get("verified", True) is False:
                 consecutive += 1
             else:
                 break

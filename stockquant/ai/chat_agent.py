@@ -3,13 +3,11 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Dict, Generator, List, Optional
 
 from stockquant.agent.llm_adapter import LLMAdapter
 from stockquant.agent.tool_registry import ToolRegistry
-from stockquant.agent.react_agent import ReActAgent
 
 logger = logging.getLogger("stockquant.ai")
 
@@ -236,7 +234,7 @@ class ChatAgent:
             self._tool_registry.register(stop_monitoring)
             self._tool_registry.register(check_monitor_status)
             try:
-                from stockquant.ai.monitor_agent import MonitorAgent
+                from stockquant.ai.monitor_agent import MonitorAgent  # noqa: F401
                 # monitor_agent 的 scan / brief / summary 通过已有工具覆盖
             except ImportError:
                 logger.debug("MonitorAgent not available")

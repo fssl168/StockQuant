@@ -9,7 +9,7 @@ interface TradeRecord {
   quantity: number
   price: number
   pnl?: number
-  trade_id?: string
+  tradeId?: string
   commission?: number
   slippage?: number
   notional?: number
@@ -21,7 +21,7 @@ interface TradeTableProps {
 
 export default function TradeTable({ trades }: TradeTableProps) {
   const columns = [
-    { title: '交易ID', dataIndex: 'trade_id', key: 'trade_id', width: 90, render: (v: string) => (
+    { title: '交易ID', dataIndex: 'tradeId', key: 'tradeId', width: 90, render: (v: string) => (
       <Text style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{v?.slice(0, 8) ?? '-'}</Text>
     )},
     { title: '时间', dataIndex: 'date', key: 'date', width: 140, render: (d: string) => d ? new Date(d).toLocaleString() : '-' },

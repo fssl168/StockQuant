@@ -102,7 +102,7 @@ async def delete_strategy(strategy_id: str, _user: UserToken = Depends(get_trade
 
     del _strategies[strategy_id]
     logger.info(f"策略已删除: {strategy_id}")
-    return {"success": True, "strategy_id": strategy_id}
+    return {"success": True, "strategyId": strategy_id}
 
 
 @admin_router.delete("/strategy/clear-all", response_model=MessageResponse, summary="清空所有策略")
@@ -110,12 +110,13 @@ async def clear_all_strategies() -> MessageResponse:
     """删除所有已保存的策略（包括内存缓存和数据库）"""
     global _strategies
     from stockquant.persistence.persistent_store import _get_db_url
-    from stockquant.persistence.repository import delete_all_strategies
+    from stockquant.persistence.repository_v2 import Repository
+    _repo = Repository.instance()
     count = len(_strategies)
     _strategies.clear()
     try:
-        delete_all_strategies(_get_db_url())
+        _repo.delete_all_strategies(_get_db_url())
     except Exception as e:
         logger.warning(f"清空策略数据库记录失败: {e}")
     logger.info(f"已清空所有策略: {count} 个")
-    return {"success": True, "deleted_count": count}
+    return {"success": True, "deletedCount": count}

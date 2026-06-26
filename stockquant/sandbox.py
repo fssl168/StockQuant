@@ -12,10 +12,8 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import io
 import logging
 import os
-import sys
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -106,7 +104,7 @@ class StrategySandbox:
         self.timeout = timeout
         self.memory_limit_mb = memory_limit_mb
         self.validator = StrategyCodeValidator()
-        self._compiled_code: Dict[str, code] = {}
+        self._compiled_code: Dict[str, Any] = {}
         
     def execute(
         self, 
@@ -217,7 +215,7 @@ def get_strategy_sandbox() -> StrategySandbox:
     global _sandbox
     if _sandbox is None:
         from stockquant.config import get_config
-        config = get_config()
+        get_config()
         _sandbox = StrategySandbox(
             timeout=30,
             memory_limit_mb=256,

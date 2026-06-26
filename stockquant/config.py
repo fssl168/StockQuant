@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings
 import logging

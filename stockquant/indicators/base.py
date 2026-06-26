@@ -209,7 +209,7 @@ class IndicatorProxy:
             fig.savefig(buf, format="svg", bbox_inches="tight")
             buf.seek(0)
             svg_bytes = buf.read()
-            encoded = base64.b64encode(svg_bytes).decode("utf-8")
+            base64.b64encode(svg_bytes).decode("utf-8")
             # matplotlib savefig 不支持直接 SVG 到 base64 内联显示
             # 改为直接返回 SVG 字符串
             return svg_bytes.decode("utf-8")

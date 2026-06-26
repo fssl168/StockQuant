@@ -1,4 +1,4 @@
-﻿import { Card, Form, Input, Select, Space, Typography, Button, Alert, Tag, Divider, InputNumber } from 'antd'
+import { Card, Form, Input, Select, Space, Typography, Button, Alert, Tag, Divider, InputNumber } from 'antd'
 import { ApiOutlined, CheckCircleOutlined, DisconnectOutlined, ExperimentOutlined } from '@ant-design/icons'
 import type { SettingEntry } from './types'
 
@@ -10,7 +10,7 @@ interface BrokerSettingsProps {
 }
 
 const BROKER_ITEMS: SettingEntry[] = [
-  { key: 'trading.broker', value: 'paper', defaultValue: 'paper', value_type: 'select', label: '券商通道', options: [
+  { key: 'trading.broker', value: 'paper', defaultValue: 'paper', valueType: 'select', label: '券商通道', options: [
     { value: 'paper', label: '模拟盘 (Paper)' },
     { value: 'xtp', label: '中泰证券 XTP' },
     { value: 'qmt', label: '国信 QMT' },
@@ -19,26 +19,26 @@ const BROKER_ITEMS: SettingEntry[] = [
 ]
 
 const XTP_ITEMS: SettingEntry[] = [
-  { key: 'trading.xtp_ip', value: '127.0.0.1', defaultValue: '127.0.0.1', value_type: 'string', label: 'XTP 交易服务器', description: '券商提供的交易服务器 IP' },
-  { key: 'trading.xtp_port', value: 6002, defaultValue: 6002, value_type: 'number', label: 'XTP 端口', min: 1, max: 65535 },
-  { key: 'trading.xtp_key', value: '', defaultValue: '', value_type: 'string', label: '软件 KEY', description: '券商提供的软件 KEY', secret: true },
-  { key: 'trading.xtp_account', value: '', defaultValue: '', value_type: 'string', label: '资金账号' },
+  { key: 'trading.xtp_ip', value: '127.0.0.1', defaultValue: '127.0.0.1', valueType: 'string', label: 'XTP 交易服务器', description: '券商提供的交易服务器 IP' },
+  { key: 'trading.xtp_port', value: 6002, defaultValue: 6002, valueType: 'number', label: 'XTP 端口', min: 1, max: 65535 },
+  { key: 'trading.xtp_key', value: '', defaultValue: '', valueType: 'string', label: '软件 KEY', description: '券商提供的软件 KEY', secret: true },
+  { key: 'trading.xtp_account', value: '', defaultValue: '', valueType: 'string', label: '资金账号' },
 ]
 
 const QMT_ITEMS: SettingEntry[] = [
-  { key: 'trading.qmt_path', value: '', defaultValue: '', value_type: 'string', label: 'QMT 安装路径', description: '迅投 QMT 量化软件的安装目录' },
-  { key: 'trading.qmt_account', value: '', defaultValue: '', value_type: 'string', label: 'QMT 资金账号' },
+  { key: 'trading.qmt_path', value: '', defaultValue: '', valueType: 'string', label: 'QMT 安装路径', description: '迅投 QMT 量化软件的安装目录' },
+  { key: 'trading.qmt_account', value: '', defaultValue: '', valueType: 'string', label: 'QMT 资金账号' },
 ]
 
 const CTP_ITEMS: SettingEntry[] = [
-  { key: 'trading.ctp_broker_id', value: '', defaultValue: '', value_type: 'string', label: '期货公司代码' },
-  { key: 'trading.ctp_user', value: '', defaultValue: '', value_type: 'string', label: 'CTP 账号' },
-  { key: 'trading.ctp_password', value: '', defaultValue: '', value_type: 'string', label: 'CTP 密码', secret: true },
-  { key: 'trading.ctp_front', value: 'tcp://127.0.0.1:51201', defaultValue: 'tcp://127.0.0.1:51201', value_type: 'string', label: 'CTP 交易服务器' },
+  { key: 'trading.ctp_broker_id', value: '', defaultValue: '', valueType: 'string', label: '期货公司代码' },
+  { key: 'trading.ctp_user', value: '', defaultValue: '', valueType: 'string', label: 'CTP 账号' },
+  { key: 'trading.ctp_password', value: '', defaultValue: '', valueType: 'string', label: 'CTP 密码', secret: true },
+  { key: 'trading.ctp_front', value: 'tcp://127.0.0.1:51201', defaultValue: 'tcp://127.0.0.1:51201', valueType: 'string', label: 'CTP 交易服务器' },
 ]
 
 function renderField(item: SettingEntry, value: unknown, onChange: (v: unknown) => void) {
-  if (item.value_type === 'select') {
+  if (item.valueType === 'select') {
     return (
       <Select value={value as string} onChange={onChange} style={{ width: '100%' }}>
         {item.options?.map(opt => (
@@ -50,7 +50,7 @@ function renderField(item: SettingEntry, value: unknown, onChange: (v: unknown) 
   if (item.secret) {
     return <Input.Password value={value as string} onChange={e => onChange(e.target.value)} placeholder="请输入" />
   }
-  if (item.value_type === 'number') {
+  if (item.valueType === 'number') {
     return <InputNumber value={value as number} onChange={onChange} min={item.min} max={item.max} style={{ width: '100%' }} />
   }
   return <Input value={value as string} onChange={e => onChange(e.target.value)} placeholder="请输入" />

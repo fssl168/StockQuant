@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -157,7 +157,6 @@ class MarketReviewer:
     def _fetch_indices_eastmoney(review_date: date) -> List[MarketIndex]:
         """通过东方财富 API 获取指数数据。"""
         indices: List[MarketIndex] = []
-        fields = "f2,f3,f4,f8"  # 最新价, 涨跌幅, 涨跌额, 成交量
 
         for name, code in MAJOR_INDICES.items():
             try:
@@ -306,7 +305,6 @@ class MarketReviewer:
         try:
             # 沪深港通资金流向
             url = "http://push2.eastmoney.com/api/qt/kamt.s/get"
-            fields = "f1,f2,f3,f4"  # 沪净买,深净买,沪累计,深累计
             params = {
                 "fields1": "f1,f2,f3,f4",
                 "fields2": "f51,f52,f53,f54,f55,f56",
@@ -362,7 +360,6 @@ class MarketReviewer:
         try:
             url = _EASTMONEY_FFLOW
             params = {
-                "lmt": "0",
                 "klt": 1,
                 "lmt": 1,
                 "fields1": "f1,f2,f3,f7",
@@ -372,7 +369,7 @@ class MarketReviewer:
             }
             resp = requests.get(url, params=params, timeout=10)
             resp.raise_for_status()
-            data = resp.json()
+            resp.json()
 
             # 获取大盘主力净流入（用上证50或沪深300作为代理）
             # 通过主战场API获取全市场主力净流入

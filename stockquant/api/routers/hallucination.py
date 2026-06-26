@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """F020 反幻觉系统 API — /api/hallucination"""
 
-from __future__ import annotations
-
 import logging
 from typing import Any, Dict, List, Optional
 

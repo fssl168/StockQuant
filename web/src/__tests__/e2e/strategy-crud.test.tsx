@@ -24,8 +24,8 @@ vi.mock('@/components/Strategy/PreviewPanel', () => ({
 
 // Mock strategyApi
 const mockStrategies = [
-  { id: '1', name: 'Strategy A', code: 'code A', created_at: '2024-01-01' },
-  { id: '2', name: 'Strategy B', code: 'code B', created_at: '2024-01-02' },
+  { id: '1', name: 'Strategy A', code: 'code A', createdAt: '2024-01-01' },
+  { id: '2', name: 'Strategy B', code: 'code B', createdAt: '2024-01-02' },
 ]
 
 const mockCreateStrategy = vi.fn(() => Promise.resolve({ id: '3', name: 'New Strategy', code: 'new code' }))

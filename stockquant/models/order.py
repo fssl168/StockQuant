@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+
+# 从 events 模块导入统一事件类型
+# 订单状态统一使用 EventType 中的 ORDER_XXX 值
+from stockquant.events import EventType as OrderEventType
 
 
 class OrderSide(Enum):
@@ -21,11 +24,6 @@ class OrderType(Enum):
     STOP = "Stop"         # 止损单
     STOP_LIMIT = "StopLimit"  # 止损限价单
     MARKET_ON_CLOSE = "MarketOnClose"  # 收盘市价单
-
-
-# 从 events 模块导入统一事件类型
-# 订单状态统一使用 EventType 中的 ORDER_XXX 值
-from stockquant.events import EventType as OrderEventType
 
 
 @dataclass

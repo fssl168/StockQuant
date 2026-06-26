@@ -14,7 +14,7 @@ describe('Backtest API', () => {
 
   // ---- list ----
   it('backtestApi.list should call GET /api/backtest', async () => {
-    const mockList = [{ task_id: 't1', status: 'completed' }]
+    const mockList = [{ taskId: 't1', status: 'completed' }]
     vi.mocked(client.get).mockResolvedValueOnce(mockList)
     const result = await backtestApi.list()
     expect(client.get).toHaveBeenCalledWith('/api/backtest')
@@ -29,7 +29,7 @@ describe('Backtest API', () => {
 
   // ---- get ----
   it('backtestApi.get should call GET /api/backtest/:id', async () => {
-    const mockTask = { task_id: 'test-1', status: 'completed', strategy_name: 'Dual MA' }
+    const mockTask = { taskId: 'test-1', status: 'completed', strategyName: 'Dual MA' }
     vi.mocked(client.get).mockResolvedValueOnce(mockTask)
     const result = await backtestApi.get('test-1')
     expect(client.get).toHaveBeenCalledWith('/api/backtest/test-1')
@@ -43,18 +43,18 @@ describe('Backtest API', () => {
 
   // ---- submit ----
   it('backtestApi.submit should call POST /api/backtest with payload', async () => {
-    const mockResponse = { task_id: 'task-1', status: 'pending' }
+    const mockResponse = { taskId: 'task-1', status: 'pending' }
     vi.mocked(client.post).mockResolvedValueOnce(mockResponse)
     const payload = {
-      strategy_name: 'test',
+      strategyName: 'test',
       symbols: ['sh600519'],
-      start_date: '2024-01-01',
-      end_date: '2024-12-31',
+      startDate: '2024-01-01',
+      endDate: '2024-12-31',
       cash: 1000000,
-      strategy_code: 'code',
-      commission_type: 'ashare',
-      slippage_type: 'none',
-      equity_curve: [] as unknown[],
+      strategyCode: 'code',
+      commissionType: 'ashare',
+      slippageType: 'none',
+      equityCurve: [] as unknown[],
     }
     const result = await backtestApi.submit(payload)
     expect(client.post).toHaveBeenCalledWith('/api/backtest', payload)
@@ -65,15 +65,15 @@ describe('Backtest API', () => {
     vi.mocked(client.post).mockRejectedValueOnce(new Error('Invalid strategy'))
     await expect(
       backtestApi.submit({
-        strategy_name: '',
+        strategyName: '',
         symbols: [],
-        start_date: '',
-        end_date: '',
+        startDate: '',
+        endDate: '',
         cash: 0,
-        strategy_code: '',
-        commission_type: '',
-        slippage_type: '',
-        equity_curve: [],
+        strategyCode: '',
+        commissionType: '',
+        slippageType: '',
+        equityCurve: [],
       })
     ).rejects.toThrow('Invalid strategy')
   })

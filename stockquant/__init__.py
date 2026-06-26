@@ -37,7 +37,7 @@ from stockquant.strategy.base import BaseStrategy
 from stockquant.strategy.yaml_loader import YamlStrategyLoader
 from stockquant.strategy.signal import (
     Signal, SignalSide, SignalSource, SignalManager,
-    SignalAuditLog, convert_ai_to_strategy,
+    SignalAuditLog, convert_ai_to_strategy,  # noqa: F401
 )
 from stockquant.strategy.signal_evaluator import (
     SignalEvaluator, SignalAccuracy, SignalDecay,

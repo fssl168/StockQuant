@@ -271,7 +271,6 @@ class YamlStrategyLoader:
 
             支持比较表达式: "fast_ma > slow_ma", "price > boll_upper", etc.
             """
-            import re
 
             # Replace indicator names with their values
             # Sort by name length descending to avoid partial replacement

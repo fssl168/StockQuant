@@ -2,7 +2,7 @@
 """持久化存储包装器 — 用于替代内存字典存储。
 
 DEPRECATED: 这些 Store 类是仓储层合并（Phase 5）的中间产物。
-新的代码应直接使用 repository.py 中的函数或 repository_v2.py 中的 Repository 类。
+新的代码应直接使用 repository_v2.py 中的 Repository 类（通过 Repository.instance()）。
 
 Store 类通过 __setitem__/__delitem__ 自动持久化到数据库，
 同时维护 _cache 内存缓存作为性能优化。
@@ -13,48 +13,48 @@ from __future__ import annotations
 import json
 import logging
 import os
-import warnings
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import sessionmaker
 
+from stockquant.persistence.repository_v2 import Repository
+# Repository 类的 save_strategy/get_strategy/list_strategies 签名与 repository.py 不同
+# （engine_url 位置不同），直接从 repository.py 导入以保持 Store 类调用兼容
 from stockquant.persistence.repository import (
-    get_backtest_task,
-    save_backtest_task,
-    list_backtest_tasks,
-    delete_backtest_task,
-    get_strategy,
     save_strategy,
     list_strategies,
     delete_strategy,
-    save_collect_task,
-    list_collect_tasks,
-    delete_collect_task,
-    save_optimize_task,
-    list_optimize_tasks,
-    delete_optimize_task,
-    save_comparison_history,
-    list_comparison_history,
-    save_pending_order,
-    list_pending_orders,
-    delete_pending_order,
-    save_order_audit,
-    list_order_audits,
-    delete_order_audit,
-    list_notifications,
-    delete_notification,
-    list_monitor_alerts,
-    save_monitor_alert,
-    save_scheduler_task,
-    list_scheduler_tasks,
-    delete_scheduler_task,
 )
 from stockquant.persistence.models import (
     Notification as NotificationModel,
-    MonitorAlert as MonitorAlertModel,
-    SchedulerTask as SchedulerTaskModel,
     get_engine,
 )
+
+_repo = Repository.instance()
+
+# 以下函数通过 Repository.__getattr__ 委托到 repository.py 模块级函数
+get_backtest_task = _repo.get_backtest_task
+save_backtest_task = _repo.save_backtest_task
+list_backtest_tasks = _repo.list_backtest_tasks
+delete_backtest_task = _repo.delete_backtest_task
+save_collect_task = _repo.save_collect_task
+list_collect_tasks = _repo.list_collect_tasks
+delete_collect_task = _repo.delete_collect_task
+save_optimize_task = _repo.save_optimize_task
+list_optimize_tasks = _repo.list_optimize_tasks
+delete_optimize_task = _repo.delete_optimize_task
+save_comparison_history = _repo.save_comparison_history
+list_comparison_history = _repo.list_comparison_history
+save_order_audit = _repo.save_order_audit
+list_order_audits = _repo.list_order_audits
+delete_order_audit = _repo.delete_order_audit
+list_notifications = _repo.list_notifications
+delete_notification = _repo.delete_notification
+list_monitor_alerts = _repo.list_monitor_alerts
+save_monitor_alert = _repo.save_monitor_alert
+save_scheduler_task = _repo.save_scheduler_task
+list_scheduler_tasks = _repo.list_scheduler_tasks
+delete_scheduler_task = _repo.delete_scheduler_task
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,7 @@ class BacktestTaskStore:
         self._cache[key] = value
         try:
             status = value.get("status", "running")
-            progress = value.get("progress", 0.0)
+            value.get("progress", 0.0)
             result = json.dumps(value, default=str)
             save_backtest_task(self._db_url, self._user_id, key, status, result)
         except Exception:
@@ -312,7 +312,7 @@ class OptimizeTaskStore:
         self._cache[key] = value
         try:
             status = value.get("status", "running")
-            progress = value.get("progress", 0.0)
+            value.get("progress", 0.0)
             result = json.dumps(value, default=str)
             save_optimize_task(self._db_url, self._user_id, key, status=status, result=result)
         except Exception:
@@ -404,83 +404,6 @@ class ComparisonHistoryStore:
 
     def clear(self):
         self._cache.clear()
-
-
-class PendingOrderStore:
-    """[DEPRECATED] 待处理订单存储 — 功能并入 Order 模型
-
-    请使用 stockquant.persistence.repository.save_order/list_orders/delete_order
-    或 Repository 直接操作 Order。
-    """
-
-    def __init__(self, user_id: Optional[str] = None):
-        self._db_url = _get_db_url()
-        self._user_id = user_id
-        self._cache: Dict[str, Any] = {}
-        self._load_from_db()
-
-    def _load_from_db(self):
-        try:
-            orders = list_pending_orders(self._db_url, self._user_id)
-            for order in orders:
-                self._cache[order["id"]] = order
-            logger.info("PendingOrderStore loaded %d orders from database", len(self._cache))
-        except Exception as exc:
-            logger.warning("PendingOrderStore failed to load from database, using empty cache: %s", exc)
-
-    def __setitem__(self, key: str, value: Any):
-        self._cache[key] = value
-        try:
-            symbol = value.get("symbol", "")
-            type = value.get("type", "buy")
-            price = value.get("price", 0.0)
-            quantity = value.get("quantity", 0)
-            status = value.get("status", "pending")
-            save_pending_order(self._db_url, self._user_id, key, symbol, type, price, quantity, status)
-        except Exception:
-            logger.debug("PendingOrderStore: Failed to persist order %s to database, using memory only", key)
-
-    def __getitem__(self, key: str) -> Any:
-        return self._cache.get(key)
-
-    def __delitem__(self, key: str):
-        if key in self._cache:
-            del self._cache[key]
-            try:
-                delete_pending_order(self._db_url, self._user_id, key)
-            except Exception:
-                logger.debug("PendingOrderStore: Failed to delete order %s from database", key)
-
-    def __contains__(self, key: str) -> bool:
-        return key in self._cache
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return self._cache.get(key, default)
-
-    def keys(self):
-        return self._cache.keys()
-
-    def values(self):
-        return self._cache.values()
-
-    def items(self):
-        return self._cache.items()
-
-    def __len__(self):
-        return len(self._cache)
-
-    def clear(self):
-        self._cache.clear()
-
-    def pop(self, key: str, default: Any = None) -> Any:
-        """弹出指定键的值，并从数据库删除。"""
-        val = self._cache.pop(key, default)
-        if val is not default:
-            try:
-                delete_pending_order(self._db_url, self._user_id, key)
-            except Exception:
-                logger.debug("PendingOrderStore: Failed to delete order %s from database in pop()", key)
-        return val
 
 
 class OrderAuditStore:

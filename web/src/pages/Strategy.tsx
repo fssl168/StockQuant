@@ -397,8 +397,7 @@ export default function Strategy() {
                 key: 'time',
                 width: 80,
                 render: (_: any, r: any) => {
-                  // snakeToCamel 将 created_at → createdAt，双兼容取值
-                  const dateStr = r.created_at ?? r.createdAt
+                  const dateStr = r.createdAt
                   if (!dateStr) return '-'
                   try { return new Date(dateStr).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) } catch { return '-' }
                 },

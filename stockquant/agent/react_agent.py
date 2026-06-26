@@ -8,7 +8,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, List, Optional
 
 from stockquant.agent.llm_adapter import LLMAdapter, LLMResponse
 from stockquant.agent.tool_registry import ToolRegistry, tool

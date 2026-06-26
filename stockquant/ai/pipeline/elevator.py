@@ -261,6 +261,6 @@ class Elevator:
             has_positive_l3 = any(w in content for w in positive_words)
 
             if (has_positive and has_negative_l3) or (has_negative and has_positive_l3):
-                return f"当前信息与历史记录存在方向矛盾"
+                return "当前信息与历史记录存在方向矛盾"
 
         return None

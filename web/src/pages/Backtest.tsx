@@ -424,7 +424,7 @@ export default function Backtest() {
         } : undefined,
       } as any)
 
-      const taskId = result?.task_id || result?.task_id || 'latest'
+      const taskId = result?.taskId || result?.taskId || 'latest'
       addNotification({ type: 'info', title: '回测已提交', message: values.strategy_name as string, time: new Date().toLocaleTimeString() })
       setProgress(0)
       setProgressTaskId(taskId)
@@ -464,8 +464,8 @@ export default function Backtest() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {tasks.slice(0, 10).map((t: any) => (
                   <div
-                    key={t.task_id}
-                    onClick={() => navigate(`/backtest/${t.task_id}`)}
+                    key={t.taskId}
+                    onClick={() => navigate(`/backtest/${t.taskId}`)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8,
                       padding: '6px 10px', borderRadius: 6, cursor: 'pointer',
@@ -476,12 +476,12 @@ export default function Backtest() {
                     onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-brand-primary)')}
                     onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--color-border-default)')}
                   >
-                    <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{t.strategy_name || '未命名'}</span>
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{t.strategyName || '未命名'}</span>
                     <Tag color={t.status === 'completed' ? 'green' : t.status === 'running' ? 'blue' : 'red'} style={{ margin: 0, fontSize: 10 }}>
                       {t.status === 'completed' ? '完成' : t.status === 'running' ? '运行中' : '失败'}
                     </Tag>
                     <span style={{ fontSize: 10, color: 'var(--color-text-tertiary)' }}>
-                      {t.created_at ? new Date(t.created_at).toLocaleString() : ''}
+                      {t.createdAt ? new Date(t.createdAt).toLocaleString() : ''}
                     </span>
                     <ArrowRight size={12} style={{ color: 'var(--color-text-tertiary)' }} />
                   </div>

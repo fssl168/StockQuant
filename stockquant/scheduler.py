@@ -242,7 +242,7 @@ class StockScheduler:
         if name not in self._tasks:
             return False
 
-        task = self._tasks.pop(name)
+        self._tasks.pop(name)
         schedule.clear(name)
         logger.info(f"Removed task '{name}'")
 
@@ -262,7 +262,6 @@ class StockScheduler:
             logger.warning("Scheduler already running")
             return
 
-        import schedule
 
         self._running = True
         self._thread = threading.Thread(target=self._run_loop, daemon=True, name="stockquant-scheduler")

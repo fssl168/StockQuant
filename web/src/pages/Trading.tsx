@@ -272,7 +272,7 @@ export default function Trading() {
           </span>}>
             <Table
               dataSource={orders}
-              rowKey={(r) => r?.id || r?.order_id || Math.random().toString(36).slice(2)}
+              rowKey={(r) => r?.id || r?.orderId || Math.random().toString(36).slice(2)}
               size="small"
               pagination={false}
               scroll={{ y: 260 }}
@@ -332,7 +332,7 @@ export default function Trading() {
           </span>}>
             <Table
               dataSource={trades}
-              rowKey={(r) => r?.id || r?.trade_id || Math.random().toString(36).slice(2)}
+              rowKey={(r) => r?.id || r?.tradeId || Math.random().toString(36).slice(2)}
               size="small"
               pagination={{ pageSize: 8, size: 'small' }}
               scroll={{ x: 500 }}

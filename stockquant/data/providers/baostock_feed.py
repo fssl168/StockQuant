@@ -138,7 +138,7 @@ class BaoStockFeed(DataFeed):
     def _fetch_all(self):
         """拉取所有标的的数据"""
         try:
-            import requests
+            import requests  # noqa: F401
         except ImportError:
             logger.error("BaoStockFeed requires 'requests' package")
             return

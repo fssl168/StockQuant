@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 """F019 信号管线 API — 暴露 SignalManager 到 REST 端点"""
 
-from __future__ import annotations
-
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -85,8 +83,8 @@ async def signal_audit(
     """获取信号审计日志"""
     logs = _signal_manager.get_audit_logs()
     if symbol:
-        logs = [l for l in logs if l.signal.symbol == symbol]
-    return {"logs": [_audit_to_dict(l) for l in logs[-limit:]], "count": len(logs)}
+        logs = [log for log in logs if log.signal.symbol == symbol]
+    return {"logs": [_audit_to_dict(log) for log in logs[-limit:]], "count": len(logs)}
 
 
 @router.get("/stats", summary="信号统计")
@@ -94,13 +92,13 @@ async def signal_stats(_user: UserToken = Depends(get_current_user)) -> Dict[str
     """获取信号管线统计信息"""
     signals = _signal_manager.get_active_signals()
     return {
-        "active_count": len(signals),
-        "by_side": {
+        "activeCount": len(signals),
+        "bySide": {
             "BUY": len([s for s in signals if s.side == SignalSide.BUY]),
             "SELL": len([s for s in signals if s.side == SignalSide.SELL]),
             "HOLD": len([s for s in signals if s.side == SignalSide.HOLD]),
         },
-        "by_source": {
+        "bySource": {
             s.value: len([sig for sig in signals if sig.source == s])
             for s in SignalSource
         },

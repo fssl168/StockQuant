@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
-from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from stockquant.persistence.repository import save_chat_message
@@ -135,8 +135,6 @@ class ChatMemory:
                 removed += 1
         return removed
 
-
-from dataclasses import dataclass, field
 
 @dataclass
 class ChatMessage:

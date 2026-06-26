@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
 
 from celery import shared_task
 from stockquant.celery_app import celery_app
@@ -31,7 +30,7 @@ def run_backtest(self, task_id: str, params: dict) -> dict:
         self.update_state(state='PROGRESS', meta={'progress': 5, 'status': '初始化引擎'})
 
         # 加载参数
-        strategy_id = params.get('strategy_id')
+        params.get('strategy_id')
         strategy_code = params.get('strategy_code', '')
         strategy_class = params.get('strategy_class', 'DualMACrossoverStrategy')
         symbols = params.get('symbols', ['sh600519'])
@@ -150,9 +149,8 @@ def get_task_status(self, task_id: str) -> dict:
     @staticmethod
     def _run_cerebro(feed, strategy_cls, initial_cash: float, params: dict):
         """运行 Cerebro 回测引擎"""
-        from stockquant.engine import Cerebro, BacktestBroker
-        from stockquant.engine.commission import CommissionInfo, FixedSlippage
-        from stockquant.analytics.report import ReportGenerator
+        from stockquant.engine import Cerebro
+        from stockquant.engine.commission import CommissionInfo
 
         cerebro = Cerebro()
         cerebro.add_data(feed)
@@ -231,7 +229,6 @@ def get_task_status(self, task_id: str) -> dict:
 
 def _safe_load_strategy_code(code: str, class_name: str):
     """安全加载用户策略代码"""
-    import types
     import ast
     from stockquant.strategy.base import BaseStrategy
 

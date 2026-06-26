@@ -74,7 +74,7 @@ class DualMACrossoverStrategy(BaseStrategy):
                     self.close_all()
                     self._trade_count += 1
                     print(f"DEBUG: Close all placed (trade #{self._trade_count})")
-                    self.log(f"DEATH CROSS: SELL ALL")
+                    self.log("DEATH CROSS: SELL ALL")
 
     def on_finish(self):
         """回测结束时打印交易计数"""
@@ -254,7 +254,7 @@ class MACDDivergenceStrategy(BaseStrategy):
                     self._last_signal != "sell"):
                 self._last_signal = "sell"
                 self.close_all()
-                self.log(f"MACD BEARISH DIVERGENCE detected: SELL ALL")
+                self.log("MACD BEARISH DIVERGENCE detected: SELL ALL")
 
 
 # ========================================================================
@@ -326,7 +326,7 @@ class DualThrustStrategy(BaseStrategy):
             elif bar.close < lower_bound and self._last_signal != "sell":
                 self._last_signal = "sell"
                 self.close_all()
-                self.log(f"DUAL THRUST BREAKDOWN: SELL ALL")
+                self.log("DUAL THRUST BREAKDOWN: SELL ALL")
 
 
 # ========================================================================
@@ -395,7 +395,7 @@ class MeanReversionStrategy(BaseStrategy):
             elif abs(bar.close - ma) < std * 0.5 and self._last_signal == "buy":
                 self.close_all()
                 self._last_signal = None
-                self.log(f"MEAN REVERSION EXIT: price converged to MA")
+                self.log("MEAN REVERSION EXIT: price converged to MA")
 
 
 # ========================================================================

@@ -1,15 +1,13 @@
 # -*- coding: utf-8 -*-
 """Unified data API router - delegates to DataService."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import os
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from typing import Dict, List, Any
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 
@@ -66,10 +64,10 @@ def _cache_stats_via_service() -> Dict[str, Any]:
     if _app_data_service is not None:
         s = _app_data_service.cache.stats()
         return {
-            "size_mb": s.get("total_size_mb", 0),
-            "hit_rate": 0.0,
-            "symbol_count": s.get("file_count", 0),
-            "last_update": datetime.now().isoformat(),
+            "sizeMb": s.get("total_size_mb", 0),
+            "hitRate": 0.0,
+            "symbolCount": s.get("file_count", 0),
+            "lastUpdate": datetime.now().isoformat(),
         }
     return _calculate_legacy_cache_stats()
 
@@ -77,7 +75,6 @@ def _cache_stats_via_service() -> Dict[str, Any]:
 def _calculate_legacy_cache_stats() -> Dict[str, Any]:
     cache_dir = _get_cache_dir()
     total_size = 0
-    symbol_count = 0
     csv_files = list(cache_dir.glob("*.csv"))
     for f in csv_files:
         total_size += f.stat().st_size
@@ -87,10 +84,10 @@ def _calculate_legacy_cache_stats() -> Dict[str, Any]:
         if parts:
             symbols.add(parts[0])
     return {
-        "size_mb": round(total_size / (1024 * 1024), 2),
-        "hit_rate": 0.0,
-        "symbol_count": len(symbols),
-        "last_update": datetime.now().isoformat(),
+        "sizeMb": round(total_size / (1024 * 1024), 2),
+        "hitRate": 0.0,
+        "symbolCount": len(symbols),
+        "lastUpdate": datetime.now().isoformat(),
     }
 
 
@@ -112,8 +109,8 @@ def _dynamic_sources() -> List[Dict[str, Any]]:
                     "name": h.get("name", provider),
                     "enabled": h.get("healthy", True),
                     "priority": len(sources) + 1,
-                    "api_key": "",
-                    "api_url": "",
+                    "apiKey": "",
+                    "apiUrl": "",
                 })
         return sources
 
@@ -124,15 +121,15 @@ def _dynamic_sources() -> List[Dict[str, Any]]:
     # Preferred provider
     pref = config.data_provider.source
     if pref.value == "alphafeed":
-        sources.append({"provider": "alphafeed", "name": "AlphaFeed", "enabled": True, "priority": priority, "api_key": "", "api_url": ""})
+        sources.append({"provider": "alphafeed", "name": "AlphaFeed", "enabled": True, "priority": priority, "apiKey": "", "apiUrl": ""})
         priority += 1
     if pref.value != "baostock":
-        sources.append({"provider": "baostock", "name": "BaoStock", "enabled": True, "priority": priority, "api_key": "", "api_url": ""})
+        sources.append({"provider": "baostock", "name": "BaoStock", "enabled": True, "priority": priority, "apiKey": "", "apiUrl": ""})
         priority += 1
-    sources.append({"provider": "sqlite", "name": "SQLite", "enabled": True, "priority": priority, "api_key": "", "api_url": ""})
+    sources.append({"provider": "sqlite", "name": "SQLite", "enabled": True, "priority": priority, "apiKey": "", "apiUrl": ""})
     priority += 1
     if config.data_provider.csv.directory:
-        sources.append({"provider": "csv", "name": "CSV", "enabled": True, "priority": priority, "api_key": "", "api_url": ""})
+        sources.append({"provider": "csv", "name": "CSV", "enabled": True, "priority": priority, "apiKey": "", "apiUrl": ""})
     return sources
 
 
@@ -164,18 +161,18 @@ async def delete_source(provider: str):
     return {"success": True, "provider": provider}
 
 
-@router.get("/data/cache", summary="????")
+@router.get("/data/cache", summary="缓存统计")
 async def get_cache_stats():
     """Return cache statistics."""
     return _cache_stats_via_service()
 
 
-@router.delete("/data/cache", summary="????")
+@router.delete("/data/cache", summary="清除缓存")
 async def clear_cache():
     """Clear all K-line cache."""
     if _app_data_service is not None:
         _app_data_service.cache.clear()
-        return {"success": True, "deleted_files": 0}
+        return {"success": True, "deletedFiles": 0}
 
     cache_dir = _get_cache_dir()
     deleted_count = 0
@@ -187,15 +184,15 @@ async def clear_cache():
             logger.warning("Failed to delete cache file: %s, %s", f, e)
 
     logger.info("Cache cleared. Deleted %d files.", deleted_count)
-    return {"success": True, "deleted_files": deleted_count}
+    return {"success": True, "deletedFiles": deleted_count}
 
 
 @router.get("/data/kline", summary="查询K线数据")
 async def get_kline(
-        symbol: str = Query(..., description="股稿代码"),
-        start: str = Query(..., description="开始業期 YYYY-MM-DD"),
-        end: str = Query(..., description="开始業期 YYYY-MM-DD"),
-        timeframe: str = Query("1d", description="股稿代码"),
+        symbol: str = Query(..., description="股票代码"),
+        start: str = Query(..., description="开始日期 YYYY-MM-DD"),
+        end: str = Query(..., description="结束日期 YYYY-MM-DD"),
+        timeframe: str = Query("1d", description="时间周期"),
         source: str = Query("", description="数据源名称(不传则默认DataService)"),
 ):
     """Fetch K-line OHLCV data via DataService with proper async handling."""
@@ -238,7 +235,7 @@ async def get_kline(
         }
 
 
-@router.post("/data/collect", summary="??????")
+@router.post("/data/collect", summary="手动触发数据采集")
 async def collect_data(payload: CollectDataRequest) -> Dict[str, Any]:
     """Start data collection task."""
     symbol = payload.symbol
@@ -277,10 +274,10 @@ async def collect_data(payload: CollectDataRequest) -> Dict[str, Any]:
             })
 
     asyncio.create_task(_do_collect())
-    return {"task_id": task_id, "status": "collecting", "symbol": symbol}
+    return {"taskId": task_id, "status": "collecting", "symbol": symbol}
 
 
-@router.get("/data/health", summary="获取数据源列表")
+@router.get("/data/health", summary="获取数据源健康状态")
 async def get_data_health():
     """Return health status of all configured data sources."""
     if _app_data_service is not None:
@@ -294,7 +291,7 @@ async def get_data_health():
                 "name": feed_name,
                 "enabled": True,
                 "healthy": h.get("healthy", False),
-                "last_check": h.get("last_check", ""),
+                "lastCheck": h.get("last_check", ""),
                 "error": h.get("error", ""),
             })
         return result
@@ -303,7 +300,7 @@ async def get_data_health():
     return []
 
 
-@router.get("/data/collect-logs", summary="??????")
+@router.get("/data/collect-logs", summary="数据采集日志")
 async def get_collect_logs():
     """Return recent collect task logs (last 20, sorted by created_at desc)."""
     tasks = sorted(
@@ -331,8 +328,8 @@ async def get_collect_logs():
     return logs
 
 
-@router.get("/data/download", summary="??????")
-async def download_data(provider: str = Query(..., description="时间框架")):
+@router.get("/data/download", summary="批量下载")
+async def download_data(provider: str = Query(..., description="数据源名称")):
     """Download K-line data for default symbols from a provider."""
     default_symbols = [
         "sh600519", "sz000858", "sh601318", "sh600036",
@@ -389,7 +386,7 @@ async def download_data(provider: str = Query(..., description="时间框架")):
     asyncio.create_task(_do_download())
     return {
         "success": True,
-        "task_id": task_id,
+        "taskId": task_id,
         "provider": provider,
         "symbols": default_symbols,
         "status": "collecting",
@@ -397,7 +394,7 @@ async def download_data(provider: str = Query(..., description="时间框架")):
     }
 
 
-@router.post("/data/upload-csv", summary="CSV????")
+@router.post("/data/upload-csv", summary="上传 CSV 数据文件")
 async def upload_csv(file: UploadFile = File(..., description="CSV文件")):
     """Upload and import CSV K-line data."""
     import pandas as pd

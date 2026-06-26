@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 import os
 import threading
-import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -24,7 +23,6 @@ from stockquant.events import EventType as OrderStatus, EventType
 from stockquant.models.bar import BarData
 from stockquant.models.trade import TradeData
 from stockquant.engine.broker import Broker, OrderAuditLog
-from stockquant.execution.brokers.mock_sdk import MockCtpApi
 
 logger = logging.getLogger("stockquant.execution.ctp")
 

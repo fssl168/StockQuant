@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, TYPE_CHECKING
 
 import pandas as pd
 

@@ -25,7 +25,7 @@ v2 策略用事件驱动模式：
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, Optional, Type, TYPE_CHECKING
+from typing import Any, Dict, Optional, Type, TYPE_CHECKING
 
 from stockquant.strategy.base import BaseStrategy
 from stockquant.models.bar import BarData

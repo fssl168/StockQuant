@@ -44,10 +44,6 @@ from stockquant.persistence.repository import (
     get_comparison_history,
     list_comparison_history,
     delete_comparison_history,
-    save_pending_order,
-    get_pending_order,
-    list_pending_orders,
-    delete_pending_order,
     save_order_audit,
     get_order_audit,
     list_order_audits,
@@ -374,29 +370,6 @@ class TestComparisonHistoryCrud:
         save_comparison_history(ENGINE_URL, user_id="u3", history_id=hid, strategy_ids="s1,s2")
         assert delete_comparison_history(ENGINE_URL, user_id="u3", history_id=hid) is True
         assert delete_comparison_history(ENGINE_URL, user_id="u3", history_id=hid) is False
-
-
-# ── TestPendingOrderCrud ──────────────────────────────────────────────────
-
-
-class TestPendingOrderCrud:
-    def test_save_and_get_pending_order(self):
-        save_pending_order(ENGINE_URL, user_id="u1", order_id="po1", symbol="sh600519", type="buy", price=1800.0, quantity=100, status="pending")
-        order = get_pending_order(ENGINE_URL, user_id="u1", order_id="po1")
-        assert order is not None
-        assert order["symbol"] == "sh600519"
-        assert order["price"] == 1800.0
-
-    def test_list_pending_orders(self):
-        for i in range(3):
-            save_pending_order(ENGINE_URL, user_id="u2", order_id=f"po_u2_{i}", symbol="sh600519", type="buy")
-        orders = list_pending_orders(ENGINE_URL, user_id="u2")
-        assert len(orders) == 3
-
-    def test_delete_pending_order(self):
-        save_pending_order(ENGINE_URL, user_id="u3", order_id="po_del", symbol="sh600519", type="buy")
-        assert delete_pending_order(ENGINE_URL, user_id="u3", order_id="po_del") is True
-        assert delete_pending_order(ENGINE_URL, user_id="u3", order_id="po_del") is False
 
 
 # ── TestOrderAuditCrud ────────────────────────────────────────────────────

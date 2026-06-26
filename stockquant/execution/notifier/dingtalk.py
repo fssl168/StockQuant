@@ -83,7 +83,7 @@ class DingTalkNotifier(Notifier):
         if signal_data.get("target_quantity"):
             content += f"- **数量**: {signal_data['target_quantity']}\n"
         if reasoning:
-            content += f"\n**推理链**:\n"
+            content += "\n**推理链**:\n"
             for i, r in enumerate(reasoning, 1):
                 content += f"{i}. {r}\n"
         return self.send(content, title=title)

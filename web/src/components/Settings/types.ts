@@ -1,10 +1,10 @@
-﻿// Settings 页面类型定义
+// Settings 页面类型定义
 
 export interface SettingEntry {
   key: string
   value: unknown
   defaultValue: unknown
-  value_type: 'string' | 'number' | 'boolean' | 'select' | 'password' | 'float'
+  valueType: 'string' | 'number' | 'boolean' | 'select' | 'password' | 'float'
   label: string
   description?: string
   secret?: boolean

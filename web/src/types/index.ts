@@ -1,5 +1,5 @@
 export interface BacktestTask {
-  task_id: string
+  taskId: string
   status: string
   strategyName: string
   strategyCode: string
@@ -13,7 +13,7 @@ export interface BacktestTask {
   updatedAt: string
   metrics: Record<string, unknown>
   trades: unknown[]
-  equity_curve: unknown[]
+  equityCurve: unknown[]
   error: string | null
 }
 
@@ -113,7 +113,7 @@ export interface MarketQuote {
 
 export interface WSMessage {
   type: 'progress' | 'metrics' | 'trade' | 'alert' | 'quote'
-  task_id?: string
+  taskId?: string
   data: unknown
   timestamp: string
 }
@@ -122,13 +122,13 @@ export interface SettingItem {
   key: string
   value: unknown
   overridden: boolean
-  value_type: 'string' | 'number' | 'float' | 'boolean' | 'password' | 'select' | 'time' | 'lines'
+  valueType: 'string' | 'number' | 'float' | 'boolean' | 'password' | 'select' | 'time' | 'lines'
   label: string
   description: string
   secret: boolean
-  group_key: string
-  group_label: string
-  group_icon: string
+  groupKey: string
+  groupLabel: string
+  groupIcon: string
   order: number
   min?: number
   max?: number
@@ -151,13 +151,13 @@ export interface SettingGroup {
 export interface DataSourceConfig {
   provider: string
   enabled: boolean
-  api_key?: string
-  api_url?: string
-  tushare_token?: string
-  tdx_host?: string
-  tdx_port?: number
-  duckdb_path?: string
-  db_url?: string
+  apiKey?: string
+  apiUrl?: string
+  tushareToken?: string
+  tdxHost?: string
+  tdxPort?: number
+  duckdbPath?: string
+  dbUrl?: string
 }
 
 export interface CacheStats {
@@ -175,7 +175,7 @@ export type OrderStatus = 'ORDER_PENDING' | 'ORDER_SUBMITTED' | 'ORDER_PARTIAL_F
 
 export interface Order {
   id: string
-  order_id?: string
+  orderId?: string
   symbol: string
   side: OrderSide
   type: OrderType
@@ -200,7 +200,7 @@ export interface AccountInfo {
 
 export interface TradeRecord {
   id: string
-  trade_id?: string
+  tradeId?: string
   orderId: string
   symbol: string
   side: OrderSide

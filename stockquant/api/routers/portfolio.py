@@ -5,8 +5,6 @@
 权益曲线基于真实交易记录和 K 线数据计算。
 """
 
-from __future__ import annotations
-
 import logging
 from datetime import datetime, timedelta
 from typing import Any
@@ -86,7 +84,7 @@ def _compute_equity_curve_from_snapshots(days: int = 30) -> tuple[list[str], lis
     """从权益快照表获取历史权益曲线"""
     try:
         from stockquant.persistence.models import EquitySnapshot, get_engine
-        from sqlalchemy import create_engine as _create_engine, select
+        from sqlalchemy import select
 
         engine = get_engine()
         if engine is None:
@@ -116,15 +114,14 @@ def _compute_equity_curve_from_snapshots(days: int = 30) -> tuple[list[str], lis
 def _compute_equity_curve_from_backtest(days: int = 30) -> tuple[list[str], list[float]]:
     """从最近的回测结果获取权益曲线"""
     try:
-        from stockquant.persistence.repository import Repository
-        from stockquant.persistence.models import BacktestResult
-        repo = Repository(BacktestResult)
-        backtests = repo.list(limit=10)
+        from stockquant.persistence.repository_v2 import Repository
+        _repo = Repository.instance()
+        backtests = _repo.list_backtests(limit=10)
         if not backtests:
             return [], []
         # 按创建时间排序取最近一个
-        latest = sorted(backtests, key=lambda b: b.created_at, reverse=True)[0]
-        equity_data = latest.equity_curve
+        latest = sorted(backtests, key=lambda b: b["created_at"], reverse=True)[0]
+        equity_data = latest["equity_curve"]
         if not equity_data:
             return [], []
 
@@ -263,9 +260,9 @@ async def get_positions():
             "shares": pos.quantity,
             "cost": round(pos.cost_price, 2),
             "price": round(pos.current_price, 2),
-            "market_value": round(pos.market_value, 2),
+            "marketValue": round(pos.market_value, 2),
             "pnl": round(pos.pnl, 2),
-            "pnl_pct": round((pos.current_price - pos.cost_price) / pos.cost_price * 100, 2)
+            "pnlPct": round((pos.current_price - pos.cost_price) / pos.cost_price * 100, 2)
                         if pos.cost_price > 0 else 0,
             "sector": _SECTOR_MAP.get(symbol, "其他"),
         }
@@ -280,7 +277,7 @@ async def get_account(_user=Depends(get_current_user)):
     acc = _portfolio.account
     positions = _portfolio.positions
 
-    market_value = sum(p.market_value for p in positions.values() if p.quantity > 0)
+    sum(p.market_value for p in positions.values() if p.quantity > 0)
 
     total_cost = sum(
         p.cost_price * p.quantity for p in positions.values() if p.quantity > 0
@@ -289,11 +286,11 @@ async def get_account(_user=Depends(get_current_user)):
     total_pnl_pct = round(total_pnl / acc.initial_cash * 100, 2) if acc.initial_cash > 0 else 0
 
     return {
-        "total_value": round(acc.total_equity, 2),
-        "total_cost": round(total_cost, 2),
-        "total_pnl": round(total_pnl, 2),
-        "total_pnl_pct": total_pnl_pct,
-        "position_count": len([p for p in positions.values() if p.quantity > 0]),
+        "totalValue": round(acc.total_equity, 2),
+        "totalCost": round(total_cost, 2),
+        "totalPnl": round(total_pnl, 2),
+        "totalPnlPct": total_pnl_pct,
+        "positionCount": len([p for p in positions.values() if p.quantity > 0]),
     }
 
 
@@ -334,12 +331,12 @@ async def get_pnl():
     trades = paper_broker.trade_log
     if not trades:
         return {
-            "win_count": 0,
-            "loss_count": 0,
-            "win_rate": 0,
-            "avg_win": 0,
-            "avg_loss": 0,
-            "profit_factor": 0,
+            "winCount": 0,
+            "lossCount": 0,
+            "winRate": 0,
+            "avgWin": 0,
+            "avgLoss": 0,
+            "profitFactor": 0,
         }
 
     # 按 symbol 配对买卖计算盈亏
@@ -385,12 +382,12 @@ async def get_pnl():
     profit_factor = round(total_win / total_loss, 2) if total_loss > 0 else 0
 
     return {
-        "win_count": win_count,
-        "loss_count": loss_count,
-        "win_rate": round(win_count / total_trades, 3) if total_trades > 0 else 0,
-        "avg_win": avg_win,
-        "avg_loss": avg_loss,
-        "profit_factor": profit_factor,
+        "winCount": win_count,
+        "lossCount": loss_count,
+        "winRate": round(win_count / total_trades, 3) if total_trades > 0 else 0,
+        "avgWin": avg_win,
+        "avgLoss": avg_loss,
+        "profitFactor": profit_factor,
     }
 
 
@@ -428,10 +425,8 @@ async def get_stock_equity_curve(symbol: str, _user=Depends(get_current_user)):
 
         # 取最近一笔买入作为基准
         last_buy = buy_trades[-1]
-        base_price = last_buy.price
         base_quantity = last_buy.quantity
     else:
-        base_price = pos.cost_price
         base_quantity = pos.quantity
 
     # 获取 K 线价格并计算每日市值
@@ -496,7 +491,7 @@ def save_daily_snapshot() -> dict:
             "date": today,
             "equity": round(acc.total_equity, 2),
             "cash": round(acc.available_cash, 2),
-            "positions_count": len(positions),
+            "positionsCount": len(positions),
         }
     except Exception as e:
         logger.error(f"保存权益快照失败: {e}")
@@ -553,7 +548,7 @@ async def save_equity_snapshot(_user=Depends(get_current_user)):
             "date": today,
             "equity": round(acc.total_equity, 2),
             "cash": round(acc.available_cash, 2),
-            "positions_count": len(positions),
+            "positionsCount": len(positions),
         }
     except HTTPException:
         raise
@@ -585,7 +580,7 @@ def _compute_risk_metrics() -> dict:
         "var95": 0.0,
         "volatility": 0.0,
         "sharpe": 0.0,
-        "max_drawdown": 0.0,
+        "maxDrawdown": 0.0,
         "beta": 0.0,
         "alpha": 0.0,
     }
@@ -625,7 +620,7 @@ def _compute_risk_metrics() -> dict:
         dd = (peak - v) / peak if peak > 0 else 0
         if dd > max_dd:
             max_dd = dd
-    result["max_drawdown"] = round(max_dd, 4)
+    result["maxDrawdown"] = round(max_dd, 4)
 
     # 夏普比率（年化收益 / 年化波动率，无风险利率假设 2%）
     if len(values) >= 2 and values[0] > 0:
@@ -659,7 +654,7 @@ async def get_risk_metrics(_user=Depends(get_current_user)):
             "var95": 0.0,
             "volatility": 0.0,
             "sharpe": 0.0,
-            "max_drawdown": 0.0,
+            "maxDrawdown": 0.0,
             "beta": 0.0,
             "alpha": 0.0,
         }

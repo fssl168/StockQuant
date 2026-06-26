@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
 """F027 策略对比路由 — 多策略横向对比 + 组合优化"""
 
-from __future__ import annotations
-
 import json
 import logging
-from datetime import datetime
 
 from typing import Any, Dict
 
@@ -67,21 +64,21 @@ async def compare_strategies(payload: CompareStrategiesRequest, _user: UserToken
             for k, entries in comparison.rankings.items()
         },
         "recommendations": comparison.recommendations,
-        "portfolio_weights": comparison.portfolio_weights,
-        "correlation_matrix": comparison.correlation_matrix,
-        "recent_performance": recent_perf,
+        "portfolioWeights": comparison.portfolio_weights,
+        "correlationMatrix": comparison.correlation_matrix,
+        "recentPerformance": recent_perf,
     }
 
     # 记录对比历史（ComparisonHistoryStore 会自动持久化到 DB）
     history_entry = {
-        "strategy_ids": ",".join(strategy_ids),
+        "strategyIds": ",".join(strategy_ids),
         "result": json.dumps({
             "strategies": comparison.strategies,
             "rankings": comparison.rankings,
             "recommendations": comparison.recommendations,
-            "portfolio_weights": comparison.portfolio_weights,
-            "correlation_matrix": comparison.correlation_matrix,
-            "recent_performance": recent_perf,
+            "portfolioWeights": comparison.portfolio_weights,
+            "correlationMatrix": comparison.correlation_matrix,
+            "recentPerformance": recent_perf,
         }),
     }
     _comparison_history.append(history_entry)

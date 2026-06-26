@@ -22,7 +22,7 @@ vi.mock('react-router-dom', () => ({
 }))
 
 // Mock backtestStore
-const mockSubmitTask = vi.fn(() => Promise.resolve({ task_id: 'test-task-123' }))
+const mockSubmitTask = vi.fn(() => Promise.resolve({ taskId: 'test-task-123' }))
 const mockAddNotification = vi.fn()
 
 vi.mock('@/stores/backtestStore', () => ({
@@ -46,7 +46,7 @@ vi.mock('@/stores/notificationStore', () => ({
 describe('Backtest E2E Flow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSubmitTask.mockResolvedValue({ task_id: 'test-task-123' })
+    mockSubmitTask.mockResolvedValue({ taskId: 'test-task-123' })
   })
 
   describe('Page render and initial state', () => {

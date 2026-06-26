@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Callable, Dict, List
 
 from .checkpoints import (
     source_verify,

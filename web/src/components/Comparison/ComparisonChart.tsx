@@ -5,11 +5,11 @@ interface ComparisonChartProps {
   strategies: Array<{
     name: string
     metrics: {
-      total_return?: number
-      sharpe_ratio?: number
-      max_drawdown?: number
-      win_rate?: number
-      profit_loss_ratio?: number
+      totalReturn?: number
+      sharpeRatio?: number
+      maxDrawdown?: number
+      winRate?: number
+      profitLossRatio?: number
     }
   }>
   height?: number
@@ -19,16 +19,16 @@ interface ComparisonChartProps {
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
 
 const RADAR_INDICATORS = [
-  { key: 'total_return' as const, name: '收益率', max: 100 },
-  { key: 'sharpe_ratio' as const, name: '夏普比率', max: 100 },
-  { key: 'max_drawdown' as const, name: '最大回撤', max: 100 },
-  { key: 'win_rate' as const, name: '胜率', max: 100 },
-  { key: 'profit_loss_ratio' as const, name: '盈亏比', max: 100 },
+  { key: 'totalReturn' as const, name: '收益率', max: 100 },
+  { key: 'sharpeRatio' as const, name: '夏普比率', max: 100 },
+  { key: 'maxDrawdown' as const, name: '最大回撤', max: 100 },
+  { key: 'winRate' as const, name: '胜率', max: 100 },
+  { key: 'profitLossRatio' as const, name: '盈亏比', max: 100 },
 ]
 
 function normalizeVal(v: number | undefined, key: string): number {
   if (v === undefined || v === null) return 0
-  if (key === 'max_drawdown') {
+  if (key === 'maxDrawdown') {
     // 回撤为负值，取绝对值
     return Math.min(Math.abs(v) * 100, 100)
   }
@@ -107,11 +107,11 @@ function buildBarOption(
   _height: number,
 ): echarts.EChartsOption {
   const metricKeys = [
-    { key: 'total_return', name: '收益率', unit: '%' },
-    { key: 'sharpe_ratio', name: '夏普比率', unit: '' },
-    { key: 'max_drawdown', name: '最大回撤', unit: '%' },
-    { key: 'win_rate', name: '胜率', unit: '%' },
-    { key: 'profit_loss_ratio', name: '盈亏比', unit: '' },
+    { key: 'totalReturn', name: '收益率', unit: '%' },
+    { key: 'sharpeRatio', name: '夏普比率', unit: '' },
+    { key: 'maxDrawdown', name: '最大回撤', unit: '%' },
+    { key: 'winRate', name: '胜率', unit: '%' },
+    { key: 'profitLossRatio', name: '盈亏比', unit: '' },
   ] as const
 
   const series = metricKeys.map((mk, idx) => ({
@@ -144,8 +144,8 @@ function buildBarOption(
     data: strategies.map((s) => {
       const val = s.metrics[mk.key]
       if (val === undefined || val === null) return 0
-      if (mk.key === 'max_drawdown') return -(Math.abs(val) * 100)
-      return Math.min(val * (mk.key === 'profit_loss_ratio' ? 10 : 1), 100)
+      if (mk.key === 'maxDrawdown') return -(Math.abs(val) * 100)
+      return Math.min(val * (mk.key === 'profitLossRatio' ? 10 : 1), 100)
     }),
   }))
 

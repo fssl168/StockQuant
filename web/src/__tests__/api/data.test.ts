@@ -29,7 +29,7 @@ describe('Data API', () => {
 
   // ---- updateSource ----
   it('dataApi.updateSource should call POST /api/data/sources with config', async () => {
-    const mockConfig = { provider: 'tushare', enabled: true, tushare_token: 'xxx' }
+    const mockConfig = { provider: 'tushare', enabled: true, tushareToken: 'xxx' }
     vi.mocked(client.post).mockResolvedValueOnce({ success: true })
     const result = await dataApi.updateSource(mockConfig)
     expect(client.post).toHaveBeenCalledWith('/api/data/sources', mockConfig)

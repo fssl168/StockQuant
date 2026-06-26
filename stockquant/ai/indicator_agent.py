@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
@@ -57,8 +57,8 @@ class MarketStateDetector:
         """计算 ATR"""
         if len(close) < period + 1:
             return np.array([0.0])
-        high = np.convolve(close, np.ones(period), mode='valid') / period
-        low = np.convolve(close, np.ones(period), mode='valid') / period
+        np.convolve(close, np.ones(period), mode='valid') / period
+        np.convolve(close, np.ones(period), mode='valid') / period
         return close[-1] - close[-period]
 
     def _ma_slope(self, close: np.ndarray, period: int) -> float:
@@ -95,7 +95,7 @@ class MarketStateDetector:
             return MarketState.LOW_VOLATILITY
 
         # 计算真实 ATR（用日振幅近似）
-        true_range = np.max(np.abs(np.diff(close)), axis=0) if len(close) > 1 else 0.0
+        np.max(np.abs(np.diff(close)), axis=0) if len(close) > 1 else 0.0
         avg_close = np.mean(close[-self.atr_period:])
         # 用最近几日的平均振幅代替 ATR
         recent_returns = np.abs(np.diff(close)[-min(20, len(close)):] / close[-min(20, len(close)) - 1:-1])
