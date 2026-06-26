@@ -165,19 +165,19 @@ describe('TradingStore', () => {
   })
 
   describe('cancelOrder()', () => {
-    it('should update target order status to CANCELLED', async () => {
+    it('should update target order status to ORDER_CANCELLED', async () => {
       // First refresh to populate orders
       await useTradingStore.getState().refreshAll()
       // Clear store orders and place a fresh one
       const pendingOrder = useTradingStore.getState().orders.find(
-        (o) => o.status === 'PENDING'
+        (o) => o.status === 'ORDER_PENDING' || o.status === 'ORDER_SUBMITTED'
       )
       if (pendingOrder) {
         await useTradingStore.getState().cancelOrder(pendingOrder.id)
         const updated = useTradingStore.getState().orders.find(
           (o) => o.id === pendingOrder.id
         )
-        expect(updated!.status).toBe('CANCELLED')
+        expect(updated!.status).toBe('ORDER_CANCELLED')
       }
     })
 

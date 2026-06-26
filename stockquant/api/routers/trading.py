@@ -29,7 +29,8 @@ from stockquant.engine.risk import RiskManager
 from stockquant.ai.risk_agent import RiskAgent
 from stockquant.models.account import Account
 from stockquant.models.bar import BarData
-from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+from stockquant.models.order import Order, OrderSide, OrderType
+from stockquant.events import EventType as OrderStatus
 from stockquant.models.portfolio import Portfolio
 
 logger = logging.getLogger("stockquant.api.trading")
@@ -319,7 +320,7 @@ def _recover_trading_state() -> None:
                     price=order_info["price"],
                     quantity=order_info["quantity"],
                     order_id=order_info["order_id"],
-                    status=OrderStatus.SUBMITTED,
+                    status=OrderStatus.ORDER_SUBMITTED.value,
                 )
                 _pending_limit_orders[order_id] = order
             logger.info(f"已恢复 {len(pending_data)} 个待撮合订单")
@@ -430,13 +431,13 @@ def _match_pending_limits(bar: BarData):
         limit_up = bar.close * (1 + _paper_broker._limit_up_ratio)
         limit_down = bar.close * (1 - _paper_broker._limit_down_ratio)
         if order.price > limit_up or order.price < limit_down:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             _paper_broker.cancel_order(order)
             continue
 
         # 100 股整数倍
         if order.quantity % 100 != 0:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             _paper_broker.cancel_order(order)
             continue
 
@@ -459,7 +460,7 @@ def _match_pending_limits(bar: BarData):
                 price=order.price,
                 quantity=order.quantity,
                 order_id=order.order_id,
-                status=OrderStatus.SUBMITTED,
+                status=OrderStatus.ORDER_SUBMITTED.value,
             )
             trade = _paper_broker.place_order(new_order, bar)
             if trade:
@@ -569,7 +570,7 @@ async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get
         price=exec_price,
         quantity=quantity,
         order_id=order_id,
-        status=OrderStatus.SUBMITTED,
+        status=OrderStatus.ORDER_SUBMITTED.value,
     )
 
     # 记录审计日志
@@ -599,7 +600,7 @@ async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get
         if order_side == OrderSide.BUY:
             needed_cash = exec_price * quantity + _commission_info.calc_buy_cost(exec_price * quantity)
             if needed_cash > _portfolio.account.available_cash:
-                order.update_status(OrderStatus.REJECTED)
+                order.update_status(OrderStatus.ORDER_REJECTED.value)
                 _orders_audit[order_id]["status"] = "REJECTED"
                 _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
                 raise HTTPException(status_code=400, detail="可用资金不足")
@@ -655,7 +656,7 @@ async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get
         # 检查资金
         needed_cash = exec_price * quantity + _commission_info.calc_buy_cost(exec_price * quantity)
         if needed_cash > _portfolio.account.available_cash:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             _orders_audit[order_id]["status"] = "REJECTED"
             _orders_audit[order_id]["updated_at"] = datetime.now().isoformat()
             raise HTTPException(status_code=400, detail="可用资金不足")

@@ -18,16 +18,26 @@ logger = logging.getLogger("stockquant.api")
 
 
 class EventType(str, Enum):
-    """事件类型枚举"""
-    ORDER_CREATED = "ORDER_CREATED"
+    """事件类型枚举 — 统一订单/持仓/账户事件
+
+    合并了原 OrderStatus 的 PENDING/SUBMITTED/QUEUED/PARTIAL/FILLED/CANCELLED/REJECTED
+    为统一的 EventType 订单状态值。
+    """
+    # 订单状态（合并 ORDER_CREATED + PENDING/SUBMITTED）
+    ORDER_PENDING = "ORDER_PENDING"
+    ORDER_SUBMITTED = "ORDER_SUBMITTED"
+    ORDER_PARTIAL_FILL = "ORDER_PARTIAL_FILL"
     ORDER_FILLED = "ORDER_FILLED"
     ORDER_CANCELLED = "ORDER_CANCELLED"
     ORDER_REJECTED = "ORDER_REJECTED"
+    # 持仓/账户
+    POSITION_CLOSED = "POSITION_CLOSED"
+    ACCOUNT_BALANCE_UPDATE = "ACCOUNT_BALANCE_UPDATE"
+    # 原有事件
     RISK_ALERT = "RISK_ALERT"
     SIGNAL_GENERATED = "SIGNAL_GENERATED"
     PRICE_UPDATE = "PRICE_UPDATE"
     POSITION_UPDATE = "POSITION_UPDATE"
-    ACCOUNT_UPDATE = "ACCOUNT_UPDATE"
 
 
 class EventBus:
@@ -200,19 +210,39 @@ event_bus = EventBus()
 
 # ============ 便捷函数 ============
 
-async def publish_order_created(order_data: dict) -> None:
-    """发布订单创建事件"""
-    await event_bus.publish(EventType.ORDER_CREATED, order_data)
+async def publish_order_submitted(order_data: dict) -> None:
+    """发布订单提交事件（替代原 publish_order_created）"""
+    await event_bus.publish(EventType.ORDER_SUBMITTED, order_data)
+
+
+async def publish_order_partially_filled(order_data: dict) -> None:
+    """发布订单部分成交事件"""
+    await event_bus.publish(EventType.ORDER_PARTIAL_FILL, order_data)
 
 
 async def publish_order_filled(order_data: dict) -> None:
-    """发布订单成交事件"""
+    """发布订单全部成交事件"""
     await event_bus.publish(EventType.ORDER_FILLED, order_data)
 
 
 async def publish_order_cancelled(order_id: str, reason: str = "") -> None:
     """发布订单取消事件"""
     await event_bus.publish(EventType.ORDER_CANCELLED, {"order_id": order_id, "reason": reason})
+
+
+async def publish_order_rejected(order_id: str, reason: str = "") -> None:
+    """发布订单拒绝事件"""
+    await event_bus.publish(EventType.ORDER_REJECTED, {"order_id": order_id, "reason": reason})
+
+
+async def publish_position_closed(position_data: dict) -> None:
+    """发布持仓平仓事件"""
+    await event_bus.publish(EventType.POSITION_CLOSED, position_data)
+
+
+async def publish_account_balance_update(balance_data: dict) -> None:
+    """发布账户余额变动事件（替代原 publish_account_update）"""
+    await event_bus.publish(EventType.ACCOUNT_BALANCE_UPDATE, balance_data)
 
 
 async def publish_risk_alert(alert_data: dict) -> None:

@@ -19,7 +19,8 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+from stockquant.models.order import Order, OrderSide, OrderType
+from stockquant.events import EventType as OrderStatus, EventType
 from stockquant.models.bar import BarData
 from stockquant.models.trade import TradeData
 from stockquant.engine.broker import Broker, OrderAuditLog
@@ -204,14 +205,14 @@ class XTPBroker(Broker):
         """
         # A 股 100 股整数倍校验
         if order.quantity % 100 != 0:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             self._log_order(order, "REJECTED", "quantity not multiple of 100")
             return None
 
         if not self.connected:
             # 降级为模拟模式
             logger.warning("XTP 未连接，订单 %s 以模拟模式执行", order.order_id)
-            order.update_status(OrderStatus.SUBMITTED)
+            order.update_status(OrderStatus.ORDER_SUBMITTED.value)
             trade = TradeData(
                 trade_id=f"{order.order_id}_sim",
                 order_id=order.order_id,
@@ -260,7 +261,7 @@ class XTPBroker(Broker):
                     self._xtp_order_map[xtp_order_id] = order.order_id
                     self._open_orders[order.order_id] = order
 
-                order.update_status(OrderStatus.SUBMITTED)
+                order.update_status(OrderStatus.ORDER_SUBMITTED.value)
                 self._log_order(
                     order, "SUBMITTED",
                     f"XTP order submitted, xtp_order_id={xtp_order_id}"
@@ -276,19 +277,19 @@ class XTPBroker(Broker):
                 )
             else:
                 # 下单失败
-                order.update_status(OrderStatus.REJECTED)
+                order.update_status(OrderStatus.ORDER_REJECTED.value)
                 self._log_order(order, "REJECTED", f"XTP InsertOrder failed, xtp_order_id={xtp_order_id}")
                 return None
 
         except Exception as e:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             self._log_order(order, "REJECTED", str(e))
             return None
 
     def cancel_order(self, order: Order) -> bool:
         """通过 XTP 撤单"""
-        if order.status.name in ("PENDING", "SUBMITTED", "QUEUED"):
-            order.update_status(OrderStatus.CANCELLED)
+        if order.status in (EventType.ORDER_PENDING.value, EventType.ORDER_SUBMITTED.value, "QUEUED"):
+            order.update_status(OrderStatus.ORDER_CANCELLED.value)
             self._open_orders.pop(order.order_id, None)
 
             if self.connected and self._xtp_api:
@@ -443,24 +444,24 @@ class _XTPTaderSpi:
 
             # 更新订单状态
             status_map = {
-                1: OrderStatus.SUBMITTED,    # XTP_ORDER_STATUS_INIT
-                2: OrderStatus.SUBMITTED,    # XTP_ORDER_STATUS_ALLTRADED
-                3: OrderStatus.PARTIAL,      # XTP_ORDER_STATUS_PARTTRADED
-                4: OrderStatus.CANCELLED,    # XTP_ORDER_STATUS_CANCELED
-                5: OrderStatus.REJECTED,     # XTP_ORDER_STATUS_REJECTED
-                6: OrderStatus.PARTIAL,      # XTP_ORDER_STATUS_PARTTRADEDPARTCANCELED
+                1: OrderStatus.ORDER_SUBMITTED.value,    # XTP_ORDER_STATUS_INIT
+                2: OrderStatus.ORDER_SUBMITTED.value,    # XTP_ORDER_STATUS_ALLTRADED
+                3: OrderStatus.ORDER_PARTIAL_FILL.value,      # XTP_ORDER_STATUS_PARTTRADED
+                4: OrderStatus.ORDER_CANCELLED.value,    # XTP_ORDER_STATUS_CANCELED
+                5: OrderStatus.ORDER_REJECTED.value,     # XTP_ORDER_STATUS_REJECTED
+                6: OrderStatus.ORDER_PARTIAL_FILL.value,      # XTP_ORDER_STATUS_PARTTRADEDPARTCANCELED
             }
             xtp_status = getattr(order_info, 'order_status', 0)
-            new_status = status_map.get(xtp_status, OrderStatus.SUBMITTED)
+            new_status = status_map.get(xtp_status, OrderStatus.ORDER_SUBMITTED.value)
             order.update_status(new_status)
 
             self._broker._log_order(
-                order, new_status.name,
+                order, new_status,
                 f"XTP order event, xtp_status={xtp_status}"
             )
 
             # 如果全部成交或撤单，从挂单中移除
-            if new_status in (OrderStatus.COMPLETED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+            if new_status in (OrderStatus.ORDER_FILLED.value, OrderStatus.ORDER_CANCELLED.value, OrderStatus.ORDER_REJECTED.value):
                 self._broker._open_orders.pop(order_id, None)
 
         except Exception as e:

@@ -194,7 +194,8 @@ class TestRiskCheck:
 
     def test_risk_check_speed(self):
         """测试风控检查速度"""
-        from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+        from stockquant.models.order import Order, OrderSide, OrderType
+        from stockquant.events import EventType as OrderStatus
 
         start = time.perf_counter()
         for i in range(1000):
@@ -205,7 +206,7 @@ class TestRiskCheck:
                 price=1800.0,
                 quantity=100,
                 order_id=f"RISK-TEST-{i}",
-                status=OrderStatus.SUBMITTED,
+                status=OrderStatus.ORDER_SUBMITTED.value,
             )
             # 模拟风控检查
             _ = order.quantity % 100 == 0

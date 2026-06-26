@@ -32,7 +32,7 @@ class TestPaperBrokerPlaceOrder:
         assert trade is not None
         assert trade.symbol == "sh600519"
         assert trade.side == "Buy"
-        assert order.status.name == "FILLED"
+        assert order.status == "ORDER_FILLED"
 
     def test_lot_size_rejected(self, broker, bar):
         """100 股非整数倍的买单应被拒绝"""
@@ -40,7 +40,7 @@ class TestPaperBrokerPlaceOrder:
                       price=100.0, quantity=50)
         trade = broker.place_order(order, bar)
         assert trade is None
-        assert order.status.name == "REJECTED"
+        assert order.status == "ORDER_REJECTED"
 
     def test_limit_up_rejected(self, broker, bar):
         """涨停板以上的买单应被拒绝"""
@@ -48,7 +48,7 @@ class TestPaperBrokerPlaceOrder:
                       price=120.0, quantity=100)
         trade = broker.place_order(order, bar)
         assert trade is None
-        assert order.status.name == "REJECTED"
+        assert order.status == "ORDER_REJECTED"
 
     def test_limit_down_rejected(self, broker, bar):
         """跌停板以下的卖单应被拒绝"""
@@ -56,7 +56,7 @@ class TestPaperBrokerPlaceOrder:
                       price=80.0, quantity=100)
         trade = broker.place_order(order, bar)
         assert trade is None
-        assert order.status.name == "REJECTED"
+        assert order.status == "ORDER_REJECTED"
 
     def test_trade_log_captured(self, broker, bar):
         """成交记录应被添加到日志"""
@@ -74,7 +74,7 @@ class TestPaperBrokerCancelOrder:
                       price=100.0, quantity=100)
         result = broker.cancel_order(order)
         assert result is True
-        assert order.status.name == "CANCELLED"
+        assert order.status == "ORDER_CANCELLED"
 
     def test_cancel_filled_order_fails(self, broker, bar):
         """已成交订单不能撤销"""

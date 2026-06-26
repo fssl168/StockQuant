@@ -1,12 +1,12 @@
 import client from './client'
 
 export interface DashboardMetrics {
-  total_assets: number
-  today_pnl: number
-  position_count: number
-  backtest_count: number
-  annualized_return: number
-  max_drawdown: number
+  totalEquity: number
+  dailyPnl: number
+  positionCount: number
+  backtestCount: number
+  annualizedReturn: number
+  maxDrawdown: number
   sharpe_ratio: number
   volatility: number
 }

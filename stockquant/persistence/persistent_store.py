@@ -1,11 +1,19 @@
 # -*- coding: utf-8 -*-
-"""持久化存储包装器  用于替代内存字典存储"""
+"""持久化存储包装器 — 用于替代内存字典存储。
+
+DEPRECATED: 这些 Store 类是仓储层合并（Phase 5）的中间产物。
+新的代码应直接使用 repository.py 中的函数或 repository_v2.py 中的 Repository 类。
+
+Store 类通过 __setitem__/__delitem__ 自动持久化到数据库，
+同时维护 _cache 内存缓存作为性能优化。
+"""
 
 from __future__ import annotations
 
 import json
 import logging
 import os
+import warnings
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import sessionmaker
@@ -57,7 +65,7 @@ def _get_db_url():
 
 
 class BacktestTaskStore:
-    """回测任务存储  模拟字典接口，底层使用数据库"""
+    """[DEPRECATED] 回测任务存储 — 使用 repository.save_backtest_task/list_backtest_tasks 替代"""
 
     def __init__(self, user_id: Optional[str] = None):
         self._db_url = _get_db_url()
@@ -130,7 +138,7 @@ class BacktestTaskStore:
 
 
 class StrategyStore:
-    """策略存储  模拟字典接口，底层使用数据库"""
+    """[DEPRECATED] 策略存储 — 使用 repository.save_strategy/list_strategies 替代"""
 
     def __init__(self, user_id: Optional[str] = None):
         self._db_url = _get_db_url()
@@ -195,7 +203,7 @@ class StrategyStore:
 
 
 class CollectTaskStore:
-    """数据收集任务存储  模拟字典接口，底层使用数据库"""
+    """[DEPRECATED] 数据收集任务存储 — 使用 repository.save_collect_task 替代"""
 
     def __init__(self, user_id: Optional[str] = None):
         self._db_url = _get_db_url()
@@ -274,7 +282,7 @@ class CollectTaskStore:
 
 
 class OptimizeTaskStore:
-    """参数优化任务存储  模拟字典接口，底层使用数据库"""
+    """[DEPRECATED] 参数优化任务存储 — 使用 repository.save_optimize_task 替代"""
 
     def __init__(self, user_id: Optional[str] = None):
         self._db_url = _get_db_url()
@@ -351,7 +359,7 @@ class OptimizeTaskStore:
 
 
 class ComparisonHistoryStore:
-    """策略对比历史存储  模拟列表接口，底层使用数据库"""
+    """[DEPRECATED] 策略对比历史存储 — 使用 repository.save_comparison_history 替代"""
 
     def __init__(self, user_id: Optional[str] = None):
         self._db_url = _get_db_url()
@@ -399,7 +407,11 @@ class ComparisonHistoryStore:
 
 
 class PendingOrderStore:
-    """待处理订单存储  模拟字典接口，底层使用数据库"""
+    """[DEPRECATED] 待处理订单存储 — 功能并入 Order 模型
+
+    请使用 stockquant.persistence.repository.save_order/list_orders/delete_order
+    或 Repository 直接操作 Order。
+    """
 
     def __init__(self, user_id: Optional[str] = None):
         self._db_url = _get_db_url()
@@ -550,7 +562,7 @@ class OrderAuditStore:
 
 
 class NotificationStore:
-    """通知存储  模拟列表接口，底层使用数据库"""
+    """[DEPRECATED] 通知存储 — 使用 repository.list_notifications 替代"""
 
     def __init__(self, user_id: Optional[str] = None):
         self._db_url = _get_db_url()

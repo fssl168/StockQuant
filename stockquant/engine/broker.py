@@ -6,12 +6,14 @@ from __future__ import annotations
 import json
 import logging
 from abc import ABC, abstractmethod
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+from stockquant.models.order import Order, OrderSide, OrderType
+from stockquant.events import EventType as OrderStatus, EventType
 from stockquant.models.bar import BarData
 from stockquant.models.trade import TradeData
 
@@ -112,7 +114,7 @@ class BacktestBroker(Broker):
 
     def _try_fill(self, order: Order, exec_price: float, bar: BarData) -> Optional[TradeData]:
         """执行一笔成交，返回 TradeData；失败返回 None"""
-        order.update_status(OrderStatus.FILLED)
+        order.update_status(OrderStatus.ORDER_FILLED.value)
         order.add_fill(order.quantity, exec_price)
 
         trade = TradeData(
@@ -145,7 +147,7 @@ class BacktestBroker(Broker):
         still_pending: List[Order] = []
         for order in self._order_book[symbol]:
             # 已过期的订单（例如已被用户撤销）
-            if order.status == OrderStatus.CANCELLED:
+            if order.status == OrderStatus.ORDER_CANCELLED.value:
                 continue
 
             is_buy = order.side == OrderSide.BUY
@@ -218,12 +220,12 @@ class BacktestBroker(Broker):
         limit_down = bar.close * (1 - self._limit_down_ratio)
 
         if order.price > limit_up or order.price < limit_down:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             return None
 
         # 2. 100 股整数倍
         if order.quantity % 100 != 0:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             return None
 
         # 3. STOP 订单：止损触发逻辑
@@ -245,7 +247,7 @@ class BacktestBroker(Broker):
             if symbol not in self._order_book:
                 self._order_book[symbol] = []
             self._order_book[symbol].append(order)
-            order.update_status(OrderStatus.QUEUED)
+            order.update_status(OrderStatus.ORDER_PENDING.value)
             return None
 
         # 4. STOP_LIMIT 订单：止损+限价逻辑
@@ -272,7 +274,7 @@ class BacktestBroker(Broker):
             if symbol not in self._order_book:
                 self._order_book[symbol] = []
             self._order_book[symbol].append(order)
-            order.update_status(OrderStatus.QUEUED)
+            order.update_status(OrderStatus.ORDER_PENDING.value)
             return None
 
         # 5. LIMIT 单价格检查
@@ -291,8 +293,8 @@ class BacktestBroker(Broker):
         return self._try_fill(order, exec_price, bar)
 
     def cancel_order(self, order: Order) -> bool:
-        if order.status.name in ("PENDING", "SUBMITTED", "QUEUED"):
-            order.update_status(OrderStatus.CANCELLED)
+        if order.status in (EventType.ORDER_PENDING.value, EventType.ORDER_SUBMITTED.value, EventType.ORDER_PENDING.value):
+            order.update_status(OrderStatus.ORDER_CANCELLED.value)
             return True
         return False
 
@@ -359,11 +361,11 @@ class PaperBroker(Broker):
         limit_up = bar.close * (1 + self._limit_up_ratio)
         limit_down = bar.close * (1 - self._limit_down_ratio)
         if order.price > limit_up or order.price < limit_down:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             return None
         # 100 股整数倍
         if order.quantity % 100 != 0:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             return None
         # 限价单
         if order.order_type.name == "LIMIT":
@@ -377,7 +379,7 @@ class PaperBroker(Broker):
         if self._slippage:
             exec_price = self._slippage.apply(bar.close, side)
         # 成交
-        order.update_status(OrderStatus.FILLED)
+        order.update_status(OrderStatus.ORDER_FILLED.value)
         order.add_fill(order.quantity, exec_price)
         trade = TradeData(
             trade_id=f"{order.order_id}_trade",
@@ -394,8 +396,8 @@ class PaperBroker(Broker):
         return trade
 
     def cancel_order(self, order: Order) -> bool:
-        if order.status.name in ("PENDING", "SUBMITTED", "QUEUED"):
-            order.update_status(OrderStatus.CANCELLED)
+        if order.status in (EventType.ORDER_PENDING.value, EventType.ORDER_SUBMITTED.value, EventType.ORDER_PENDING.value):
+            order.update_status(OrderStatus.ORDER_CANCELLED.value)
             return True
         return False
 
@@ -446,13 +448,13 @@ class PaperBroker(Broker):
             limit_up = bar.close * (1 + self._limit_up_ratio)
             limit_down = bar.close * (1 - self._limit_down_ratio)
             if order.price > limit_up or order.price < limit_down:
-                order.update_status(OrderStatus.REJECTED)
+                order.update_status(OrderStatus.ORDER_REJECTED.value)
                 self.cancel_order(order)
                 continue
 
             # 100 股整数倍
             if order.quantity % 100 != 0:
-                order.update_status(OrderStatus.REJECTED)
+                order.update_status(OrderStatus.ORDER_REJECTED.value)
                 self.cancel_order(order)
                 continue
 
@@ -541,7 +543,7 @@ class PaperBroker(Broker):
                         price=o["price"],
                         quantity=o["quantity"],
                         order_id=o["order_id"],
-                        status=OrderStatus.SUBMITTED,
+                        status=OrderStatus.ORDER_SUBMITTED.value,
                     )
                     self._order_book[key].append(order)
             self._logger.info(f"已从 {filepath} 恢复状态: {len(self._trade_log)} 条交易记录")
@@ -782,7 +784,7 @@ class LiveBroker(Broker):
         """
         # 1. A 股 100 股整数倍校验
         if order.quantity % 100 != 0:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             self._log_order(order, status="REJECTED",
                             reason="quantity not a multiple of 100")
             return None
@@ -791,7 +793,7 @@ class LiveBroker(Broker):
         limit_up = bar.close * 1.10
         limit_down = bar.close * 0.90
         if order.price > limit_up or order.price < limit_down:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             self._log_order(order, status="REJECTED",
                             reason="price beyond ±10% limit")
             return None
@@ -801,7 +803,7 @@ class LiveBroker(Broker):
             try:
                 result = self._sdk_broker.place_order(order, bar)
                 if result:
-                    order.update_status(OrderStatus.SUBMITTED)
+                    order.update_status(OrderStatus.ORDER_SUBMITTED.value)
                     self._open_orders[order.order_id] = order
                     self._log_order(order, status="SUBMITTED",
                                     reason=f"order submitted via {self._api} SDK")
@@ -810,7 +812,7 @@ class LiveBroker(Broker):
                 logger.warning("SDK 下单失败，回退到骨架模式: %s", e)
 
         # 4. 骨架模式：标记为已提交
-        order.update_status(OrderStatus.SUBMITTED)
+        order.update_status(OrderStatus.ORDER_SUBMITTED.value)
         self._open_orders[order.order_id] = order
         self._log_order(order, status="SUBMITTED", reason="order submitted to broker")
 
@@ -844,8 +846,8 @@ class LiveBroker(Broker):
         对状态为 PENDING / SUBMITTED / QUEUED 的订单，
         将其置为 CANCELLED 并记录审计日志。
         """
-        if order.status.name in ("PENDING", "SUBMITTED", "QUEUED"):
-            order.update_status(OrderStatus.CANCELLED)
+        if order.status in (EventType.ORDER_PENDING.value, EventType.ORDER_SUBMITTED.value, EventType.ORDER_PENDING.value):
+            order.update_status(OrderStatus.ORDER_CANCELLED.value)
             self._open_orders.pop(order.order_id, None)
             self._log_order(order, status="CANCELLED", reason="user cancel request")
             return True

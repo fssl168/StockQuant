@@ -48,14 +48,14 @@ export const useAIStore = create<AIState>((set, get) => ({
     // 2. 从后端同步会话列表
     let activeId = ''
     try {
-      const data = await aiApi.getConversations()
+      const data = await aiApi.conversations()
       const convs: Conversation[] = (data.conversations || []).map((c: any) => {
-        const createdAt = c.created_at ? new Date(c.created_at).getTime() : Date.now()
+        const createdAt = c.createdAt ? new Date(c.createdAt).getTime() : Date.now()
         return {
           id: c.id,
           title: c.title || '新对话',
           createdAt: isNaN(createdAt) ? Date.now() : createdAt,
-          messageCount: c.message_count ?? 0,
+          messageCount: c.messageCount ?? 0,
         }
       })
       const state = get()

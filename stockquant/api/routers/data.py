@@ -140,31 +140,31 @@ def _dynamic_sources() -> List[Dict[str, Any]]:
 # Endpoints
 # ------------------------------------------------------------------
 
-@router.get("/data/sources", summary="???????")
+@router.get("/data/sources", summary="获取数据源列表")
 async def get_sources():
     """Return dynamically resolved data sources."""
     return _dynamic_sources()
 
 
-@router.post("/data/sources", summary="???????")
+@router.post("/data/sources", summary="获取数据源列表")
 async def update_source(payload: UpdateDataRequest) -> Dict[str, Any]:
     """Update data source config."""
     return {"success": True, "provider": payload.provider}
 
 
-@router.put("/data/sources/{provider}", summary="???????")
+@router.put("/data/sources/{provider}", summary="获取数据源列表")
 async def update_source_by_provider(provider: str, payload: UpdateDataRequest) -> Dict[str, Any]:
     """Update data source config."""
     return {"success": True, "provider": provider}
 
 
-@router.delete("/data/sources/{provider}", summary="?????")
+@router.delete("/data/sources/{provider}", summary="删除数据源")
 async def delete_source(provider: str):
     """Remove a data source (no-op for now - sources are dynamic)."""
     return {"success": True, "provider": provider}
 
 
-@router.get("/data/cache", summary="??????")
+@router.get("/data/cache", summary="????")
 async def get_cache_stats():
     """Return cache statistics."""
     return _cache_stats_via_service()
@@ -190,13 +190,13 @@ async def clear_cache():
     return {"success": True, "deleted_files": deleted_count}
 
 
-@router.get("/data/kline", summary="??K???")
+@router.get("/data/kline", summary="查询K线数据")
 async def get_kline(
-    symbol: str = Query(..., description="????"),
-    start: str = Query(..., description="???? YYYY-MM-DD"),
-    end: str = Query(..., description="???? YYYY-MM-DD"),
-    timeframe: str = Query("1d", description="????"),
-    source: str = Query("", description="???(???????DataService??)"),
+        symbol: str = Query(..., description="股稿代码"),
+        start: str = Query(..., description="开始業期 YYYY-MM-DD"),
+        end: str = Query(..., description="开始業期 YYYY-MM-DD"),
+        timeframe: str = Query("1d", description="股稿代码"),
+        source: str = Query("", description="数据源名称(不传则默认DataService)"),
 ):
     """Fetch K-line OHLCV data via DataService with proper async handling."""
     try:
@@ -238,7 +238,7 @@ async def get_kline(
         }
 
 
-@router.post("/data/collect", summary="????")
+@router.post("/data/collect", summary="??????")
 async def collect_data(payload: CollectDataRequest) -> Dict[str, Any]:
     """Start data collection task."""
     symbol = payload.symbol
@@ -280,7 +280,7 @@ async def collect_data(payload: CollectDataRequest) -> Dict[str, Any]:
     return {"task_id": task_id, "status": "collecting", "symbol": symbol}
 
 
-@router.get("/data/health", summary="?????????")
+@router.get("/data/health", summary="获取数据源列表")
 async def get_data_health():
     """Return health status of all configured data sources."""
     if _app_data_service is not None:
@@ -331,8 +331,8 @@ async def get_collect_logs():
     return logs
 
 
-@router.get("/data/download", summary="????")
-async def download_data(provider: str = Query(..., description="?????")):
+@router.get("/data/download", summary="??????")
+async def download_data(provider: str = Query(..., description="时间框架")):
     """Download K-line data for default symbols from a provider."""
     default_symbols = [
         "sh600519", "sz000858", "sh601318", "sh600036",
@@ -398,7 +398,7 @@ async def download_data(provider: str = Query(..., description="?????")):
 
 
 @router.post("/data/upload-csv", summary="CSV????")
-async def upload_csv(file: UploadFile = File(..., description="CSV??")):
+async def upload_csv(file: UploadFile = File(..., description="CSV文件")):
     """Upload and import CSV K-line data."""
     import pandas as pd
 

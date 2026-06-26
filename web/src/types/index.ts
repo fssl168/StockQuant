@@ -1,16 +1,16 @@
 export interface BacktestTask {
   task_id: string
   status: string
-  strategy_name: string
-  strategy_code: string
+  strategyName: string
+  strategyCode: string
   symbols: string[]
-  start_date: string
-  end_date: string
+  startDate: string
+  endDate: string
   cash: number
-  commission_type: string
-  slippage_type: string
-  created_at: string
-  updated_at: string
+  commissionType: string
+  slippageType: string
+  createdAt: string
+  updatedAt: string
   metrics: Record<string, unknown>
   trades: unknown[]
   equity_curve: unknown[]
@@ -84,8 +84,8 @@ export interface Strategy {
   code: string
   description: string
   parameters: Record<string, unknown>
-  created_at: string
-  updated_at: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Message {
@@ -171,7 +171,7 @@ export interface CacheStats {
 export type BrokerMode = 'paper' | 'live' | 'xtp' | 'ctp'
 export type OrderSide = 'BUY' | 'SELL'
 export type OrderType = 'MARKET' | 'LIMIT' | 'STOP'
-export type OrderStatus = 'PENDING' | 'SUBMITTED' | 'PARTIAL_FILLED' | 'FILLED' | 'CANCELLED' | 'REJECTED'
+export type OrderStatus = 'ORDER_PENDING' | 'ORDER_SUBMITTED' | 'ORDER_PARTIAL_FILL' | 'ORDER_FILLED' | 'ORDER_CANCELLED' | 'ORDER_REJECTED'
 
 export interface Order {
   id: string

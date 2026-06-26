@@ -2,7 +2,8 @@
 """数据模型层"""
 
 from stockquant.models.base import Event, EventType
-from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+from stockquant.models.order import Order, OrderSide, OrderType
+from stockquant.events import EventType as OrderStatus
 from stockquant.models.position import Position
 from stockquant.models.account import Account
 from stockquant.models.bar import BarData

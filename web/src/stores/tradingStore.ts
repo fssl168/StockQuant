@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { BrokerMode, Order, AccountInfo, Position, TradeRecord, OrderSide, OrderType } from '../types'
+import type { BrokerMode, Order, AccountInfo, Position, TradeRecord, OrderSide, OrderType, OrderStatus } from '../types'
 import * as tradingApi from '../api/trading'
 import { message } from 'antd'
 
@@ -75,7 +75,7 @@ export const useTradingStore = create<TradingState>((set, get) => ({
     }
     set((s) => ({
       orders: s.orders.map((o) =>
-        o.id === orderId ? { ...o, status: 'CANCELLED' as const, updatedAt: new Date().toISOString() } : o,
+        o.id === orderId ? { ...o, status: 'ORDER_CANCELLED' as OrderStatus, updatedAt: new Date().toISOString() } : o,
       ),
     }))
   },

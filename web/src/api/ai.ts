@@ -8,19 +8,19 @@ export interface SSEEvent {
 
 export const aiApi = {
   chat: (conversationId: string, message: string) =>
-    client.post("/api/ai/chat", { conversation_id: conversationId, message }) as Promise<{
+    client.post("/api/ai/chat", { conversationId: conversationId, message }) as Promise<{
       reply: string;
-      conversation_id: string;
+      conversationId: string;
       history: unknown[];
     }>,
   conversations: () =>
     client.get("/api/ai/conversations") as Promise<{
-      conversations: { id: string; title: string; created_at: string; message_count: number }[];
+      conversations: { id: string; title: string; createdAt: string; messageCount: number }[];
     }>,
   clear: (id: string) => client.delete(`/api/ai/conversation/${id}`) as Promise<void>,
   getConversation: (id: string) =>
     client.get(`/api/ai/conversation/${id}`) as Promise<{
-      conversation_id: string;
+      conversationId: string;
       messages: { role: string; content: string; timestamp: string }[];
     }>,
   saveMessage: (conversationId: string, role: string, content: string) =>
@@ -44,7 +44,7 @@ export async function* streamChat(
     method: "POST",
     headers,
     body: JSON.stringify({
-      conversation_id: conversationId,
+      conversationId: conversationId,
       message,
       mode: options?.mode,
     }),

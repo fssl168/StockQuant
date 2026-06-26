@@ -6,7 +6,7 @@ interface StrategyState {
   strategies: Strategy[]
   loading: boolean
   fetchStrategies: () => Promise<void>
-  createStrategy: (data: Omit<Strategy, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
+  createStrategy: (data: Omit<Strategy, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
   updateStrategy: (id: string, data: { name: string; code: string }) => Promise<void>
   deleteStrategy: (id: string) => Promise<void>
   clearAllStrategies: () => Promise<void>

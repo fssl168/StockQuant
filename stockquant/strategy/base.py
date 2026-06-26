@@ -6,7 +6,8 @@ from abc import ABC
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from stockquant.indicators.base import Indicator, IndicatorProxy
-from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+from stockquant.models.order import Order, OrderSide, OrderType
+from stockquant.events import EventType as OrderStatus
 from stockquant.models.bar import BarData
 from stockquant.models.position import Position
 
@@ -237,7 +238,7 @@ class BaseStrategy(ABC):
             return
 
         order.order_id = f"{order.order_id}_{order.side.value}_{self._next_order_id()}" if order.order_id else f"{order.symbol}_{order.side.value}_{self._next_order_id()}"
-        order.update_status(OrderStatus.SUBMITTED)
+        order.update_status(OrderStatus.ORDER_SUBMITTED.value)
 
         # 风控检查
         if self._cerebro.risk_manager:
@@ -248,7 +249,7 @@ class BaseStrategy(ABC):
                 equity = self._cerebro.portfolio.equity
             valid, reason = risk_mgr.check(order, equity, positions, equity)
             if not valid:
-                order.update_status(OrderStatus.REJECTED)
+                order.update_status(OrderStatus.ORDER_REJECTED.value)
                 self.log(f"Order rejected by risk manager: {reason}")
                 return
 
@@ -258,7 +259,7 @@ class BaseStrategy(ABC):
         notional = bar.close * order.quantity
         buy_cost = comm.calc_buy_cost(notional)
         if order.side == OrderSide.BUY and (notional + buy_cost) > self._cerebro.cash:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             self.log(f"Order rejected: insufficient cash {self._cerebro.cash:.2f} < {notional + buy_cost:.2f}")
             return
 

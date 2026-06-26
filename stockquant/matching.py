@@ -16,6 +16,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, List, Tuple
 
+from stockquant.events import EventType
+
 logger = logging.getLogger("stockquant.matching")
 
 
@@ -30,13 +32,8 @@ class OrderType(str, Enum):
     STOP = "STOP"
 
 
-class OrderStatus(str, Enum):
-    PENDING = "PENDING"
-    SUBMITTED = "SUBMITTED"
-    PARTIAL_FILLED = "PARTIAL_FILLED"
-    FILLED = "FILLED"
-    CANCELLED = "CANCELLED"
-    REJECTED = "REJECTED"
+# Order status aliases — map EventType values to matching engine usage
+# PENDING, SUBMITTED, PARTIAL_FILLED, FILLED, CANCELLED, REJECTED
 
 
 @dataclass
@@ -51,7 +48,7 @@ class Order:
     quantity: int
     filled_quantity: int = 0
     avg_fill_price: float = 0.0
-    status: OrderStatus = OrderStatus.PENDING
+    status: str = EventType.ORDER_PENDING.value
     created_at: datetime = None
     
     def __post_init__(self):
@@ -144,7 +141,7 @@ class MatchingEngine:
         is_valid, error = self.check_order_validity(order, tick)
         if not is_valid:
             logger.warning(f"订单 {order.order_id} 校验失败: {error}")
-            order.status = OrderStatus.REJECTED
+            order.status = EventType.ORDER_REJECTED.value
             return None
             
         # 计算成交价格
@@ -166,9 +163,9 @@ class MatchingEngine:
         )
         
         if order.filled_quantity >= order.quantity:
-            order.status = OrderStatus.FILLED
+            order.status = EventType.ORDER_FILLED.value
         else:
-            order.status = OrderStatus.PARTIAL_FILLED
+            order.status = EventType.ORDER_PARTIAL_FILL.value
             
         # 返回成交记录
         return {
@@ -254,7 +251,7 @@ class MatchingEngine:
                 fills.append(result)
                 
             # 订单完成或被拒绝，退出循环
-            if order.status in [OrderStatus.FILLED, OrderStatus.REJECTED, OrderStatus.CANCELLED]:
+            if order.status in [EventType.ORDER_FILLED.value, EventType.ORDER_REJECTED.value, EventType.ORDER_CANCELLED.value]:
                 break
                 
         return fills

@@ -15,7 +15,8 @@ import pandas as pd
 import pytest
 
 from stockquant.engine.risk import RiskManager
-from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+from stockquant.models.order import Order, OrderSide, OrderType
+from stockquant.events import EventType as OrderStatus
 from stockquant.models.position import Position
 from stockquant.indicators.moving_avg import MA, EMA, KAMA, TRIX
 from stockquant.indicators.oscillators import RSI, KDJ, CCI, ROC, STOCHRSI

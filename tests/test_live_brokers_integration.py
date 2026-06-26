@@ -27,7 +27,8 @@ from stockquant.execution.brokers.xtp_broker import XTPBroker
 from stockquant.execution.brokers.ctp_broker import CTPBroker
 from stockquant.execution.brokers.qmt_broker import QMTBroker
 
-from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+from stockquant.models.order import Order, OrderSide, OrderType
+from stockquant.events import EventType as OrderStatus
 from stockquant.models.bar import BarData
 from datetime import datetime
 
@@ -77,7 +78,7 @@ class TestXTPBrokerMock:
         assert trade.symbol == "sh600519"
         assert trade.price == 100.0
         assert trade.quantity == 100
-        assert order.status.name == "SUBMITTED"
+        assert order.status == "ORDER_SUBMITTED"
 
     def test_place_limit_order(self, bar):
         """Mock SDK 限价单应正常返回 TradeData"""
@@ -96,7 +97,7 @@ class TestXTPBrokerMock:
         broker.place_order(order, bar)
         result = broker.cancel_order(order)
         assert result is True
-        assert order.status.name == "CANCELLED"
+        assert order.status == "ORDER_CANCELLED"
 
     def test_get_positions(self):
         """Mock SDK 持仓查询应返回预设数据"""
@@ -123,7 +124,7 @@ class TestXTPBrokerMock:
                       order_type=OrderType.MARKET, price=100.0, quantity=50)
         trade = broker.place_order(order, bar)
         assert trade is None
-        assert order.status.name == "REJECTED"
+        assert order.status == "ORDER_REJECTED"
 
     def test_order_audit_log(self, bar):
         """下单应记录审计日志"""
@@ -169,7 +170,7 @@ class TestCTPBrokerMock:
         trade = broker.place_order(order, bar)
         assert trade is not None
         assert trade.symbol == "IF2406"
-        assert order.status.name == "SUBMITTED"
+        assert order.status == "ORDER_SUBMITTED"
 
     def test_no_lot_validation(self, bar):
         """CTP 期货不应校验 100 股整数倍"""
@@ -187,7 +188,7 @@ class TestCTPBrokerMock:
         broker.place_order(order, bar)
         result = broker.cancel_order(order)
         assert result is True
-        assert order.status.name == "CANCELLED"
+        assert order.status == "ORDER_CANCELLED"
 
     def test_get_positions(self):
         """Mock SDK 持仓查询应返回预设数据（含多空）"""
@@ -247,7 +248,7 @@ class TestQMTBrokerMock:
         trade = broker.place_order(order, bar)
         assert trade is not None
         assert trade.symbol == "sh600519"
-        assert order.status.name == "SUBMITTED"
+        assert order.status == "ORDER_SUBMITTED"
 
     def test_place_limit_order(self, bar):
         """Mock SDK 限价单应正常返回 TradeData"""
@@ -265,7 +266,7 @@ class TestQMTBrokerMock:
         broker.place_order(order, bar)
         result = broker.cancel_order(order)
         assert result is True
-        assert order.status.name == "CANCELLED"
+        assert order.status == "ORDER_CANCELLED"
 
     def test_get_positions(self):
         """Mock SDK 持仓查询应返回预设数据"""
@@ -291,7 +292,7 @@ class TestQMTBrokerMock:
                       order_type=OrderType.MARKET, price=100.0, quantity=50)
         trade = broker.place_order(order, bar)
         assert trade is None
-        assert order.status.name == "REJECTED"
+        assert order.status == "ORDER_REJECTED"
 
     def test_order_audit_log(self, bar):
         """下单应记录审计日志"""

@@ -453,9 +453,15 @@ class ComparisonHistory(Base):
     )
 
 
+# ── PendingOrder 已废弃，功能并入 Order 模型 ──
+# 保留空类用于兼容旧的 Alembic migration 依赖
+# 实际使用请改用 Order 模型（stockquant.persistence.models.Order）
+
+
 class PendingOrder(Base):
-    """待处理订单"""
+    """[DEPRECATED] 待处理订单 — 已废弃，功能并入 Order 模型"""
     __tablename__ = "pending_orders"
+    # 已废弃：所有操作通过 stockquant.persistence.models.Order 进行
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)

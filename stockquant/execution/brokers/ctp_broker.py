@@ -19,7 +19,8 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+from stockquant.models.order import Order, OrderSide, OrderType
+from stockquant.events import EventType as OrderStatus, EventType
 from stockquant.models.bar import BarData
 from stockquant.models.trade import TradeData
 from stockquant.engine.broker import Broker, OrderAuditLog
@@ -234,7 +235,7 @@ class CTPBroker(Broker):
         if not self.connected:
             # 降级为模拟模式
             logger.warning("CTP 未连接，订单 %s 以模拟模式执行", order.order_id)
-            order.update_status(OrderStatus.SUBMITTED)
+            order.update_status(OrderStatus.ORDER_SUBMITTED.value)
             trade = TradeData(
                 trade_id=f"{order.order_id}_sim",
                 order_id=order.order_id,
@@ -295,7 +296,7 @@ class CTPBroker(Broker):
                     self._ctp_order_map[order.order_id] = order.order_id
                     self._open_orders[order.order_id] = order
 
-                order.update_status(OrderStatus.SUBMITTED)
+                order.update_status(OrderStatus.ORDER_SUBMITTED.value)
                 self._log_order(order, "SUBMITTED", "CTP order submitted")
 
                 return TradeData(
@@ -307,19 +308,19 @@ class CTPBroker(Broker):
                     quantity=order.quantity,
                 )
             else:
-                order.update_status(OrderStatus.REJECTED)
+                order.update_status(OrderStatus.ORDER_REJECTED.value)
                 self._log_order(order, "REJECTED", f"CTP ReqOrderInsert returned {ret}")
                 return None
 
         except Exception as e:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             self._log_order(order, "REJECTED", str(e))
             return None
 
     def cancel_order(self, order: Order) -> bool:
         """通过 CTP 撤单"""
-        if order.status.name in ("PENDING", "SUBMITTED", "QUEUED"):
-            order.update_status(OrderStatus.CANCELLED)
+        if order.status in (EventType.ORDER_PENDING.value, EventType.ORDER_SUBMITTED.value, EventType.ORDER_PENDING.value):
+            order.update_status(OrderStatus.ORDER_CANCELLED.value)
             self._open_orders.pop(order.order_id, None)
 
             if self.connected and self._ctp_api:
@@ -469,7 +470,7 @@ class _CTPTraderSpi(_CTP_SPI_BASE):
             with self._broker._lock:
                 order = self._broker._open_orders.get(order_ref)
             if order:
-                order.update_status(OrderStatus.REJECTED)
+                order.update_status(OrderStatus.ORDER_REJECTED.value)
                 self._broker._log_order(order, "REJECTED", f"CTP: {pRspInfo.ErrorMsg}")
 
     def OnRtnOrder(self, pOrder):
@@ -484,24 +485,24 @@ class _CTPTraderSpi(_CTP_SPI_BASE):
 
             # CTP 订单状态映射
             status_map = {
-                "0": OrderStatus.SUBMITTED,   # THOST_FTDC_OAS_Submitted
-                "1": OrderStatus.SUBMITTED,   # THOST_FTDC_OAS_Accepted
-                "2": OrderStatus.REJECTED,    # THOST_FTDC_OAS_Rejected
-                "3": OrderStatus.PARTIAL,     # THOST_FTDC_OST_PartTraded
-                "4": OrderStatus.CANCELLED,   # THOST_FTDC_OST_NoTradeQueueing -> 撤单
-                "5": OrderStatus.COMPLETED,   # THOST_FTDC_OST_AllTraded
-                "a": OrderStatus.PARTIAL,     # 部成部撤
+                "0": OrderStatus.ORDER_SUBMITTED.value,   # THOST_FTDC_OAS_Submitted
+                "1": OrderStatus.ORDER_SUBMITTED.value,   # THOST_FTDC_OAS_Accepted
+                "2": OrderStatus.ORDER_REJECTED.value,    # THOST_FTDC_OAS_Rejected
+                "3": OrderStatus.ORDER_PARTIAL_FILL.value,     # THOST_FTDC_OST_PartTraded
+                "4": OrderStatus.ORDER_CANCELLED.value,   # THOST_FTDC_OST_NoTradeQueueing -> 撤单
+                "5": OrderStatus.ORDER_FILLED.value,   # THOST_FTDC_OST_AllTraded
+                "a": OrderStatus.ORDER_PARTIAL_FILL.value,     # 部成部撤
             }
             ctp_status = getattr(pOrder, 'OrderStatus', '0')
-            new_status = status_map.get(ctp_status, OrderStatus.SUBMITTED)
+            new_status = status_map.get(ctp_status, OrderStatus.ORDER_SUBMITTED.value)
             order.update_status(new_status)
 
             self._broker._log_order(
-                order, new_status.name,
+                order, new_status,
                 f"CTP OnRtnOrder, status={ctp_status}"
             )
 
-            if new_status in (OrderStatus.COMPLETED, OrderStatus.CANCELLED, OrderStatus.REJECTED):
+            if new_status in (OrderStatus.ORDER_FILLED.value, OrderStatus.ORDER_CANCELLED.value, OrderStatus.ORDER_REJECTED.value):
                 self._broker._open_orders.pop(order_ref, None)
 
         except Exception as e:

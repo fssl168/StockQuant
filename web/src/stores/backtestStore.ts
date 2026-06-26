@@ -4,7 +4,7 @@ import { backtestApi, type BacktestTask } from '@/api/backtest'
 interface BacktestSubmitResult {
   task_id: string
   status: string
-  created_at?: string
+  createdAt?: string
 }
 
 interface BacktestState {

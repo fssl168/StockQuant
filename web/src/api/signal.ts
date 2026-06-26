@@ -14,7 +14,7 @@ export interface Signal {
 }
 
 export interface SignalStats {
-  active_count: number
+  activeCount: number
   by_side: Record<string, number>
   by_source: Record<string, number>
 }

@@ -17,7 +17,8 @@ from typing import Any, Callable, Dict, List, Optional, Type, TYPE_CHECKING
 
 from stockquant.models.base import Event, EventType
 from stockquant.models.bar import BarData
-from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+from stockquant.models.order import Order, OrderSide, OrderType
+from stockquant.events import EventType as OrderStatus
 from stockquant.models.account import Account
 from stockquant.models.position import Position
 from stockquant.models.trade import TradeData

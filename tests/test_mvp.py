@@ -255,7 +255,8 @@ class TestOrder(unittest.TestCase):
     """订单数据模型测试"""
 
     def test_order_creation(self):
-        from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+        from stockquant.models.order import Order, OrderSide, OrderType
+        from stockquant.events import EventType as OrderStatus
         order = Order(
             symbol="sh600519",
             side=OrderSide.BUY,
@@ -264,7 +265,7 @@ class TestOrder(unittest.TestCase):
             quantity=100,
         )
         self.assertIsNotNone(order.order_id)
-        self.assertEqual(order.status, OrderStatus.PENDING)
+        self.assertEqual(order.status, OrderStatus.ORDER_PENDING.value)
         self.assertEqual(order.remaining, 100)
 
     def test_order_fill(self):
@@ -278,15 +279,16 @@ class TestOrder(unittest.TestCase):
         )
         order.add_fill(300, 1800.0)
         self.assertEqual(order.filled_quantity, 300)
-        self.assertEqual(order.status.value, "Partial")
+        self.assertEqual(order.status, "ORDER_PARTIAL_FILL")
         self.assertEqual(order.remaining, 200)
 
         order.add_fill(200, 1800.5)
         self.assertEqual(order.filled_quantity, 500)
-        self.assertEqual(order.status.value, "Filled")
+        self.assertEqual(order.status, "ORDER_FILLED")
 
     def test_order_rejected(self):
-        from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+        from stockquant.models.order import Order, OrderSide, OrderType
+        from stockquant.events import EventType as OrderStatus
         order = Order(
             symbol="sh600519",
             side=OrderSide.BUY,
@@ -294,8 +296,8 @@ class TestOrder(unittest.TestCase):
             price=1800.0,
             quantity=100,
         )
-        order.update_status(OrderStatus.REJECTED)
-        self.assertEqual(order.status, OrderStatus.REJECTED)
+        order.update_status(OrderStatus.ORDER_REJECTED.value)
+        self.assertEqual(order.status, OrderStatus.ORDER_REJECTED.value)
 
 
 class TestPosition(unittest.TestCase):
@@ -357,7 +359,7 @@ class TestBroker(unittest.TestCase):
         trade = broker.place_order(order, bar)
         self.assertIsNotNone(trade)
         self.assertAlmostEqual(trade.price, 100.0, places=2)
-        self.assertEqual(order.status.value, "Filled")
+        self.assertEqual(order.status, "ORDER_FILLED")
 
     def test_lot_size_rejection(self):
         """非 100 整数倍被拒绝"""
@@ -380,7 +382,7 @@ class TestBroker(unittest.TestCase):
         )
         trade = broker.place_order(order, bar)
         self.assertIsNone(trade)
-        self.assertEqual(order.status.value, "Rejected")
+        self.assertEqual(order.status, "ORDER_REJECTED")
 
 
 class TestCSVFeed(unittest.TestCase):

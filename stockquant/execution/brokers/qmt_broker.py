@@ -10,7 +10,8 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from stockquant.models.order import Order, OrderSide, OrderType, OrderStatus
+from stockquant.models.order import Order, OrderSide, OrderType
+from stockquant.events import EventType as OrderStatus, EventType
 from stockquant.models.bar import BarData
 from stockquant.models.trade import TradeData
 from stockquant.engine.broker import Broker, OrderAuditLog
@@ -65,14 +66,14 @@ class QMTBroker(Broker):
         """通过 QMT 下单"""
         # 100 股整数倍校验
         if order.quantity % 100 != 0:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             self._log_order(order, "REJECTED", "quantity not multiple of 100")
             return None
 
         if not self._connected:
             # 降级为模拟模式
             logger.warning("QMT 未连接，订单 %s 以模拟模式执行", order.order_id)
-            order.update_status(OrderStatus.SUBMITTED)
+            order.update_status(OrderStatus.ORDER_SUBMITTED.value)
             trade = TradeData(
                 trade_id=f"{order.order_id}_sim",
                 order_id=order.order_id,
@@ -111,7 +112,7 @@ class QMTBroker(Broker):
                     price=float(order.price),
                 )
 
-            order.update_status(OrderStatus.SUBMITTED)
+            order.update_status(OrderStatus.ORDER_SUBMITTED.value)
             self._open_orders[order.order_id] = order
             self._log_order(order, "SUBMITTED", f"QMT order submitted, xt_order_id={xt_order_id}")
 
@@ -124,13 +125,13 @@ class QMTBroker(Broker):
                 quantity=order.quantity,
             )
         except Exception as e:
-            order.update_status(OrderStatus.REJECTED)
+            order.update_status(OrderStatus.ORDER_REJECTED.value)
             self._log_order(order, "REJECTED", str(e))
             return None
 
     def cancel_order(self, order: Order) -> bool:
-        if order.status.name in ("PENDING", "SUBMITTED", "QUEUED"):
-            order.update_status(OrderStatus.CANCELLED)
+        if order.status in (EventType.ORDER_PENDING.value, EventType.ORDER_SUBMITTED.value, EventType.ORDER_PENDING.value):
+            order.update_status(OrderStatus.ORDER_CANCELLED.value)
             self._open_orders.pop(order.order_id, None)
             if self._connected and self._xt_trader:
                 try:

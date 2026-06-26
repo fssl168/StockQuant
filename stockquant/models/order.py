@@ -23,19 +23,14 @@ class OrderType(Enum):
     MARKET_ON_CLOSE = "MarketOnClose"  # 收盘市价单
 
 
-class OrderStatus(Enum):
-    PENDING = "Pending"
-    SUBMITTED = "Submitted"
-    QUEUED = "Queued"
-    PARTIAL = "Partial"
-    FILLED = "Filled"
-    CANCELLED = "Cancelled"
-    REJECTED = "Rejected"
+# 从 events 模块导入统一事件类型
+# 订单状态统一使用 EventType 中的 ORDER_XXX 值
+from stockquant.events import EventType as OrderEventType
 
 
 @dataclass
 class Order:
-    """订单数据类"""
+    """订单数据类 — 状态统一使用 EventType.ORDER_XXX"""
     symbol: str
     side: OrderSide
     order_type: OrderType
@@ -44,7 +39,7 @@ class Order:
     order_id: str = ""
     filled_quantity: float = 0.0
     filled_price: float = 0.0
-    status: OrderStatus = field(default=OrderStatus.PENDING)
+    status: str = field(default=OrderEventType.ORDER_PENDING.value)
     timestamps: dict = field(default_factory=dict)
     _strategy_name: str = ""
     _exchange_order_id: str = ""
@@ -53,9 +48,9 @@ class Order:
         if not self.order_id:
             self.order_id = f"{self.symbol}_{self.side.value}_{id(self)}"
         self.timestamps["created"] = datetime.now()
-        if self.status == OrderStatus.SUBMITTED:
+        if self.status == OrderEventType.ORDER_SUBMITTED.value:
             self.timestamps["submitted"] = datetime.now()
-        elif self.status == OrderStatus.FILLED:
+        elif self.status == OrderEventType.ORDER_FILLED.value:
             self.timestamps["filled"] = datetime.now()
 
     @property
@@ -68,20 +63,20 @@ class Order:
             return 0.0
         return self.filled_quantity / self.quantity
 
-    def update_status(self, status: OrderStatus):
-        """更新订单状态"""
+    def update_status(self, status: str) -> None:
+        """更新订单状态（接受字符串值）"""
         self.status = status
-        self.timestamps[str(status.value).lower()] = datetime.now()
+        self.timestamps[str(status).lower().replace(" ", "_")] = datetime.now()
 
-    def add_fill(self, quantity: float, price: float):
+    def add_fill(self, quantity: float, price: float) -> None:
         """添加成交"""
         self.filled_quantity += quantity
         self.filled_price += price * quantity
         if self.filled_quantity >= self.quantity:
             self.filled_price = self.filled_price / self.filled_quantity if self.filled_quantity else 0
-            self.update_status(OrderStatus.FILLED)
+            self.update_status(OrderEventType.ORDER_FILLED.value)
         else:
-            self.update_status(OrderStatus.PARTIAL)
+            self.update_status(OrderEventType.ORDER_PARTIAL_FILL.value)
 
     def __repr__(self) -> str:
         return (f"Order({self.order_id} {self.side.value} {self.quantity}@"

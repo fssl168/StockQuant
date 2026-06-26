@@ -3,16 +3,16 @@ import client from './client'
 export interface BacktestTask {
   task_id: string
   status: string
-  strategy_name: string
-  strategy_code: string
+  strategyName: string
+  strategyCode: string
   symbols: string[]
-  start_date: string
-  end_date: string
+  startDate: string
+  endDate: string
   cash: number
-  commission_type: string
-  slippage_type: string
-  created_at: string
-  updated_at: string
+  commissionType: string
+  slippageType: string
+  createdAt: string
+  updatedAt: string
   metrics: Record<string, unknown>
   trades: unknown[]
   equity_curve: unknown[]

@@ -18,7 +18,7 @@ export default function Dashboard() {
   const [equityCurve, setEquityCurve] = useState<{ dates: string[]; values: number[] } | null>(null)
   const [benchmarkData, setBenchmarkData] = useState<{ dates: string[]; values: number[] } | null>(null)
   const [loading, setLoading] = useState(true)
-  const [aggMetrics, setAggMetrics] = useState<{ total_equity?: number; daily_pnl?: number; position_count?: number }>({})
+  const [aggMetrics, setAggMetrics] = useState<{ totalEquity?: number; dailyPnl?: number; positionCount?: number }>({})
   const notifications = useNotificationStore((s) => s.notifications)
 
   useEffect(() => {
@@ -67,9 +67,9 @@ export default function Dashboard() {
     : NaN
 
   // 从聚合指标获取真实数据
-  const totalEquity = aggMetrics.total_equity || 0
-  const dailyPnl = aggMetrics.daily_pnl || 0
-  const positionCount = aggMetrics.position_count || 0
+  const totalEquity = aggMetrics.totalEquity || 0
+  const dailyPnl = aggMetrics.dailyPnl || 0
+  const positionCount = aggMetrics.positionCount || 0
 
   const formatMoney = (val: number) => {
     if (Math.abs(val) >= 1_000_000) return `¥${(val / 1_000_000).toFixed(2)}M`

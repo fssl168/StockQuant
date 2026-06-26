@@ -144,7 +144,7 @@ export default function Data() {
         onChange={(checked) => handleToggleSource(r.provider, checked)}
       />
     ) },
-    { title: '最后更新', key: 'last', width: 160, render: (_: any, r: any) => r.last_check ? new Date(r.last_check).toLocaleString('zh-CN') : '—' },
+    { title: '最后更新', key: 'last', width: 160, render: (_: any, r: any) => r.lastCheck ? new Date(r.lastCheck).toLocaleString('zh-CN') : '—' },
     { title: '记录数', key: 'records', width: 100, render: (_: any, r: any) => r.records != null ? Number(r.records).toLocaleString() : '—' },
     { title: '操作', key: 'action', width: 160, render: (_: any, r: any) => (
       <Space>

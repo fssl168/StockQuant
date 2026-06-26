@@ -4,6 +4,7 @@
 
 import json
 import logging
+import warnings
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -39,6 +40,17 @@ from stockquant.persistence.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ── 废弃功能标记 ─────────────────────────────────────────────────────────
+
+def _warn_pending_order() -> None:
+    """PendingOrder 相关函数已废弃，统一使用 Order 模型"""
+    warnings.warn(
+        "PendingOrder 已废弃，功能并入 Order 模型。"
+        "请使用 save_order/get_order/list_orders/delete_order 替代。",
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 def _session_factory(engine_url: str):
@@ -1068,9 +1080,11 @@ def delete_comparison_history(engine_url: str, user_id: Optional[str] = None, hi
         return True
 
 
-# ── 待处理订单持久化 ──
+# ── 待处理订单持久化 (DEPRECATED — 请使用 Order 模型替代) ──
 
 def save_pending_order(engine_url: str, user_id: Optional[str] = None, order_id: str = "", symbol: str = "", type: str = "", price: float = 0.0, quantity: int = 0, status: str = "pending") -> None:
+    """[DEPRECATED] 保存或更新待处理订单 — 请使用 save_order 替代"""
+    _warn_pending_order()
     """保存或更新待处理订单（按 user_id 存储）。"""
     session_factory = _session_factory(engine_url)
     effective_uid = user_id or ""
@@ -1101,6 +1115,8 @@ def save_pending_order(engine_url: str, user_id: Optional[str] = None, order_id:
 
 
 def get_pending_order(engine_url: str, user_id: Optional[str] = None, order_id: str = "") -> Optional[Dict[str, Any]]:
+    """[DEPRECATED] 获取待处理订单 — 请使用 get_order 替代"""
+    _warn_pending_order()
     """获取待处理订单（按 user_id 过滤）。"""
     session_factory = _session_factory(engine_url)
     effective_uid = user_id or ""
@@ -1123,6 +1139,8 @@ def get_pending_order(engine_url: str, user_id: Optional[str] = None, order_id: 
 
 
 def list_pending_orders(engine_url: str, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """[DEPRECATED] 获取待处理订单列表 — 请使用 list_orders 替代"""
+    _warn_pending_order()
     """获取待处理订单列表（按 user_id 过滤）。"""
     session_factory = _session_factory(engine_url)
 
@@ -1147,6 +1165,8 @@ def list_pending_orders(engine_url: str, user_id: Optional[str] = None) -> List[
 
 
 def delete_pending_order(engine_url: str, user_id: Optional[str] = None, order_id: str = "") -> bool:
+    """[DEPRECATED] 删除待处理订单 — 请使用 delete_order 替代"""
+    _warn_pending_order()
     """删除待处理订单（需 user_id 验证）。"""
     session_factory = _session_factory(engine_url)
     effective_uid = user_id or ""

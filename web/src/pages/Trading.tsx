@@ -84,12 +84,12 @@ export default function Trading() {
   const statusTag = (status: OrderStatus | undefined | null) => {
     if (!status) return <Tag>未知</Tag>
     const map: Record<OrderStatus, { color: string; label: string }> = {
-      PENDING: { color: 'default', label: '待提交' },
-      SUBMITTED: { color: 'processing', label: '已报' },
-      PARTIAL_FILLED: { color: 'warning', label: '部分成交' },
-      FILLED: { color: 'success', label: '全部成交' },
-      CANCELLED: { color: 'error', label: '已撤销' },
-      REJECTED: { color: 'error', label: '拒单' },
+      ORDER_PENDING: { color: 'default', label: '待提交' },
+      ORDER_SUBMITTED: { color: 'processing', label: '已报' },
+      ORDER_PARTIAL_FILL: { color: 'warning', label: '部分成交' },
+      ORDER_FILLED: { color: 'success', label: '全部成交' },
+      ORDER_CANCELLED: { color: 'error', label: '已撤销' },
+      ORDER_REJECTED: { color: 'error', label: '拒单' },
     }
     const s = map[status]
     if (!s) return <Tag>{String(status)}</Tag>
@@ -286,7 +286,7 @@ export default function Trading() {
                 { title: '价格', dataIndex: 'price', key: 'price', width: 70, render: (n: number) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{(n ?? 0).toFixed(2)}</span> },
                 { title: '状态', dataIndex: 'status', key: 'status', width: 90, render: (t: OrderStatus) => statusTag(t) },
                 { title: '操作', key: 'action', width: 60, render: (_: unknown, r: Order) =>
-                  (r.status === 'PENDING' || r.status === 'SUBMITTED') ? (
+                  (r.status === 'ORDER_PENDING' || r.status === 'ORDER_SUBMITTED') ? (
                     <Tooltip title="撤单"><Button type="link" danger size="small" icon={<XCircle size={14} />} onClick={() => handleCancel(r.id)} /></Tooltip>
                   ) : <span style={{ color: 'var(--color-text-disabled)' }}>-</span>
                 },

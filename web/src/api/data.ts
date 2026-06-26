@@ -6,7 +6,7 @@ export interface DataHealthEntry {
   name: string
   enabled: boolean
   healthy: boolean
-  last_check: string
+  lastCheck: string
   error: string
 }
 
