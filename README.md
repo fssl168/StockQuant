@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Alpha-orange)]()
-[![Tests](https://img.shields.io/badge/tests-763%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-765%20passed-brightgreen)]()
 
 ---
 
@@ -22,7 +22,7 @@ StockQuant 2.0 是一个面向**专业量化开发者**的 **AI 原生机构级*
 
 **对标框架**：backtrader / VNPy / vectorbt，同时通过 AI Agent 架构实现差异化。
 
-**当前状态**：完成 **30/30 功能（97%+）**，**763 测试通过**，6 skipped。
+**当前状态**：完成 **30/30 功能（97%+）**，**765 测试通过**，6 skipped。
 
 ---
 
@@ -227,6 +227,8 @@ StockQuant 使用三层 Agent 架构：
 |------|------|------|
 | **API Gateway** | FastAPI RESTful 23 router + 6 WebSocket（F029） | ✅ Partial（后端 100% 完成） |
 | **Docker** | Docker Compose 一键部署（F030） | ✅ Done |
+| **API 基础设施** | repository_v2（427 行全新持久化层 + 18 ORM 模型） | ✅ Done |
+| **AI Service** | AIService 统一编排层（Agent Orchestrator + Memory + Hallucination + Pipeline） | ✅ Done |
 
 ---
 
@@ -313,9 +315,10 @@ advice = agent.evaluate({
 | **v2.0.0-beta** | 已完成 | + 佣金/滑点 + 参数优化 + 风控 + 报表 + Broker 抽象 + 9 通知渠道 + API 网关 |
 | **v2.0.0-rc** | 已完成 | + 数据缓存 + 模拟盘 + AI ReAct 循环 + 持久化 + 信号管线 + 763 测试 |
 | **v2.0.1** | 已完成 | + 记忆系统 + 反幻觉 + 信息管线 + AI 对话 + 盯盘 + 策略对比 + 完整前端 |
-| **v2.0.2** | 进行中 | + DataService/AIService 统一层 + config 治理 + 数据库持久化完整化 |
+| **v2.0.2** | 进行中 | + DataService/AIService 统一层 + config 治理 + 数据库持久化完整化 + API 基础设施 (repository_v2) |
+| **v2.0.3** | 规划中 | + 机构级重构阶段 1（多租户 + Alembic + RBAC 加固 + 审计日志） |
 
-**当前进度**：30/30 功能完成（97%+），763 测试通过，6 skipped。
+**当前进度**：30/30 功能完成（97%+），765 测试通过，6 skipped。
 
 ---
 
@@ -374,7 +377,18 @@ pytest tests/ -v
 pytest tests/ --cov=stockquant --cov-report=html
 ```
 
-当前：**763 tests passed, 0 failed, 6 skipped**。
+当前：**765 tests collected, 0 failed, 6 skipped**。
+
+---
+
+## 最近变更
+
+| 日期 | 提交 | 摘要 |
+|------|------|------|
+| 2026-06-27 | `5f1ac893` | **AI 子系统完善 + API 对齐 + 前端修复**：`AIService` 统一编排层（156 行）、`repository_v2` 427 行全新持久化、auth/monitor/trading 端点对齐、事件引擎优化、broker 层重构、41 文件变更 |
+| 2026-06-26 | `63f834a4` | **AI 基础设施 API + 记忆/反幻觉/管线 + 全面测试**：761→763 测试通过；记忆/反幻觉管线 API 端点完整化；openapi 代码生成（Service + Models 2000+ 行）；195 文件变更 |
+| 2026-06-25 | `e316570f` | **数据层统一 + AI 层对齐 + 前端对齐**：DataService/AIService 集成、前端 store 对齐后端 API、config 治理 |
+| 2026-06-25 | `b961c239` | **前端构建修复**：App.tsx never type、Data.tsx map 类型、vite/tsconfig 配置、monitor global 修复 |
 
 ---
 
@@ -385,4 +399,4 @@ MIT License
 ---
 
 > **说明**：StockQuant 2.0 目前处于 Alpha 开发阶段，API 和功能尚未稳定。
-> 当前版本 2.0.2-dev，完成 30/30 功能（97%+），763 测试通过，6 skipped。
+> 当前版本 2.0.2-dev，完成 30/30 功能（97%+），765 测试通过，6 skipped。

@@ -32,6 +32,12 @@ class L2Store:
         self._engine = None
         self._session_factory = None
         self._entries: List[Dict[str, Any]] = []  # 内存降级后备
+        # RecallScorer 实例（B3 集成）：L2 对应 shallow tier
+        try:
+            from .recall_scorer import RecallScorer
+            self._scorer = RecallScorer(scene="default")
+        except ImportError:
+            self._scorer = None
         self._init_db()
 
     def _init_db(self) -> None:
@@ -288,7 +294,7 @@ class L2Store:
     # ── 异步 PostgreSQL 操作 ─────────────────────────────────────────────
 
     async def _write_async(self, item: Dict[str, Any]) -> str:
-        """异步写入 PostgreSQL"""
+        """异步写入 PostgreSQL（B3: 记录 source/sentiment/scope 到 metadata 供 RecallScorer 使用）"""
         from stockquant.persistence.models import L2Memory
         from sqlalchemy import select
 
@@ -300,8 +306,17 @@ class L2Store:
             )
             row = existing.scalar_one_or_none()
 
+            # B3: 合并 metadata + RecallScorer shallow tier 字段
             metadata = item.get("metadata", {})
             if not isinstance(metadata, str):
+                metadata = dict(metadata) if isinstance(metadata, dict) else {}
+                # 注入 source/sentiment/scope 到 metadata
+                if item.get("source"):
+                    metadata.setdefault("source", item["source"])
+                if item.get("sentiment_score") is not None:
+                    metadata.setdefault("sentiment_score", item["sentiment_score"])
+                if item.get("scope"):
+                    metadata.setdefault("scope", item["scope"])
                 metadata = json.dumps(metadata, ensure_ascii=False)
 
             user_id = item.get("user_id") or self._user_id
@@ -331,7 +346,7 @@ class L2Store:
         return item_id
 
     async def _search_async(self, query: str, top_k: int) -> List[Dict[str, Any]]:
-        """异步语义检索"""
+        """异步语义检索（B3: 集成 RecallScorer 排序，tier=shallow）"""
         from stockquant.persistence.models import L2Memory
         from sqlalchemy import select
 
@@ -345,11 +360,86 @@ class L2Store:
 
             items = [self._row_to_dict(row) for row in rows]
 
-            # 优先 TF-IDF
+            # 优先 TF-IDF / Embedding（产生 semantic_score）
+            semantic_scores: List[float] = []
             try:
-                return self._tfidf_search(query, items, top_k)
+                return self._tfidf_search_with_scorer(query, items, top_k)
             except ImportError:
-                return self._keyword_search(query, items, top_k)
+                pass
+            except Exception as exc:
+                logger.debug("TF-IDF 检索失败，降级 RecallScorer 关键词模式: %s", exc)
+
+            # B3: 直接用 RecallScorer 评分（无 semantic_score）
+            if self._scorer is not None:
+                try:
+                    ranked = self._scorer.rank(
+                        items, query=query, tier="shallow", top_k=top_k,
+                    )
+                    return [item for item, _ in ranked]
+                except Exception as exc:
+                    logger.debug("RecallScorer 评分失败，降级关键词: %s", exc)
+
+            # 最终降级：关键词匹配
+            return self._keyword_search(query, items, top_k)
+
+    def _tfidf_search_with_scorer(
+        self, query: str, items: List[Dict[str, Any]], top_k: int
+    ) -> List[Dict[str, Any]]:
+        """TF-IDF/Embedding 检索后用 RecallScorer 重排序（B3 集成）
+
+        步骤：
+        1. 用 TF-IDF 或 Embedding 算出每条 item 的语义相似度
+        2. 将相似度作为 semantic_score 传给 RecallScorer
+        3. RecallScorer 综合三因子排序后返回 top_k
+        """
+        # 优先尝试 Embedding
+        try:
+            from sentence_transformers import SentenceTransformer
+            import numpy as np
+            if not hasattr(self, "_st_model"):
+                self._st_model = SentenceTransformer("all-MiniLM-L6-v2")
+            contents = [item["content"] for item in items]
+            doc_emb = self._st_model.encode(contents, convert_to_numpy=True, show_progress_bar=False)
+            q_emb = self._st_model.encode([query], convert_to_numpy=True, show_progress_bar=False)
+            sims = np.dot(doc_emb, q_emb[0]) / (
+                np.linalg.norm(doc_emb, axis=1) * np.linalg.norm(q_emb[0]) + 1e-8
+            )
+            # 注入 semantic_score 到每条 item
+            for item, sim in zip(items, sims.tolist()):
+                item["_semantic_score"] = max(0.0, sim)
+        except ImportError:
+            raise
+        except Exception as exc:
+            logger.debug("Embedding 不可用，降级 TF-IDF: %s", exc)
+            # TF-IDF 降级
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            from sklearn.metrics.pairwise import cosine_similarity
+            corpus = [item["content"] for item in items]
+            corpus.append(query)
+            vectorizer = TfidfVectorizer()
+            tfidf = vectorizer.fit_transform(corpus)
+            sims = cosine_similarity(tfidf[-1:], tfidf[:-1]).flatten()
+            for item, sim in zip(items, sims.tolist()):
+                item["_semantic_score"] = max(0.0, sim)
+
+        # B3: 用 RecallScorer 重排序
+        if self._scorer is not None:
+            try:
+                ranked = self._scorer.rank(
+                    items, query=query, tier="shallow", top_k=top_k,
+                )
+                # 清理临时字段
+                for item, _ in ranked:
+                    item.pop("_semantic_score", None)
+                return [item for item, _ in ranked]
+            except Exception as exc:
+                logger.debug("RecallScorer 重排序失败，降级 semantic: %s", exc)
+
+        # 降级：按 semantic_score 排序
+        items.sort(key=lambda x: x.get("_semantic_score", 0.0), reverse=True)
+        for item in items:
+            item.pop("_semantic_score", None)
+        return items[:top_k]
 
     # ── 内存降级方法 ────────────────────────────────────────────────────
 
@@ -359,12 +449,32 @@ class L2Store:
         # Ensure user_id is present (required by L2Memory model)
         if "user_id" not in entry or not entry["user_id"]:
             entry["user_id"] = self._user_id
+        # B3: 提取 RecallScorer shallow tier 所需字段到 entry 顶层
+        # 来源：item 顶层优先，否则从 metadata 提取
+        metadata = item.get("metadata") or {}
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except Exception:
+                metadata = {}
+        entry.setdefault("source", item.get("source") or metadata.get("source") or "unknown")
+        entry.setdefault("sentiment_score", item.get("sentiment_score") or metadata.get("sentiment_score") or 0.0)
+        entry.setdefault("scope", item.get("scope") or metadata.get("scope") or "individual")
         self._entries.append(entry)
         return item_id
 
     def _search_memory(self, query: str, top_k: int) -> List[Dict[str, Any]]:
         if not self._entries:
             return []
+        # B3: 优先 RecallScorer 评分（tier=shallow）
+        if self._scorer is not None:
+            try:
+                ranked = self._scorer.rank(
+                    self._entries[:], query=query, tier="shallow", top_k=top_k,
+                )
+                return [item for item, _ in ranked]
+            except Exception as exc:
+                logger.debug("RecallScorer 评分失败，降级关键词: %s", exc)
         return self._keyword_search(query, self._entries, top_k)
 
     # ── 检索算法 ────────────────────────────────────────────────────────
@@ -442,15 +552,20 @@ class L2Store:
 
     @staticmethod
     def _row_to_dict(row) -> Dict[str, Any]:
-        """ORM 行转字典"""
+        """ORM 行转字典（B3: 从 metadata 提取 source/sentiment/scope 供 RecallScorer 使用）"""
+        metadata = json.loads(row.metadata_json) if row.metadata_json else {}
         return {
             "id": row.id,
             "symbol": row.symbol,
             "content": row.content,
-            "metadata": json.loads(row.metadata_json) if row.metadata_json else {},
+            "metadata": metadata,
             "timestamp": row.timestamp,
             "expiresAt": row.expires_at,
             "confidence": row.confidence,
+            # B3: 提取 RecallScorer shallow tier 所需字段到顶层
+            "source": metadata.get("source") or "unknown",
+            "sentiment_score": metadata.get("sentiment_score", 0.0),
+            "scope": metadata.get("scope", "individual"),
         }
 
     def close(self) -> None:

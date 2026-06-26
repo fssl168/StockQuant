@@ -28,7 +28,21 @@ const mockAddNotification = vi.fn()
 vi.mock('@/stores/backtestStore', () => ({
   useBacktestStore: vi.fn((selector?: any) => {
     const state = {
+      tasks: [],
       submitTask: mockSubmitTask,
+      fetchTasks: vi.fn(() => Promise.resolve()),
+    }
+    return selector ? selector(state) : state
+  }),
+}))
+
+vi.mock('@/stores/strategyStore', () => ({
+  useStrategyStore: vi.fn((selector?: any) => {
+    const state = {
+      strategies: [
+        { id: 'dual_ma', name: 'Dual MA Crossover' },
+      ],
+      fetchStrategies: vi.fn(() => Promise.resolve()),
     }
     return selector ? selector(state) : state
   }),
@@ -105,8 +119,10 @@ describe('Backtest E2E Flow', () => {
       const user = userEvent.setup()
       render(<Backtest />)
 
-      // Click on the template select to open dropdown
-      const templateSelect = document.querySelector('.ant-select[name="template"]') as HTMLElement
+      // Click on the template select to open dropdown (Ant Select doesn't render name attr,
+      // use the select near 策略模板 label)
+      const templateLabel = screen.getByText('策略模板')
+      const templateSelect = templateLabel.parentElement?.querySelector('.ant-select') as HTMLElement
       if (templateSelect) {
         await user.click(templateSelect)
 

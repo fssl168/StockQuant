@@ -2,31 +2,57 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import Monitor from '@/pages/Monitor'
 
-vi.mock('@/stores/marketStore', () => ({
-  useMarketStore: vi.fn((selector: any) => {
-    const state = {
-      symbols: ['sh600519', 'sz000858', 'sh601318'],
-      addSymbol: vi.fn(),
-      removeSymbol: vi.fn(),
-      clear: vi.fn(),
-    }
-    return selector ? selector(state) : state
-  }),
-}))
+vi.mock('@/stores/marketStore', () => {
+  const state = {
+    symbols: ['sh600519', 'sz000858', 'sh601318'],
+    addSymbol: vi.fn(),
+    removeSymbol: vi.fn(),
+    addWatchlist: vi.fn(),
+    clear: vi.fn(),
+  }
+  const useMarketStore = Object.assign(
+    vi.fn((selector: any) => (selector ? selector(state) : state)),
+    { getState: () => state }
+  )
+  return { useMarketStore }
+})
 
-vi.mock('@/stores/notificationStore', () => ({
-  useNotificationStore: vi.fn((selector: any) => {
-    const state = { notifications: [], add: vi.fn() }
-    return selector ? selector(state) : state
-  }),
-}))
+vi.mock('@/stores/notificationStore', () => {
+  const state = { notifications: [], add: vi.fn(), deleteNotification: vi.fn() }
+  const useNotificationStore = Object.assign(
+    vi.fn((selector: any) => (selector ? selector(state) : state)),
+    { getState: () => state }
+  )
+  return { useNotificationStore }
+})
 
 vi.mock('@/api/monitor', () => ({
   monitorApi: {
     start: vi.fn(() => Promise.resolve()),
     stop: vi.fn(() => Promise.resolve()),
     status: vi.fn(() => Promise.resolve({ running: false })),
-    brief: vi.fn(() => Promise.resolve({ brief: '' })),
+    brief: vi.fn(() => Promise.resolve('')), // brief returns a string, not an object
+    getWatchlist: vi.fn(() => Promise.resolve(['sh600519', 'sz000858', 'sh601318'])),
+    updateWatchlist: vi.fn(() => Promise.resolve(['sh600519', 'sz000858', 'sh601318'])),
+    removeFromWatchlist: vi.fn(() => Promise.resolve()),
+    scan: vi.fn(() => Promise.resolve({ signals: [] })),
+    summary: vi.fn(() => Promise.resolve({ total: 0, triggered: 0 })),
+  },
+}))
+
+vi.mock('@/hooks/useWebSocket', () => ({
+  useWebSocket: vi.fn(() => ({ messages: [], connected: false })),
+}))
+
+vi.mock('@/api/data', () => ({
+  dataApi: {
+    health: vi.fn(() => Promise.resolve({ status: 'ok' })),
+  },
+}))
+
+vi.mock('@/api/client', () => ({
+  default: {
+    get: vi.fn(() => Promise.resolve({})),
   },
 }))
 

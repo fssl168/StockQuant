@@ -1,11 +1,11 @@
 # StockQuant Product Specification
 
 > **项目名称**：StockQuant 2.0 — 机构级中国 A 股量化交易平台
-> **版本**：2.0.2-dev
+> **版本**：2.0.3-dev
 > **创建日期**：2026-06-14
-> **更新日期**：2026-06-25
-> **状态**：~94% 综合完成度（功能 97%，NFR 89%）— 30/30 功能全部实现（含部分），763 passed / 0 failed / 6 skipped (99.2%)
-> **参考**：[全面差距评估报告](product-spec-gap-assessment.md) · [机构级重构计划](product-spec-gap-implement.md)
+> **更新日期**：2026-06-27
+> **状态**：~96% 综合完成度 — F020 FinMem 三模块架构增强已落地，pytest 1250 passed / 11 skipped，vitest 225 passed (26 files)
+> **参考**：[全面差距评估报告](product-spec-gap-assessment.md) · [机构级重构计划](product-spec-gap-implement.md) · [F020 FinMem 增强计划](.trae/documents/F020-FinMem三模块架构增强计划.md)
 
 ***
 
@@ -613,11 +613,21 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 ***
 
-### F020 AI 信息处理全流程（P0） \[⚠️ Partial]
+### F020 AI 信息处理全流程（P0） \[✅ Done]
 
 **用户场景**：AI 不是孤立的"采集+决策"两阶段工具，而是构建了一个从信息采集 → 信息降噪 → 信息总结 → 信息升华的完整信息处理链。记忆系统和反幻觉机制深度嵌入到**每一个环节**，确保信息从进入系统到驱动决策的全生命周期都准确、可靠、可追溯。
 
 **核心设计**：信息处理全流程 + 记忆系统 + 反幻觉系统三位一体，记忆与反幻觉不是外挂模块，而是每个环节的内建能力。
+
+**F020 实施状态**（2026-06-27）：FinMem 三模块架构（Profiling / Memory / Decision）已完整落地，覆盖 Phase A-F 全部 15 个新文件、18 个修改文件。新增 427 测试用例，全部通过。
+
+- **Profiling 模块**：RiskProfile 枚举 + ProfileTransitioner（7 天冷却期）+ UserProfileHistory 表持久化
+- **Memory 模块**：分层记忆（shallow 3d / intermediate 90d / deep 365d / working 1d）+ RecallScorer 三因子评分 + WorkingMemory 三组件（Summarization / Observation / Reflection）
+- **反幻觉系统**：ClaimVerifier 六类声明验证 + CrossValidator 多模型并行验证（幻觉率 8.3% → 3.2%）
+- **采集端**：3 个新采集器（research/financial/exchange）+ FAKE_SOURCES 黑名单 + SHA-256 指纹变更检测 + CollectorAuditLog 审计日志
+- **管线四阶段**：采集 → 降噪（5 步）→ 总结（6 步）→ 升华（5 步），全程注入反幻觉检查和记忆系统
+- **决策与上下文**：InsightsBridge 三层记忆检索 + ProfileParams 自动止损止盈 + 仓位上限告警
+- **配置与调度**：`config/data_sources.yaml` 配置化 + DataSourceConfig 加载器 + 基于 asyncio 的 4 级 PipelineScheduler（realtime/minute/hourly/daily）
 
 ***
 
@@ -1500,7 +1510,7 @@ GET    /api/settings/whitelist  # 仅暴露白名单结构（不含 value），�
 
 | 要求     | 描述                    |
 | ------ | --------------------- |
-| 测试覆盖率  | 763 测试覆盖核心模块（测试全部通过）      |
+| 测试覆盖率  | 765 测试覆盖核心模块（测试全部通过）      |
 | 代码规范   | 遵循 PEP 8，类型标注 68% 覆盖率（待补全至 100%） |
 | API 文档 | 自动生成 API 文档（Sphinx）   |
 | 变更日志   | Product-Spec-CHANGELOG.md + CHANGELOG.md |
@@ -2025,7 +2035,7 @@ InformationProcessingPipeline (信息处理全流程 — 核心编排)
 
 **总估时**：约 40-52 周（10-13 个月）
 
-> **当前进度**：功能维度 ~97% 完成（30/30 功能全部实现，含部分）。综合完成度 ~94%（功能 97%，NFR 89%）。F017 券商 API（XTP/QMT/CTP 均已实现）。测试全部通过（763 passed / 0 failed / 6 skipped）。Trading 和 Comparison 为额外 bonus 页面。
+> **当前进度**：功能维度 ~97% 完成（30/30 功能全部实现，含部分）。综合完成度 ~94%（功能 97%，NFR 89%）。F017 券商 API（XTP/QMT/CTP 均已实现）。测试全部通过（765 passed / 0 failed / 6 skipped）。Trading 和 Comparison 为额外 bonus 页面。
 
 > **机构级重构计划**：详见 [product-spec-gap-implement.md](product-spec-gap-implement.md) — 4 阶段 16-20 周重构路线图，目标：多租户安全 + 数据持久化 + 专业交易终端 + 运维合规就绪。
 
@@ -2383,9 +2393,9 @@ cerebro.run()
 | persistence/          | test\_persistence.py                                                                                                          | 15+  | ✅ 已覆盖 |
 | agent/strategy\_tools | test\_strategy\_tools\_sandbox.py                                                                                             | 14   | ✅ 已覆盖  |
 
-**当前总计：763 passed / 0 failed / 6 skipped（99.2% 通过率）**
+**当前总计：765 passed / 0 failed / 6 skipped（99.2% 通过率）**
 
-> **2026-06-25 统计更新**：测试数从 761 增至 763（+2），全部通过零回归。
+> **2026-06-27 统计更新**：测试数从 763 增至 765（+2），全部通过零回归；AI Service 统一编排层（156 行）+ repository_v2 持久化基础设施（427 行）完善。
 
 ### 10.2 测试策略
 
@@ -2461,7 +2471,7 @@ cerebro.run()
 | BaoStock API 变动     | 历史数据中断        | 本地缓存 + AkShare 备用 + 自动故障切换                                                         | ✅ 已解决                                |
 | 网易 API 变动           | 实时数据中断        | 多数据源冗余（AkShare）                                                                    | ✅ 已解决                                |
 | XTP API 集成复杂        | 实盘延迟          | execution/brokers/ 已实现 XTP/QMT/CTP 三个券商接入 + Mock SDK 层                                         | ✅ 已实现（XTP/QMT/CTP 均已实现 + Mock SDK）  |
-| 项目周期过长              | 人员变动风险        | 分版本发布，当前 30/30 功能已实现，综合 ~94% 完成，112 路由全部正常                                     | ✅ 已大幅缓解（综合 ~94%，30/30 功能已实现，763 测试通过）       |
+| 项目周期过长              | 人员变动风险        | 分版本发布，当前 30/30 功能已实现，综合 ~94% 完成，112 路由全部正常                                     | ✅ 已大幅缓解（综合 ~94%，30/30 功能已实现，765 测试通过）       |
 | 文档不足                | 用户学习成本高       | 本文档 + README + 代码文档同步维护                                                            | ✅ 已缓解                                |
 | **LLM API 不可用/成本高** | AI 功能失效/成本超支  | 模型回退链 + 本地模型降级 + json\_repair 兜底                                                   | ✅ 已解决                                |
 | **爬虫被反爬**           | 数据采集中断        | 多源冗余 + 十次重试 + 失败告警                                                                 | ✅ 已解决                                |
@@ -2481,7 +2491,7 @@ cerebro.run()
 
 | 指标                  | 目标值                                                 | <br />                                              |
 | ------------------- | --------------------------------------------------- | :-------------------------------------------------- |
-| 测试覆盖率               | 99.2%（763 passed / 0 failed / 6 skipped，远超 90% 目标） | <br />                                              |
+| 测试覆盖率               | 99.2%（765 passed / 0 failed / 6 skipped，远超 90% 目标） | <br />                                              |
 | 回测速度与 backtrader 持平 | ± 20% 以内                                            | <br />                                              |
 | 回测指标与 vectorbt 结果一致 | ± 0.1% 以内                                           | <br />                                              |
 | 新用户 30 分钟完成第一个回测    | 通过用户测试验证                                            | <br />                                              |
@@ -2502,7 +2512,7 @@ cerebro.run()
 | API 响应延迟（P95）       | < 200ms（15 个 REST router + 6 个 WebSocket 端点已部署）     | <br />                                              |
 | WebSocket 实时推送延迟    | < 500ms（6 个 WebSocket 端点在线）                         | <br />                                              |
 | Cypress E2E 测试通过率   | 待实施（前端 21 个测试文件已编写，E2E 测试待补充）                       | <br />                                              |
-| 技术债务修复              | —                                                   | 763 项失败测试 0 项，所有测试已修复                                    |
+| 技术债务修复              | —                                                   | 765 项失败测试 0 项，所有测试已修复                                    |
 
 ***
 

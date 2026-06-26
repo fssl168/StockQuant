@@ -17,6 +17,9 @@ from stockquant.ai.collectors.base import BaseCollector, RawInfoItem
 from stockquant.ai.collectors.news_collector import NewsCollector
 from stockquant.ai.collectors.announcement_collector import AnnouncementCollector
 from stockquant.ai.collectors.social_collector import SocialCollector
+from stockquant.ai.collectors.research_collector import ResearchCollector      # C1
+from stockquant.ai.collectors.financial_collector import FinancialCollector    # C2
+from stockquant.ai.collectors.exchange_collector import ExchangeCollector      # C3
 from stockquant.ai.collectors.verifier import SourceVerifier
 from stockquant.ai.signal_fusion import SignalFusion, SourceSignal, FusedSignal
 
@@ -41,6 +44,9 @@ class AgentOrchestrator:
             NewsCollector(),
             AnnouncementCollector(),
             SocialCollector(),
+            ResearchCollector(),      # C1 新增：券商研报
+            FinancialCollector(),      # C2 新增：财务报表
+            ExchangeCollector(),      # C3 新增：交易所披露
         ]
         self._verifier = SourceVerifier()
         self._signal_fusion = SignalFusion()

@@ -17,7 +17,7 @@ describe('Strategy API', () => {
     const mockList = [{ id: 's1', name: 'test', code: 'code', description: '', parameters: {}, createdAt: '', updatedAt: '' }]
     vi.mocked(client.get).mockResolvedValueOnce(mockList)
     const result = await strategyApi.list()
-    expect(client.get).toHaveBeenCalledWith('/strategy')
+    expect(client.get).toHaveBeenCalledWith('/api/strategy')
     expect(result).toEqual(mockList)
   })
 
@@ -33,7 +33,7 @@ describe('Strategy API', () => {
     vi.mocked(client.post).mockResolvedValueOnce(mockCreated)
     const payload = { name: 'test', code: 'code', description: '', parameters: {} }
     const result = await strategyApi.create(payload)
-    expect(client.post).toHaveBeenCalledWith('/strategy', payload)
+    expect(client.post).toHaveBeenCalledWith('/api/strategy', payload)
     expect(result).toEqual(mockCreated)
   })
 
@@ -42,7 +42,7 @@ describe('Strategy API', () => {
     const mockStrategy = { id: 's1', name: 'test', code: 'code', description: '', parameters: {}, createdAt: '', updatedAt: '' }
     vi.mocked(client.get).mockResolvedValueOnce(mockStrategy)
     const result = await strategyApi.get('s1')
-    expect(client.get).toHaveBeenCalledWith('/strategy/s1')
+    expect(client.get).toHaveBeenCalledWith('/api/strategy/s1')
     expect(result).toEqual(mockStrategy)
   })
 
@@ -52,7 +52,7 @@ describe('Strategy API', () => {
     vi.mocked(client.put).mockResolvedValueOnce(mockUpdated)
     const payload = { name: 'updated', code: 'new code' }
     const result = await strategyApi.update('s1', payload)
-    expect(client.put).toHaveBeenCalledWith('/strategy/s1', payload)
+    expect(client.put).toHaveBeenCalledWith('/api/strategy/s1', payload)
     expect(result).toEqual(mockUpdated)
   })
 
@@ -60,7 +60,7 @@ describe('Strategy API', () => {
   it('strategyApi.delete should call DELETE /strategy/:id', async () => {
     vi.mocked(client.delete).mockResolvedValueOnce(undefined)
     await strategyApi.delete('s1')
-    expect(client.delete).toHaveBeenCalledWith('/strategy/s1')
+    expect(client.delete).toHaveBeenCalledWith('/api/strategy/s1')
   })
 
   it('strategyApi.delete should propagate error', async () => {

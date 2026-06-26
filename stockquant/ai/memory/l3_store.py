@@ -27,6 +27,10 @@ class L3Store:
     PostgreSQL 不可用时降级为内存存储。
     """
 
+    # 默认 tier（兼容旧调用方）
+    DEFAULT_TIER = "shallow"
+    DEFAULT_PERIOD_TYPE = "unspecified"
+
     def __init__(
         self,
         db_url: Optional[str] = None,
@@ -41,6 +45,12 @@ class L3Store:
         self._session_factory = None
         self._has_pgvector = False
         self._entries: List[Dict[str, Any]] = []  # 内存降级后备
+        # RecallScorer 实例（B3 集成）：默认使用 default 场景权重
+        try:
+            from .recall_scorer import RecallScorer
+            self._scorer = RecallScorer(scene="default")
+        except ImportError:
+            self._scorer = None
         self._init_backend()
 
     def _init_backend(self) -> None:
@@ -233,6 +243,141 @@ class L3Store:
             loop = __import__("asyncio").new_event_loop()
             return loop.run_until_complete(self._get_all_async(limit))
 
+    # ── B3: 分层检索接口 ───────────────────────────────────────────────
+
+    def search_by_tier(
+        self,
+        query: str,
+        tier: str = "shallow",
+        top_k: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """按 tier 检索（B3 新增）
+
+        Args:
+            query: 查询关键词
+            tier: 记忆层级 (shallow|intermediate|deep|working)
+                  - shallow: 浅层-市场新闻（3天半衰期）
+                  - intermediate: 中层-季报（90天半衰期）
+                  - deep: 深层-年报（365天半衰期）
+                  - working: 工作记忆（1天半衰期，通常不入 L3）
+            top_k: 返回最大条目数
+
+        Returns:
+            按 RecallScorer 综合评分降序排列的条目列表
+        """
+        if self._backend == "memory":
+            items = [e for e in self._entries if e.get("tier", "shallow") == tier]
+            if self._scorer is not None:
+                try:
+                    ranked = self._scorer.rank(
+                        items, query=query, tier=tier, top_k=top_k,
+                    )
+                    return [self._refresh_last_accessed(item) for item, _ in ranked]
+                except Exception as exc:
+                    logger.debug("RecallScorer 评分失败，降级时间排序: %s", exc)
+            # 降级：时间倒序
+            items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+            return items[:top_k]
+
+        # PostgreSQL 后端
+        try:
+            loop = __import__("asyncio").get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    return pool.submit(
+                        self._search_by_tier_sync, query, tier, top_k
+                    ).result()
+            return loop.run_until_complete(self._search_by_tier_async(query, tier, top_k))
+        except RuntimeError:
+            loop = __import__("asyncio").new_event_loop()
+            return loop.run_until_complete(self._search_by_tier_async(query, tier, top_k))
+
+    def _search_by_tier_sync(
+        self, query: str, tier: str, top_k: int
+    ) -> List[Dict[str, Any]]:
+        loop = __import__("asyncio").new_event_loop()
+        try:
+            return loop.run_until_complete(self._search_by_tier_async(query, tier, top_k))
+        finally:
+            loop.close()
+
+    async def _search_by_tier_async(
+        self, query: str, tier: str, top_k: int
+    ) -> List[Dict[str, Any]]:
+        """异步按 tier 检索（B3）"""
+        from stockquant.persistence.models import L3Memory
+        from sqlalchemy import select
+
+        async with self._session_factory() as session:
+            stmt = (
+                select(L3Memory)
+                .where(L3Memory.tier == tier)
+                .order_by(L3Memory.timestamp.desc())
+                .limit(top_k * 3)
+            )
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+            items = [self._row_to_dict(row) for row in rows]
+
+            if not items:
+                return []
+
+            # 用 RecallScorer 评分排序
+            if self._scorer is not None:
+                try:
+                    ranked = self._scorer.rank(
+                        items, query=query, tier=tier, top_k=top_k,
+                    )
+                    refreshed = []
+                    for item, _ in ranked:
+                        # 异步刷新 last_accessed_at（best-effort，不阻塞返回）
+                        try:
+                            await self._touch_last_accessed_async(item["id"])
+                        except Exception:
+                            pass
+                        refreshed.append(item)
+                    return refreshed
+                except Exception as exc:
+                    logger.debug("RecallScorer 评分失败，降级关键词: %s", exc)
+
+            # 降级：关键词评分
+            query_lower = query.lower()
+            scored = []
+            for item in items:
+                content_lower = (item.get("content") or "").lower()
+                summary_lower = (item.get("summary") or "").lower()
+                score = sum(
+                    1 for w in query_lower.split()
+                    if w in content_lower or w in summary_lower
+                )
+                scored.append((item, score))
+            scored.sort(key=lambda x: x[1], reverse=True)
+            return [item for item, _ in scored[:top_k]]
+
+    async def _touch_last_accessed_async(self, item_id: str) -> None:
+        """刷新 last_accessed_at 字段（B3 新增）
+
+        实现 FinMem 论文 §3.3 的"访问即刷新"机制：
+        被检索到的记忆，其 last_accessed_at 应被更新为当前时间，
+        使得 recency_score 计算时 age 更小（更新鲜）。
+        """
+        from stockquant.persistence.models import L3Memory
+        from sqlalchemy import update
+
+        async with self._session_factory() as session:
+            await session.execute(
+                update(L3Memory)
+                .where(L3Memory.id == item_id)
+                .values(last_accessed_at=datetime.now().isoformat())
+            )
+            await session.commit()
+
+    def _refresh_last_accessed(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """内存模式下的 last_accessed_at 刷新（B3 新增）"""
+        item["last_accessed_at"] = datetime.now().isoformat()
+        return item
+
     # ── 同步降级方法 ────────────────────────────────────────────────────
 
     def _write_sync(self, item: Dict[str, Any]) -> str:
@@ -285,7 +430,7 @@ class L3Store:
     # ── 异步 PostgreSQL 操作 ─────────────────────────────────────────────
 
     async def _write_async(self, item: Dict[str, Any]) -> str:
-        """异步写入 PostgreSQL"""
+        """异步写入 PostgreSQL（B3: 支持 tier/period_type/importance_score）"""
         from stockquant.persistence.models import L3Memory
         from sqlalchemy import select
 
@@ -303,6 +448,12 @@ class L3Store:
                 metadata = json.dumps(metadata, ensure_ascii=False)
 
             user_id = item.get("user_id") or self._user_id
+            now_iso = datetime.now().isoformat()
+
+            # B3: 默认 tier=shallow（兼容旧调用方）；支持新字段 period_type/importance_score
+            tier = item.get("tier") or self.DEFAULT_TIER
+            period_type = item.get("period_type") or self.DEFAULT_PERIOD_TYPE
+            importance_score = float(item.get("importance_score", 0.5))
 
             if row:
                 row.symbol = item.get("symbol", "")
@@ -310,8 +461,17 @@ class L3Store:
                 row.content = item.get("content", "")
                 row.summary = item.get("summary", "")
                 row.metadata_json = metadata
-                row.timestamp = item.get("timestamp", datetime.now().isoformat())
+                row.timestamp = item.get("timestamp", now_iso)
                 row.confidence = item.get("confidence", 1.0)
+                # B3: 更新分层字段（仅当新值非默认时覆盖，避免重写覆盖已有 tier）
+                if item.get("tier"):
+                    row.tier = tier
+                if item.get("period_type"):
+                    row.period_type = period_type
+                if "importance_score" in item:
+                    row.importance_score = importance_score
+                # 写入即访问：刷新 last_accessed_at
+                row.last_accessed_at = now_iso
             else:
                 row = L3Memory(
                     id=item_id,
@@ -320,8 +480,12 @@ class L3Store:
                     content=item.get("content", ""),
                     summary=item.get("summary", ""),
                     metadata_json=metadata,
-                    timestamp=item.get("timestamp", datetime.now().isoformat()),
+                    timestamp=item.get("timestamp", now_iso),
                     confidence=item.get("confidence", 1.0),
+                    tier=tier,
+                    period_type=period_type,
+                    importance_score=importance_score,
+                    last_accessed_at=now_iso,
                 )
                 session.add(row)
 
@@ -329,17 +493,21 @@ class L3Store:
         return item_id
 
     async def _search_async(self, query: str, top_k: int) -> List[Dict[str, Any]]:
-        """异步语义检索
+        """异步语义检索（B3: 集成 RecallScorer 排序）
 
-        优先使用 pgvector 向量检索，降级为关键词匹配。
+        优先使用 pgvector 向量检索，降级为关键词匹配，
+        最终通过 RecallScorer 进行三因子融合评分排序。
         """
         from stockquant.persistence.models import L3Memory
         from sqlalchemy import select
 
         async with self._session_factory() as session:
+            # pgvector 向量检索（返回距离后转换为相似度）
             if self._has_pgvector:
                 try:
-                    return await self._search_vector(session, query, top_k)
+                    items = await self._search_vector(session, query, top_k * 3)
+                    if items:
+                        return self._rerank_with_scorer(items, query, "shallow", top_k)
                 except Exception as exc:
                     logger.warning("向量检索失败: %s，降级为关键词匹配", exc)
 
@@ -351,17 +519,26 @@ class L3Store:
             if not rows:
                 return []
 
-            # 简单关键词评分
-            query_lower = query.lower()
-            scored = []
-            for row in rows:
-                content_lower = (row.content or "").lower()
-                summary_lower = (row.summary or "").lower()
-                score = sum(1 for word in query_lower.split()
-                            if word in content_lower or word in summary_lower)
-                scored.append((self._row_to_dict(row), score))
-            scored.sort(key=lambda x: x[1], reverse=True)
-            return [item for item, score in scored[:top_k]]
+            items = [self._row_to_dict(row) for row in rows]
+            return self._rerank_with_scorer(items, query, "shallow", top_k)
+
+    def _rerank_with_scorer(
+        self,
+        items: List[Dict[str, Any]],
+        query: str,
+        tier: str,
+        top_k: int,
+    ) -> List[Dict[str, Any]]:
+        """用 RecallScorer 对检索结果重排序（B3 集成）"""
+        if self._scorer is not None:
+            try:
+                ranked = self._scorer.rank(
+                    items, query=query, tier=tier, top_k=top_k,
+                )
+                return [item for item, _ in ranked]
+            except Exception as exc:
+                logger.debug("RecallScorer 重排序失败，降级原始顺序: %s", exc)
+        return items[:top_k]
 
     async def _search_vector(self, session, query: str, top_k: int) -> List[Dict[str, Any]]:
         """pgvector 向量检索（需要 Embedding 服务）"""
@@ -401,9 +578,31 @@ class L3Store:
         return items
 
     async def _get_embedding(self, text: str) -> Optional[list]:
-        """获取文本的向量嵌入（调用 OpenAI Embedding API 或本地模型）"""
+        """获取文本的向量嵌入（B6.2: OpenAI + 本地 fallback）
+
+        优先级：
+        1. OpenAI text-embedding-3-small（云服务，质量最佳）
+        2. 本地 sentence-transformers/all-MiniLM-L6-v2（降级方案，离线可用）
+        3. None（无可用 embedding 服务）
+        """
+        # 优先尝试 OpenAI
         try:
-            # 优先从统一配置读取，降级到环境变量
+            embedding = await self._openai_embedding(text)
+            if embedding is not None:
+                return embedding
+        except Exception as exc:
+            logger.debug("OpenAI embedding 失败，尝试本地 fallback: %s", exc)
+
+        # 降级到本地 sentence-transformers
+        try:
+            return self._local_embedding(text)
+        except Exception as exc:
+            logger.debug("本地 embedding 也不可用: %s", exc)
+        return None
+
+    async def _openai_embedding(self, text: str) -> Optional[list]:
+        """调用 OpenAI Embedding API"""
+        try:
             from stockquant.config import get_config
             config = get_config()
             ai_config = config.get("ai", {})
@@ -423,8 +622,175 @@ class L3Store:
                 if resp.status_code == 200:
                     return resp.json()["data"][0]["embedding"]
         except Exception as exc:
-            logger.debug("Embedding 获取失败: %s", exc)
+            logger.debug("OpenAI Embedding 调用失败: %s", exc)
         return None
+
+    def _local_embedding(self, text: str) -> Optional[list]:
+        """本地 sentence-transformers embedding（B6.2 fallback）
+
+        使用 all-MiniLM-L6-v2 模型（384 维），离线可用。
+        模型在首次调用时加载（懒加载），后续缓存在实例上。
+        """
+        if not hasattr(self, "_local_embedder") or self._local_embedder is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+                # all-MiniLM-L6-v2: 384 维，模型大小约 80MB
+                self._local_embedder = SentenceTransformer("all-MiniLM-L6-v2")
+            except ImportError:
+                logger.warning("sentence-transformers 未安装，本地 embedding 不可用")
+                self._local_embedder = None
+                return None
+            except Exception as exc:
+                logger.warning("本地 embedding 模型加载失败: %s", exc)
+                self._local_embedder = None
+                return None
+
+        try:
+            embedding = self._local_embedder.encode(text[:8192])
+            return embedding.tolist()
+        except Exception as exc:
+            logger.debug("本地 embedding 编码失败: %s", exc)
+            return None
+
+    # ── B6.3: 噪音模式库 + 已证伪事实库 ──────────────────────────────────
+
+    def get_noise_patterns(self) -> List[str]:
+        """获取已知噪音模式（B6.3）
+
+        查询 L3 中存储的噪音模式（标题党/营销号模板），供 DenoiseStage Step 4 使用。
+
+        Returns:
+            噪音模式字符串列表（去重）
+        """
+        try:
+            records = self._query_l3_by_metadata_type("noise_pattern", limit=100)
+            patterns: List[str] = []
+            for r in records:
+                content = r.get("content", "")
+                if content:
+                    patterns.append(content[:80])
+            # 去重保序
+            return list(dict.fromkeys(patterns))
+        except Exception as exc:
+            logger.debug("get_noise_patterns 失败: %s", exc)
+            return []
+
+    def get_disproved_facts(self, symbol: Optional[str] = None) -> List[str]:
+        """获取已证伪事实（B6.3）
+
+        查询 L3 中存储的已证伪事实，供 DenoiseStage Step 5 使用。
+
+        Args:
+            symbol: 可选，按 symbol 过滤
+
+        Returns:
+            已证伪事实字符串列表
+        """
+        try:
+            records = self._query_l3_by_metadata_type(
+                "disproved_fact", limit=100, symbol=symbol,
+            )
+            facts: List[str] = []
+            for r in records:
+                content = r.get("content", "")
+                if content:
+                    facts.append(content[:120])
+            return list(dict.fromkeys(facts))
+        except Exception as exc:
+            logger.debug("get_disproved_facts 失败: %s", exc)
+            return []
+
+    def _query_l3_by_metadata_type(
+        self,
+        type_value: str,
+        limit: int = 100,
+        symbol: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """按 metadata.type 字段查询 L3（B6.3 内部辅助）
+
+        Args:
+            type_value: metadata.type 字段值（如 'noise_pattern' / 'disproved_fact'）
+            limit: 返回最大条目数
+            symbol: 可选 symbol 过滤
+        """
+        if self._backend == "memory":
+            results: List[Dict[str, Any]] = []
+            for entry in self._entries:
+                metadata = entry.get("metadata", {})
+                if not isinstance(metadata, dict):
+                    try:
+                        import json as _json
+                        metadata = _json.loads(metadata) if metadata else {}
+                    except Exception:
+                        metadata = {}
+                # 检查 metadata.type 或顶层 type 字段
+                entry_type = metadata.get("type") or entry.get("type")
+                if entry_type != type_value:
+                    continue
+                if symbol and entry.get("symbol") != symbol:
+                    continue
+                results.append(entry)
+                if len(results) >= limit:
+                    break
+            return results
+
+        # PostgreSQL 后端
+        try:
+            loop = __import__("asyncio").get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    return pool.submit(
+                        self._query_l3_by_metadata_type_sync,
+                        type_value, limit, symbol,
+                    ).result()
+            return loop.run_until_complete(
+                self._query_l3_by_metadata_type_async(type_value, limit, symbol)
+            )
+        except RuntimeError:
+            loop = __import__("asyncio").new_event_loop()
+            return loop.run_until_complete(
+                self._query_l3_by_metadata_type_async(type_value, limit, symbol)
+            )
+
+    def _query_l3_by_metadata_type_sync(
+        self,
+        type_value: str,
+        limit: int,
+        symbol: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        loop = __import__("asyncio").new_event_loop()
+        try:
+            return loop.run_until_complete(
+                self._query_l3_by_metadata_type_async(type_value, limit, symbol)
+            )
+        finally:
+            loop.close()
+
+    async def _query_l3_by_metadata_type_async(
+        self,
+        type_value: str,
+        limit: int,
+        symbol: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """异步按 metadata.type 查询 L3（B6.3）"""
+        from stockquant.persistence.models import L3Memory
+        from sqlalchemy import select
+
+        async with self._session_factory() as session:
+            # metadata_json 是 JSON 字段，用 LIKE 简单匹配
+            # 生产环境可改用 JSONB 查询操作符
+            stmt = (
+                select(L3Memory)
+                .where(L3Memory.metadata_json.like(f'%"type":"{type_value}"%'))
+                .order_by(L3Memory.timestamp.desc())
+                .limit(limit)
+            )
+            if symbol:
+                stmt = stmt.where(L3Memory.symbol == symbol)
+
+            result = await session.execute(stmt)
+            return [self._row_to_dict(row) for row in result.scalars().all()]
 
     async def _count_async(self) -> int:
         """异步计数"""
@@ -475,12 +841,28 @@ class L3Store:
         # Ensure user_id is present (required by L3Memory model)
         if "user_id" not in entry or not entry["user_id"]:
             entry["user_id"] = self._user_id
+        # B3: 内存模式补充 tier/period_type/importance_score/last_accessed_at
+        entry.setdefault("tier", self.DEFAULT_TIER)
+        entry.setdefault("period_type", self.DEFAULT_PERIOD_TYPE)
+        entry.setdefault("importance_score", 0.5)
+        entry["last_accessed_at"] = datetime.now().isoformat()
         self._entries.append(entry)
         return item_id
 
     def _search_memory(self, query: str, top_k: int) -> List[Dict[str, Any]]:
         if not self._entries:
             return []
+        # B3: 用 RecallScorer 评分排序（tier=shallow 默认）
+        if self._scorer is not None:
+            try:
+                items = self._entries[:]
+                ranked = self._scorer.rank(
+                    items, query=query, tier="shallow", top_k=top_k,
+                )
+                return [item for item, _ in ranked]
+            except Exception as exc:
+                logger.debug("RecallScorer 评分失败，降级关键词匹配: %s", exc)
+        # 降级：关键词匹配
         query_lower = query.lower()
         scored = []
         for item in self._entries:
@@ -496,7 +878,7 @@ class L3Store:
 
     @staticmethod
     def _row_to_dict(row) -> Dict[str, Any]:
-        """ORM 行转字典"""
+        """ORM 行转字典（B3: 含 tier/period_type/importance_score/last_accessed_at）"""
         return {
             "id": row.id,
             "symbol": row.symbol,
@@ -505,6 +887,11 @@ class L3Store:
             "metadata": json.loads(row.metadata_json) if row.metadata_json else {},
             "timestamp": row.timestamp,
             "confidence": row.confidence,
+            # B3: 新增分层字段
+            "tier": getattr(row, "tier", "shallow"),
+            "period_type": getattr(row, "period_type", "unspecified"),
+            "importance_score": float(getattr(row, "importance_score", 0.5) or 0.5),
+            "last_accessed_at": getattr(row, "last_accessed_at", None),
         }
 
     def close(self) -> None:

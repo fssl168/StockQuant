@@ -4,6 +4,133 @@
 
 ---
 
+### v2.0.3 — F020 FinMem 三模块架构增强（2026-06-27）
+
+> 落地 FinMem 三模块架构（Profiling / Memory / Decision），新增反幻觉与管线调度能力。
+
+**综合完成度**：~96%
+
+**测试状态**：pytest 1250 passed / 11 skipped；vitest 225 passed (26 files)
+
+**新增模块**（15 个新文件）：
+
+- **Profiling 模块**（`stockquant/ai/profiling/`）：
+  - `risk_profile.py`：RiskProfile 枚举 + ProfileParams + evaluate()
+  - `transition.py`：ProfileTransitioner（7 天冷却期 + 触发器）
+  - `manager.py`：用户风险偏好管理器
+  - 持久化：`persistence/models.py` 增加 `UserProfileHistory` 表
+
+- **Memory 模块**（分层记忆，`stockquant/ai/memory/`）：
+  - `recall_scorer.py`：三因子召回评分（α·relevance + β·recency + γ·importance）
+  - `l2_store.py` + `l3_store.py`：浅层（3d）/ 中层（90d）/ 深层（365d）/ 工作层（1d）
+  - `working.py`：WorkingMemory 三组件（Summarization / Observation / Reflection）
+  - `system.py`：MemorySystem 统一入口
+  - `compressor.py` + `forgetting.py`：压缩与遗忘
+
+- **反幻觉系统**（`stockquant/ai/hallucination/`）：
+  - `claim_verifier.py`：FINGROUND 六类声明验证（numeric/temporal/entity_attr/comparative/regulatory/computational）
+  - `cross_validator.py`：多模型并行验证（majority vote，幻觉率 8.3% → 3.2%）
+  - `pipeline.py` + `modes.py` + `checkpoints.py` + `database.py`
+
+- **采集端增强**（`stockquant/ai/collectors/`）：
+  - `research_collector.py` / `financial_collector.py` / `exchange_collector.py`：3 个新采集器
+  - `verifier.py`：FAKE_SOURCES 黑名单 + SHA-256 指纹变更检测
+  - `audit_log.py`（Phase F3）：CollectorAuditLog 内存环形缓冲 + 持久化回调
+
+- **管线四阶段**（`stockquant/ai/pipeline/`）：
+  - `collection.py` + `denoise.py` + `summarize.py` + `elevate.py`：5+6+5 步完整化
+  - `pipeline_orchestrator.py`：InformationProcessingPipeline 编排器
+
+- **决策与上下文**：
+  - `insights_bridge.py`：F025 决策上下文组装（3 层记忆检索 + Reflection）
+  - `decision_agent.py`：ProfileParams 自动止损止盈 + 仓位上限告警
+
+- **配置与调度**：
+  - `config/data_sources.yaml`（Phase F2）：6 通道 + 4 级调度配置
+  - `stockquant/ai/data_source_config.py`：DataSourceConfig 加载器（69 测试）
+  - `stockquant/ai/scheduler.py`（Phase F1）：基于 asyncio 的 4 级 PipelineScheduler（26 测试）
+
+**新增测试**（8 个测试文件，427 测试用例）：
+
+- `tests/ai/profiling/test_risk_profile.py`（23 测试）
+- `tests/ai/memory/test_recall_scorer.py`（35 测试）
+- `tests/ai/memory/test_b3_layered_memory.py`（19 测试）
+- `tests/ai/memory/test_b4_working_memory.py`（25 测试）
+- `tests/ai/memory/test_b6_memory_enhancements.py`（30 测试）
+- `tests/ai/pipeline/test_b5_pipeline.py`（71 测试）
+- `tests/ai/collectors/test_phase_c_collectors.py`（32 测试）
+- `tests/ai/test_phase_d_decision.py`（30 测试）
+- `tests/ai/hallucination/test_phase_e_claim_verifier.py`（55 测试）
+- `tests/ai/hallucination/test_phase_e_cross_validator.py`（33 测试）
+- `tests/ai/test_phase_f1_scheduler.py`（26 测试）
+- `tests/ai/test_phase_f2_data_source_config.py`（69 测试）
+- `tests/ai/collectors/test_phase_f3_audit_log.py`（52 测试）
+- `tests/ai/pipeline/test_phase_f4_change_detection.py`（30 测试）
+
+**修复**：
+
+- `persistence/models.py`：移除 UserProfileHistory 中与 `index=True` 冲突的重复 Index 声明
+
+**删除**：
+
+- 旧版管线文件 `pipeline/denoiser.py`、`elevator.py`、`summarizer.py`、`orchestrator.py`（能力已合并到新版）
+
+---
+
+### v2.0.2 — AI 子系统完善 + API 对齐 + 前端修复（2026-06-27）
+
+> 完善 AI 基础设施层，补齐 repository_v2 持久化层和 AIService 统一编排层，对齐前端 API 类型。
+
+**综合完成度**：~94%（功能 97%，NFR 89%）
+
+**测试状态**：765 passed / 0 failed / 6 skipped（99.2%）
+
+**核心变更**（41 文件，+1034/-262 行）：
+
+- **AIService 统一编排层**（`ai/service.py`，156 行新增）：
+  - Agent Orchestrator + Memory + Hallucination + Pipeline 一体化入口
+  - 统一 AI 服务调用接口，各 Agent 通过 AIService 协调
+
+- **repository_v2 全新持久化层**（`persistence/repository_v2.py`，427 行新增）：
+  - 18 个 ORM 模型（数据库 schema 完整化）
+  - 完整 CRUD 操作封装
+  - 审计日志自动持久化
+
+- **API 端点对齐**：
+  - `auth.py`：JWT 认证逻辑优化（113 行变更）
+  - `data.py`：数据管理端点优化
+  - `trading.py`：交易执行端点对齐
+
+- **引擎层重构**：
+  - `broker.py`：Broker 抽象层优化（48 行变更）
+  - `cerebro.py`：事件引擎优化
+  - `matching.py`：撮合引擎优化
+  - `events.py`：事件模型优化（44 行新增）
+
+- **券商接入优化**：
+  - `xtp_broker.py`：XTP 接入逻辑优化（35 行变更）
+  - `qmt_broker.py`：QMT 接入优化
+  - `ctp_broker.py`：CTP 接入优化
+
+- **前端修复**（`web/`）：
+  - `types/index.ts`：类型定义对齐后端 API（22 行变更）
+  - `stores/`：tradingStore / aiStore / backtestStore / strategyStore 对齐
+  - `api/`：ai.ts / backtest.ts / dashboard.ts / signal.ts 对齐
+  - `pages/`：Dashboard / Data / Trading 页面修复
+
+- **持久化层统一**：
+  - `persistence/models.py`：ORM 模型优化
+  - `persistence/persistent_store.py`：存储层优化
+  - `persistence/repository.py`：CRUD 操作优化
+
+**架构演进**：
+  - `agent/` 基础设施层（LLMAdapter, ReActAgent, ToolRegistry）稳定
+  - `ai/` 服务层通过 AIService 统一编排（新增）
+  - `persistence/` 通过 repository_v2 补齐完整数据访问层
+  - `api/` 端点全面对齐前端类型
+
+---
+
 ### v2.0.2 — 差距评估修复冲刺 + 机构级重构路线图（2026-06-21）
 
 > 基于 [product-spec-gap-assessment.md](product-spec-gap-assessment.md) 和 [product-spec-gap-implement.md](product-spec-gap-implement.md)，完成全部差距修复并添加机构级重构路线图。

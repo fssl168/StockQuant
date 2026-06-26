@@ -54,6 +54,28 @@ vi.mock('@/stores/notificationStore', () => ({
   }),
 }))
 
+// Mock marketStore (Monitor.tsx uses useMarketStore.getState().addWatchlist/addSymbol)
+vi.mock('@/stores/marketStore', () => {
+  const state = {
+    symbols: ['sh600519'],
+    addSymbol: vi.fn((sym: string) => {
+      if (!state.symbols.includes(sym)) state.symbols.push(sym)
+    }),
+    removeSymbol: vi.fn((sym: string) => {
+      state.symbols = state.symbols.filter((s: string) => s !== sym)
+    }),
+    addWatchlist: vi.fn((syms: string[]) => {
+      state.symbols = Array.from(new Set([...state.symbols, ...syms]))
+    }),
+    clear: vi.fn(() => { state.symbols = [] }),
+  }
+  const useMarketStore = Object.assign(
+    vi.fn((selector?: any) => (selector ? selector(state) : state)),
+    { getState: () => state }
+  )
+  return { useMarketStore }
+})
+
 // Mock StockTicker
 vi.mock('@/components/Monitor/StockTicker', () => ({
   default: ({ symbol, price, change }: any) => (

@@ -8,7 +8,18 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('@/stores/backtestStore', () => ({
   useBacktestStore: vi.fn((selector: any) => {
-    const state = { submitTask: vi.fn(() => Promise.resolve({ taskId: 'test-1' })) }
+    const state = {
+      tasks: [],
+      submitTask: vi.fn(() => Promise.resolve({ taskId: 'test-1' })),
+      fetchTasks: vi.fn(() => Promise.resolve()),
+    }
+    return selector ? selector(state) : state
+  }),
+}))
+
+vi.mock('@/stores/strategyStore', () => ({
+  useStrategyStore: vi.fn((selector: any) => {
+    const state = { strategies: [], fetchStrategies: vi.fn(() => Promise.resolve()) }
     return selector ? selector(state) : state
   }),
 }))
@@ -18,6 +29,10 @@ vi.mock('@/stores/notificationStore', () => ({
     const state = { add: vi.fn() }
     return selector ? selector(state) : state
   }),
+}))
+
+vi.mock('@/hooks/useWebSocket', () => ({
+  useWebSocket: vi.fn(() => ({ messages: [], connected: false })),
 }))
 
 vi.mock('@monaco-editor/react', () => ({

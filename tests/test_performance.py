@@ -294,6 +294,7 @@ class TestDataCache:
         将合成 CSV 数据缓存为 Parquet，验证 Parquet 读取速度
         比直接解析 CSV 快 10 倍以上。
         """
+        pytest.importorskip('pyarrow')  # pyarrow 是可选依赖（extras_require）
         # 生成足够大的数据（5000 bars）
         n = 5000
         df = _generate_daily_bars(n, base_price=100.0)

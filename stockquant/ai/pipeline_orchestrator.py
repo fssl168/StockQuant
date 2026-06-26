@@ -82,12 +82,26 @@ class InformationProcessingPipeline:
                     "timestamp": datetime.now().isoformat(),
                 })
 
+        # D1: 构建 F025 决策上下文（InsightsBridge）
+        decision_context = None
+        try:
+            from .insights_bridge import InsightsBridge
+            bridge = InsightsBridge(top_k_per_layer=5)
+            decision_context = bridge.build_context(
+                symbol=symbols[0] if symbols else "",
+                insights=elevated.get("insights", []),
+                memory_system=self._memory,
+            )
+        except Exception as exc:
+            logger.warning("InsightsBridge 构建上下文失败: %s", exc)
+
         return {
             "articles_processed": len(raw_articles),
             "filtered_count": len(filtered),
             "summary": summary,
             "insights": elevated.get("insights", []),
             "hallucination_check": h_results,
+            "decision_context": decision_context,
         }
 
     def run_single_symbol(self, symbol: str, sources: Optional[List[str]] = None) -> Dict[str, Any]:

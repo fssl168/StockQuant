@@ -1,5 +1,5 @@
-﻿// @ts-nocheck
-import { defineConfig } from 'vite'
+// @ts-nocheck
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -9,7 +9,7 @@ export default defineConfig({
     alias: {
       '@': new URL('./src', import.meta.url).pathname,
     },
-    },
+  },
   server: {
     port: 3000,
     proxy: {
@@ -24,5 +24,9 @@ export default defineConfig({
         ws: true,
       },
     },
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/__tests__/setup.ts'],
   },
 })

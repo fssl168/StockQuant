@@ -73,8 +73,7 @@ class DecisionAgent:
         最大推理步数
     """
 
-    SYSTEM_PROMPT = """你是一个专业的 A 股交易决策顾问。你的任务是对交易信号进行二次验证，
-给出是否执行、如何执行的建议。
+    SYSTEM_PROMPT = """你是一个专业的 A 股交易决策顾问。你的任务是对交易信号进行二次验证，给出是否执行、如何执行的建议。
 
 工作流程（严格按顺序）：
 1. **技术面验证**：调用 verify_signal 多指标交叉确认信号可靠性
@@ -92,6 +91,15 @@ class DecisionAgent:
 - T+1 意识：当日买入不可卖出，注意流动性风险
 
 如果验证过程中发现重大风险，可以直接否决，不需要继续后续步骤。
+
+7. **风险偏好约束**（D2 新增）：根据 user_profile 调整仓位上限、止损止盈
+   - conservative（保守）: 仓位上限 5%，止损 3%，止盈 6%
+   - neutral（中性）: 仓位上限 10%，止损 5%，止盈 10%
+   - aggressive（激进）: 仓位上限 20%，止损 8%，止盈 20%
+8. **洞察整合**（D2 新增）：如果传入 insights，结合 F020 的市场洞察做综合判断
+   - F020 升华洞察是市场级与公司级的高层判断
+   - 结合 WorkingMemory 反思与历史记忆做时间维度上的连贯性校验
+   - 当 insights 显示与信号方向冲突时，应当 reject 或 modify
 """
 
     def __init__(
@@ -233,6 +241,9 @@ class DecisionAgent:
         signal: Dict[str, Any],
         current_positions: Optional[Dict[str, Any]] = None,
         total_cash: float = 1000000.0,
+        insights: Optional[List[Dict[str, Any]]] = None,
+        user_profile: Optional[Any] = None,
+        decision_context: Optional[Any] = None,
     ) -> DecisionAdvice:
         """评估交易信号，给出决策建议。
 
@@ -244,6 +255,14 @@ class DecisionAgent:
             当前持仓
         total_cash : float
             总资金
+        insights : list[dict] | None
+            F020 升华后的洞察列表（D2 新增）。若提供，将整合到决策查询中。
+        user_profile : RiskProfile | None
+            用户风险偏好（D2 新增）。若提供，将按 ProfileParams 调整仓位/止损止盈。
+            支持传入 RiskProfile 枚举或字符串（"conservative"/"neutral"/"aggressive"）。
+        decision_context : DecisionContext | None
+            F020 → F025 完整决策上下文（D2 新增）。若提供，将作为决策辅助信息。
+            优先级高于 insights（context.insights 覆盖单独传入的 insights）。
 
         Returns
         -------
@@ -254,6 +273,22 @@ class DecisionAgent:
         source = signal.get("source", "strategy")
         qty = signal.get("qty", 0)
         price = signal.get("price", 0.0)
+
+        # D2: 解析 user_profile → ProfileParams（用于仓位/止损止盈约束）
+        profile_params = self._resolve_profile_params(user_profile)
+
+        # D2: 如果传入 decision_context，从中提取 insights（优先级高于单独传入的 insights）
+        effective_insights = insights or []
+        if decision_context is not None:
+            ctx_insights = getattr(decision_context, "insights", None)
+            if ctx_insights:
+                effective_insights = ctx_insights
+            # 同时提取反思文本（作为决策辅助信息）
+            ctx_reflection = getattr(decision_context, "reflection", "") or ""
+            ctx_memory = getattr(decision_context, "memory_retrieval", []) or []
+        else:
+            ctx_reflection = ""
+            ctx_memory = []
 
         # 只读模式：直接返回建议，不执行
         if self._mode == DecisionMode.READ_ONLY:
@@ -266,18 +301,57 @@ class DecisionAgent:
             self._record_audit(signal, advice, "read_only")
             return advice
 
-        # 构建查询
+        # 构建查询（含 D2 扩展：风险偏好 + F020 洞察 + 反思）
         positions_json = json.dumps(current_positions or {}, ensure_ascii=False)
-        query = (
-            f"请评估以下交易信号：\n"
-            f"标的: {symbol}, 方向: {direction}, 数量: {qty}, 价格: {price}\n"
-            f"信号来源: {source}\n"
-            f"当前持仓: {positions_json}\n"
-            f"总资金: {total_cash:,.0f}"
-        )
+        query_lines = [
+            f"请评估以下交易信号：",
+            f"标的: {symbol}, 方向: {direction}, 数量: {qty}, 价格: {price}",
+            f"信号来源: {source}",
+            f"当前持仓: {positions_json}",
+            f"总资金: {total_cash:,.0f}",
+        ]
+        # D2: 注入风险偏好约束
+        if profile_params is not None:
+            query_lines.append(
+                f"风险偏好: {self._profile_label(user_profile)} "
+                f"(仓位上限 {profile_params.max_position_pct*100:.0f}%, "
+                f"止损 {profile_params.stop_loss_pct*100:.0f}%, "
+                f"止盈 {profile_params.take_profit_pct*100:.0f}%)"
+            )
+        # D2: 注入 F020 升华洞察
+        if effective_insights:
+            insights_text = self._format_insights(effective_insights)
+            query_lines.append(f"F020 市场洞察:\n{insights_text}")
+        # D2: 注入 WorkingMemory 反思
+        if ctx_reflection:
+            query_lines.append(f"WorkingMemory 反思: {ctx_reflection[:300]}")
+        # D2: 注入历史记忆摘要（取前 3 条）
+        if ctx_memory:
+            memory_text = self._format_memory(ctx_memory[:3])
+            query_lines.append(f"历史记忆:\n{memory_text}")
+
+        query = "\n".join(query_lines)
 
         react_result = self._react.run(query)
         advice = self._parse_react_result(react_result, signal)
+
+        # D2: 根据 ProfileParams 强制覆盖止损止盈（如未在 LLM 响应中设置）
+        if profile_params is not None:
+            cost_price = float(signal.get("price", 0.0) or 0.0)
+            if cost_price > 0:
+                if advice.stop_loss is None:
+                    advice.stop_loss = round(cost_price * (1 - profile_params.stop_loss_pct), 4)
+                if advice.take_profit is None:
+                    advice.take_profit = round(cost_price * (1 + profile_params.take_profit_pct), 4)
+            # 仓位约束：若修改后的 qty 超过 profile 约束，记录风险告警
+            if advice.modified_params and "qty" in advice.modified_params:
+                advised_qty = advice.modified_params["qty"]
+                max_qty = int(total_cash * profile_params.max_position_pct / max(cost_price, 0.001))
+                if advised_qty > max_qty:
+                    advice.risk_warnings.append(
+                        f"建议仓位 {advised_qty} 股超过 {self._profile_label(user_profile)} 档位上限 "
+                        f"{max_qty} 股（{profile_params.max_position_pct*100:.0f}% 仓位约束），请调整"
+                    )
 
         # 记录审计日志
         final_action = advice.action if self._mode == DecisionMode.AUTO else "pending_user_confirm"
@@ -314,6 +388,102 @@ class DecisionAgent:
     def get_audit_logs(self, limit: int = 50) -> List[AuditLog]:
         """获取审计日志。"""
         return self._audit_logs[-limit:]
+
+    # ── D2: Profiling + Insights 辅助方法 ─────────────────────────────────
+
+    @staticmethod
+    def _resolve_profile_params(user_profile: Optional[Any]):
+        """将 user_profile 解析为 ProfileParams
+
+        支持：
+        - RiskProfile 枚举（推荐）
+        - 字符串（"conservative"/"neutral"/"aggressive"）
+        - ProfileParams 实例（直接返回）
+        - None（返回 None，不应用约束）
+
+        Returns:
+            ProfileParams 实例或 None
+        """
+        if user_profile is None:
+            return None
+        # 已是 ProfileParams
+        try:
+            from stockquant.ai.profiling import ProfileParams
+            if isinstance(user_profile, ProfileParams):
+                return user_profile
+        except ImportError:
+            pass
+        # RiskProfile 枚举或字符串
+        try:
+            from stockquant.ai.profiling import RiskProfile, get_params
+            if isinstance(user_profile, RiskProfile):
+                return get_params(user_profile)
+            if isinstance(user_profile, str):
+                profile = RiskProfile.from_str(user_profile)
+                return get_params(profile)
+        except ImportError:
+            logger.debug("Profiling 模块不可用，跳过 user_profile 解析")
+        return None
+
+    @staticmethod
+    def _profile_label(user_profile: Optional[Any]) -> str:
+        """获取风险偏好的人类可读标签"""
+        if user_profile is None:
+            return "未指定"
+        try:
+            from stockquant.ai.profiling import RiskProfile
+            if isinstance(user_profile, RiskProfile):
+                return user_profile.value
+        except ImportError:
+            pass
+        if isinstance(user_profile, str):
+            return user_profile
+        return "未知"
+
+    @staticmethod
+    def _format_insights(insights: List[Dict[str, Any]]) -> str:
+        """格式化 F020 升华洞察为 LLM 可读文本"""
+        if not insights:
+            return ""
+        lines = []
+        for i, item in enumerate(insights[:5], 1):  # 限制 5 条，避免上下文超长
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content") or item.get("insight") or ""
+            confidence = item.get("confidence", "")
+            symbol = item.get("symbol", "")
+            line = f"{i}. "
+            if symbol:
+                line += f"[{symbol}] "
+            if confidence:
+                line += f"(置信度: {confidence}) "
+            line += str(content)[:200]
+            lines.append(line)
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_memory(memory_items: List[Dict[str, Any]]) -> str:
+        """格式化历史记忆为 LLM 可读文本"""
+        if not memory_items:
+            return ""
+        lines = []
+        for i, item in enumerate(memory_items, 1):
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content") or item.get("summary") or ""
+            symbol = item.get("symbol", "")
+            tier = item.get("tier") or item.get("layer") or ""
+            timestamp = item.get("timestamp", "")
+            line = f"{i}. "
+            if symbol:
+                line += f"[{symbol}] "
+            if tier:
+                line += f"({tier}) "
+            if timestamp:
+                line += f"@{timestamp[:10]} "
+            line += str(content)[:150]
+            lines.append(line)
+        return "\n".join(lines)
 
     def _parse_react_result(
         self, react_result: ReActResult, signal: Dict[str, Any]

@@ -213,32 +213,12 @@ Pipeline
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: stockquant.ai.pipeline.denoiser
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 .. automodule:: stockquant.ai.pipeline.elevate
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: stockquant.ai.pipeline.elevator
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: stockquant.ai.pipeline.orchestrator
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 .. automodule:: stockquant.ai.pipeline.summarize
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: stockquant.ai.pipeline.summarizer
    :members:
    :undoc-members:
    :show-inheritance:

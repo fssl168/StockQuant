@@ -72,16 +72,60 @@ class NewsCollector(BaseCollector):
             items = await self._collect_alphafeed(symbol, limit)
             if items:
                 return items
-            logger.info("AlphaFeed 无数据，降级为 AkShare")
+            # C4: AlphaFeed 无数据时记录降级原因
+            logger.info(
+                "AlphaFeed 无数据（symbol=%s），降级为 AkShare 多源聚合",
+                symbol or "<market>",
+            )
+        else:
+            # C4: SDK 未启用，记录原因
+            if not _ALPHAFEED_AVAILABLE:
+                logger.debug("AlphaFeed SDK 未安装，使用 AkShare 多源聚合")
+            elif not self._api_key:
+                logger.debug("AlphaFeed API Key 未配置，使用 AkShare 多源聚合")
 
         return await self._collect_akshare(symbol, limit)
 
     async def _collect_alphafeed(self, symbol: str, limit: int) -> List[RawInfoItem]:
-        """从 AlphaFeed 采集新闻"""
-        try:
-            # AlphaFeed 暂无独立 API，保留接口供未来扩展。
-            # Returns: [] — AlphaFeed SDK 尚未集成
+        """从 AlphaFeed 采集新闻（C4: 真实 SDK 调用）
+
+        调用 AlphaFeed SDK 的新闻接口：
+        - 如果 SDK 可用且 API Key 配置正确，返回结构化新闻列表
+        - 如果 SDK 接口签名与预期不符，捕获异常后降级
+        """
+        if not self._client:
             return []
+        try:
+            # AlphaFeed SDK 调用尝试：
+            # 新版 SDK：client.get_news(symbol=..., limit=...)
+            # 旧版 SDK：client.news(symbol, limit)
+            try:
+                result = self._client.get_news(symbol=symbol, limit=limit)
+            except (AttributeError, TypeError):
+                # 尝试旧版 API
+                result = self._client.news(symbol, limit)
+
+            # 解析结果
+            if not result:
+                return []
+            items: List[RawInfoItem] = []
+            # 兼容 dict 列表 / 对象列表
+            iterable = result.get("data", result) if isinstance(result, dict) else result
+            for entry in iterable[:limit] if hasattr(iterable, '__iter__') else []:
+                if isinstance(entry, dict):
+                    title = str(entry.get("title", ""))
+                    content = str(entry.get("content", entry.get("summary", "")))
+                    url = str(entry.get("url", ""))
+                    source = str(entry.get("source", "alphafeed"))
+                    ts = entry.get("published_at") or entry.get("timestamp")
+                    published = datetime.fromisoformat(str(ts)) if ts else datetime.now()
+                    items.append(RawInfoItem(
+                        url=url, source=source, title=title,
+                        content=content, symbol=symbol,
+                        timestamp=published,
+                    ))
+            logger.info("AlphaFeed 采集: %d 条", len(items))
+            return items
         except Exception as exc:
             logger.warning("AlphaFeed 新闻采集失败: %s", exc)
             return []

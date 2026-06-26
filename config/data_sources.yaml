@@ -1,0 +1,114 @@
+# F020 Phase F2 — 数据源与调度配置
+#
+# 本文件由 stockquant.ai.data_source_config.DataSourceConfig 加载。
+# 优先级：环境变量 DATA_SOURCES_CONFIG_PATH > 默认路径 (config/data_sources.yaml) > 内置默认值。
+#
+# 字段说明：
+#   collectors.<channel>.enabled           是否启用该采集通道
+#   collectors.<channel>.sources[]         数据源列表
+#   collectors.<channel>.sources[].name    数据源标识（需与 SourceVerifier.TRUSTED_SOURCES 对齐）
+#   collectors.<channel>.sources[].priority 优先级（1=最高，越小越优先）
+#   collectors.<channel>.sources[].trust_score 信任分（0.0~1.0）
+#   scheduling.<level>.interval_seconds   实时/分钟/小时任务的间隔秒
+#   scheduling.<level>.collectors         该级别下要执行的采集通道列表
+#   scheduling.daily.hour                  daily 级别执行的整点小时
+#   scheduling.daily.minute                daily 级别执行的分钟
+
+collectors:
+  news:
+    enabled: true
+    sources:
+      - name: eastmoney
+        priority: 1
+        trust_score: 0.8
+      - name: xueqiu
+        priority: 2
+        trust_score: 0.6
+      - name: sina
+        priority: 3
+        trust_score: 0.7
+      - name: cls_telegraph
+        priority: 4
+        trust_score: 0.7
+      - name: eastmoney_express
+        priority: 5
+        trust_score: 0.7
+
+  social:
+    enabled: true
+    sources:
+      - name: xueqiu_hot
+        priority: 1
+        trust_score: 0.5
+
+  announcement:
+    enabled: true
+    sources:
+      - name: cninfo
+        priority: 1
+        trust_score: 0.9
+      - name: sse_disclosure
+        priority: 2
+        trust_score: 0.9
+      - name: szse_disclosure
+        priority: 2
+        trust_score: 0.9
+
+  research:
+    enabled: true
+    sources:
+      - name: eastmoney_research
+        priority: 1
+        trust_score: 0.8
+
+  financial:
+    enabled: true
+    sources:
+      - name: sina_financial
+        priority: 1
+        trust_score: 0.8
+      - name: eastmoney_financial
+        priority: 2
+        trust_score: 0.8
+
+  exchange:
+    enabled: true
+    sources:
+      - name: sse
+        priority: 1
+        trust_score: 0.95
+      - name: szse
+        priority: 1
+        trust_score: 0.95
+      - name: exchange_lhb
+        priority: 2
+        trust_score: 0.85
+
+scheduling:
+  realtime:
+    interval_seconds: 60
+    collectors: [news, social]
+  minute:
+    interval_seconds: 300
+    collectors: [announcement]
+  hourly:
+    interval_seconds: 3600
+    collectors: []
+  daily:
+    hour: 18
+    minute: 0
+    collectors: [research, financial, exchange]
+
+# 默认采集目标符号（若 ScheduleSpec 未指定 symbols 时使用）
+default_symbols:
+  - sh600519
+  - sz000858
+  - sh601318
+
+# 采集参数
+collect:
+  max_articles_per_source: 20
+  # 采集失败重试次数
+  retry_count: 2
+  # 单次采集超时（秒）
+  timeout_seconds: 30

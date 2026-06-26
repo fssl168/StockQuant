@@ -83,11 +83,41 @@ class UserModel(Base):
     hashed_password: Mapped[str] = mapped_column(Text, nullable=False)
     roles: Mapped[str] = mapped_column(Text, nullable=False, default='["user"]')
     disabled: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)
+    # FinMem Profiling 模块：风险偏好（conservative|neutral|aggressive）
+    risk_profile: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="neutral"
+    )
+    profile_updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    )
+
+
+class UserProfileHistory(Base):
+    """风险偏好转换历史 — FinMem Profiling 模块动态转换追踪"""
+    __tablename__ = "user_profile_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("users.id"), nullable=False, index=True
+    )
+    from_profile: Mapped[str] = mapped_column(String(20), nullable=False)
+    to_profile: Mapped[str] = mapped_column(String(20), nullable=False)
+    # market_crash | consecutive_loss | manual | cooldown_expired | ...
+    trigger: Mapped[str] = mapped_column(String(50), nullable=False)
+    context_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+
+    __table_args__ = (
+        # user_id 已通过 index=True 创建默认索引，此处只追加 timestamp 索引
+        Index("ix_user_profile_history_timestamp", "timestamp"),
     )
 
 
@@ -290,7 +320,7 @@ class L2Memory(Base):
 
 
 class L3Memory(Base):
-    """L3 长期记忆 — PostgreSQL + pgvector 向量存储"""
+    """L3 长期记忆 — PostgreSQL + pgvector 向量存储（FinMem 分层）"""
     __tablename__ = "l3_memory"
 
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
@@ -302,10 +332,22 @@ class L3Memory(Base):
     timestamp: Mapped[str] = mapped_column(String(30), nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
     embedding = Column(_VectorClass, nullable=True)
+    # FinMem 三层分层：shallow(浅层-市场新闻) | intermediate(中层-季报) | deep(深层-年报)
+    tier: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="intermediate"
+    )
+    # 周期类型：quarterly | annual | ad_hoc
+    period_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # 重要性评分 0.0-1.0，由 ElevateStage 计算写入
+    importance_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    # 最后访问时间 ISO 字符串，用于 recency 因子计算（访问会"刷新"记忆）
+    last_accessed_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
 
     __table_args__ = (
         Index("ix_l3_confidence", "confidence"),
         Index("ix_l3_user_id", "user_id"),
+        Index("ix_l3_tier", "tier"),
+        Index("ix_l3_symbol_tier", "symbol", "tier"),
     )
 
 

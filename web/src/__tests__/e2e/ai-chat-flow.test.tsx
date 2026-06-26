@@ -17,6 +17,27 @@ vi.mock('@/api/ai', () => ({
   },
 }))
 
+// Mock @/stores/aiStore (AIChat.tsx L30 useAIStore.getState().init())
+vi.mock('@/stores/aiStore', () => {
+  const state = {
+    messages: [],
+    setMessages: vi.fn(),
+    addMessage: vi.fn((role: string, content: string) => {
+      state.messages.push({ role, content, timestamp: Date.now() })
+    }),
+    activeConversationId: 'conv-1',
+    conversations: [],
+    createConversation: vi.fn(),
+    switchConversation: vi.fn(),
+    init: vi.fn(),
+  }
+  const useAIStore = Object.assign(
+    vi.fn((selector?: any) => (selector ? selector(state) : state)),
+    { getState: () => state }
+  )
+  return { useAIStore }
+})
+
 // Mock ChatPanel component
 vi.mock('@/components/AI/ChatPanel', () => ({
   default: ({ messages, onSend, isStreaming, streamingContent }: any) => (

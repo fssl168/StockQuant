@@ -29,6 +29,58 @@ vi.mock('antd', () => ({
   InputNumber: vi.fn(),
 }))
 
+// Mock trading API to avoid calling real backend
+vi.mock('@/api/trading', () => ({
+  getAccount: vi.fn().mockResolvedValue({
+    totalEquity: 1000000,
+    cash: 500000,
+    availableCash: 500000,
+    positionValue: 500000,
+    todayPnl: 0,
+    brokerMode: 'paper',
+  }),
+  getOrders: vi.fn().mockResolvedValue([
+    {
+      id: 'ORD-1',
+      symbol: 'sh600519',
+      side: 'BUY',
+      type: 'LIMIT',
+      price: 1700,
+      quantity: 100,
+      status: 'ORDER_PENDING',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+    },
+  ]),
+  placeOrder: vi.fn().mockImplementation((req: { symbol: string; side: string; type: string; price: number; quantity: number }) =>
+    Promise.resolve({
+      id: 'ORD-NEW',
+      symbol: req.symbol,
+      side: req.side,
+      type: req.type,
+      price: req.price,
+      quantity: req.quantity,
+      status: 'ORDER_SUBMITTED',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+    })
+  ),
+  cancelOrder: vi.fn().mockResolvedValue(undefined),
+  getPositions: vi.fn().mockResolvedValue([
+    { symbol: 'sh600519', shares: 100, cost: 1700, price: 1725, pnl: 2500, pnlPct: 1.47 },
+  ]),
+  getTrades: vi.fn().mockResolvedValue([
+    {
+      tradeId: 'T1',
+      orderId: 'ORD-1',
+      symbol: 'sh600519',
+      price: 1700,
+      quantity: 100,
+      timestamp: '2024-01-01T00:00:00Z',
+    },
+  ]),
+}))
+
 describe('TradingStore', () => {
   beforeEach(() => {
     // Reset store to initial state

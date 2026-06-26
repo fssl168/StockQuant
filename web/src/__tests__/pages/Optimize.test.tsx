@@ -8,6 +8,28 @@ vi.mock('echarts-for-react', () => ({
   default: vi.fn(() => null),
 }))
 
+// Mock react-router-dom (Optimize.tsx uses useNavigate)
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+}))
+
+// Mock @/api/optimize to avoid real API calls during the workflow test
+vi.mock('@/api/optimize', () => ({
+  runOptimization: vi.fn().mockResolvedValue('OPT-TEST-123'),
+  streamOptimizeProgress: vi.fn().mockImplementation(async function* () {
+    yield { progress: 50, currentParams: { fast_period: 10 }, bestResult: undefined }
+    yield {
+      progress: 100,
+      currentParams: {},
+      bestResult: {
+        rank: 1,
+        params: { fast_period: 10, slow_period: 60 },
+        metrics: { sharpeRatio: 2.0, totalReturn: 0.3, maxDrawdown: -0.1 },
+      },
+    }
+  }),
+}))
+
 describe('Optimize Page', () => {
   beforeEach(() => {
     vi.useRealTimers()
@@ -79,10 +101,10 @@ describe('Optimize Page', () => {
       render(<Optimize />)
       await user.click(screen.getByRole('button', { name: '开始优化' }))
 
-      // Wait for progress to appear
+      // Stream mock completes quickly; assert the results section appears
+      // (results.length > 0 keeps the section visible after running=false)
       await waitFor(() => {
-        const progressText = screen.queryByText(/%/ )
-        return expect(progressText).toBeInTheDocument()
+        expect(screen.getByText('优化结果')).toBeInTheDocument()
       }, { timeout: 5000 })
     }, 15000)
   })

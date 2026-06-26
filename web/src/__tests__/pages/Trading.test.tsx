@@ -55,6 +55,8 @@ describe('Trading Page', () => {
 
     ;(useTradingStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector) => {
       const src = selector.toString()
+      // Check setBrokerMode BEFORE brokerMode — 'setBrokerMode' contains the substring 'brokerMode'
+      if (src.includes('setBrokerMode')) return commonState.setBrokerMode
       if (src.includes('brokerMode')) return 'paper'
       if (src.includes('account')) return commonState.account
       if (src.includes('orders')) return commonState.orders
@@ -62,7 +64,6 @@ describe('Trading Page', () => {
       if (src.includes('trades')) return commonState.trades
       if (src.includes('loading')) return commonState.loading
       if (src.includes('placingOrder')) return commonState.placingOrder
-      if (src.includes('setBrokerMode')) return commonState.setBrokerMode
       if (src.includes('refreshAll')) return commonState.refreshAll
       if (src.includes('placeOrder')) return commonState.placeOrder
       if (src.includes('cancelOrder')) return commonState.cancelOrder
