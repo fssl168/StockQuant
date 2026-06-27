@@ -5,6 +5,8 @@ import client from '@/api/client'
 import { useStrategyStore } from '@/stores/strategyStore'
 import StrategyEditor from '@/components/Strategy/StrategyEditor'
 import PreviewPanel from '@/components/Strategy/PreviewPanel'
+import { usePermission } from '@/hooks/usePermission'
+import { PermissionButton } from '@/components/PermissionButton'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -150,6 +152,7 @@ class MomentumStrategy(BaseStrategy):
 
 export default function Strategy() {
   const { strategies, loading, fetchStrategies, createStrategy, deleteStrategy } = useStrategyStore()
+  const { canWrite } = usePermission()
   const [editorCode, setEditorCode] = useState('')
   const [strategyName, setStrategyName] = useState('')
   const [currentStrategyId, setCurrentStrategyId] = useState<string | null>(null)
@@ -260,9 +263,13 @@ export default function Strategy() {
           <Text type="secondary" style={{ fontSize: 12 }}>编写、编辑和管理交易策略</Text>
         </div>
         <Space>
-          <Button icon={<Plus size={16} />} onClick={handleCreate}>新建策略</Button>
+          <PermissionButton requiredRoles={['TRADER', 'ADMIN']} icon={<Plus size={16} />} onClick={handleCreate}>
+            新建策略
+          </PermissionButton>
           <Button icon={<Code size={16} />} onClick={() => setTemplateModal(true)}>模板库</Button>
-          <Button type="primary" icon={<Sparkle size={16} />} onClick={() => setAiModal(true)}>AI 生成策略</Button>
+          <PermissionButton requiredRoles={['TRADER', 'ADMIN']} type="primary" icon={<Sparkle size={16} />} onClick={() => setAiModal(true)}>
+            AI 生成策略
+          </PermissionButton>
         </Space>
       </div>
 
@@ -408,14 +415,21 @@ export default function Strategy() {
                 width: 60,
                 render: (_: any, r: any) => (
                   <Space size={4}>
-                    <Tooltip title="编辑">
-                      <Button size="small" type="text" icon={<Code size={13} />} onClick={() => handleEdit(r)} />
+                    <Tooltip title="查看">
+                      <Button size="small" type="text" icon={<Code size={13} />} onClick={() => { setEditorCode(strategies.find((st) => st.name === r.name || st?.name === r.name)?.code ?? ''); setStrategyName(r.name ?? r['name'] ?? ''); setCurrentStrategyId(strategies.find((st) => st.name === r.name || st?.name === r.name)?.id ?? null); setPreviewCode(null) }} />
                     </Tooltip>
-                    <Tooltip title="删除">
-                      <Popconfirm title="确定删除此策略？" onConfirm={() => deleteStrategy(r.id ?? r['id'])}>
-                        <Button size="small" type="text" danger icon={<Trash size={13} />} />
-                      </Popconfirm>
-                    </Tooltip>
+                    {canWrite && (
+                      <Tooltip title="编辑">
+                        <Button size="small" type="text" icon={<Code size={13} />} onClick={() => handleEdit(r)} />
+                      </Tooltip>
+                    )}
+                    {canWrite && (
+                      <Tooltip title="删除">
+                        <Popconfirm title="确定删除此策略？" onConfirm={() => deleteStrategy(r.id ?? r['id'])}>
+                          <Button size="small" type="text" danger icon={<Trash size={13} />} />
+                        </Popconfirm>
+                      </Tooltip>
+                    )}
                   </Space>
                 ),
               },

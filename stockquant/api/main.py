@@ -33,6 +33,8 @@ from stockquant.api.routers import pipeline_scheduler as pipeline_scheduler_rout
 from stockquant.api.routers import pipeline_audit as pipeline_audit_router
 from stockquant.api.routers import hallucination_verify as hallucination_verify_router
 from stockquant.api.routers import profiling as profiling_router
+# 三角色前端重构：用户管理 API
+from stockquant.api.routers import user_admin as user_admin_router
 from stockquant.api.websocket import ws_manager
 from stockquant.config import get_config
 
@@ -145,6 +147,8 @@ def create_app() -> FastAPI:
     app.include_router(pipeline_audit_router.router, prefix="/api", tags=["采集审计日志"])
     app.include_router(hallucination_verify_router.router, prefix="/api", tags=["反幻觉验证"])
     app.include_router(profiling_router.router, prefix="/api", tags=["用户风险偏好"])
+    # 三角色前端重构：用户管理
+    app.include_router(user_admin_router.router, prefix="/api", tags=["用户管理 (ADMIN)"])
 
     # WebSocket 端点 — 统一路径 /ws/*
     @app.websocket("/ws")

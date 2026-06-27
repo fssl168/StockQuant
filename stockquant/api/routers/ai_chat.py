@@ -182,7 +182,7 @@ async def sentiment_analysis(symbol: str = Query("sh600519", description="股票
 
 
 @router.post("/strategy/generate", summary="AI 生成策略代码")
-def chat_complete(payload: ChatRequest) -> Dict[str, Any]:
+def chat_complete(payload: ChatRequest, _user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
     """发送消息获取 AI 回复（非流式）。"""
     message = payload.message
     conversation_id = payload.conversation_id
@@ -244,7 +244,7 @@ def chat_complete(payload: ChatRequest) -> Dict[str, Any]:
 
 
 @router.post("/strategy/generate", summary="AI 生成策略代码")
-def chat_stream(payload: ChatRequest) -> StreamingResponse:
+def chat_stream(payload: ChatRequest, _user: UserToken = Depends(get_current_user)) -> StreamingResponse:
     """流式对话（SSE 兼容）。"""
     message = payload.message
     conversation_id = payload.conversation_id

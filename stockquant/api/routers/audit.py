@@ -18,7 +18,11 @@ async def list_audit_logs(
     _user: UserToken = Depends(get_current_user),
     limit: int = Query(50, ge=1, le=200),
 ) -> List[Dict[str, Any]]:
-    """获取操作审计日志（仅 ADMIN 可查全部）。"""
+    """获取操作审计日志（仅 ADMIN 可查全部，其他用户查自己）。"""
+    if _user.get("role") != "ADMIN":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
     try:
         from stockquant.api.routers.auth import _get_db_url
         from stockquant.persistence.repository_v2 import Repository

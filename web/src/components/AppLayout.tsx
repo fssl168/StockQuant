@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Layout, Menu, Badge } from 'antd'
+import { Layout, Menu, Badge, Dropdown, Avatar, Space } from 'antd'
 import {
   ChartPie,
   Flask,
@@ -16,30 +16,84 @@ import {
   Brain,
   ShieldCheck,
   Funnel,
+  Users,
+  House,
+  SignOut,
+  User,
+  CaretDown,
 } from '@phosphor-icons/react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useNotificationStore } from '@/stores/notificationStore'
+import { useAuthStore } from '@/stores/authStore'
 
 const { Header, Sider, Content } = Layout
 
-const menuItems = [
-  { key: '/', icon: <ChartPie size={20} weight="fill" />, label: '仪表盘' },
-  { key: '/backtest', icon: <Flask size={20} weight="fill" />, label: '回测' },
-  { key: '/backtest/:id', icon: <ChartBar size={20} weight="fill" />, label: '回测结果', hidden: true },
-  { key: '/strategy', icon: <Code size={20} weight="fill" />, label: '策略' },
-  { key: '/data', icon: <Database size={20} weight="fill" />, label: '数据' },
-  { key: '/monitor', icon: <Eye size={20} weight="fill" />, label: '盯盘' },
-  { key: '/trading', icon: <CurrencyCircleDollar size={20} weight="fill" />, label: '交易' },
-  { key: '/optimize', icon: <SlidersHorizontal size={20} weight="fill" />, label: '优化' },
-  { key: '/comparison', icon: <ChartBar size={20} weight="fill" />, label: '对比' },
-  { key: '/portfolio', icon: <TrendUp size={20} weight="fill" />, label: '组合' },
-  { key: '/ai-chat', icon: <ChatCenteredText size={20} weight="fill" />, label: 'AI 对话' },
-  { key: '/memory', icon: <Brain size={20} weight="fill" />, label: '记忆系统' },
-  { key: '/hallucination', icon: <ShieldCheck size={20} weight="fill" />, label: '反幻觉' },
-  { key: '/ai-pipeline', icon: <Funnel size={20} weight="fill" />, label: 'AI 管线' },
-  { key: '/settings', icon: <Gear size={20} weight="fill" />, label: '设置' },
+// ─── 角色元数据 ──────────────────────────────────────────────────
+
+const ROLE_META: Record<string, { label: string; color: string; icon: string }> = {
+  ADMIN: { label: '管理员', color: '#ef4444', icon: '🛡️' },
+  TRADER: { label: '交易员', color: '#3b82f6', icon: '💼' },
+  VIEWER: { label: '观察者', color: '#6b7280', icon: '👁️' },
+}
+
+// ─── 菜单配置（分组 + 角色过滤）────────────────────────────────
+
+interface MenuItem {
+  key: string
+  icon: React.ReactNode
+  label: string
+  roles?: string[]  // 如果为空数组则表示全部角色可见
+}
+
+const menuGroups: { title?: string; items: MenuItem[] }[] = [
+  {
+    title: '交易研究',
+    items: [
+      { key: '/', icon: <ChartPie size={18} weight="fill" />, label: '仪表盘' },
+      { key: '/strategy', icon: <Code size={18} weight="fill" />, label: '策略管理' },
+      { key: '/backtest', icon: <Flask size={18} weight="fill" />, label: '回测' },
+      { key: '/optimize', icon: <SlidersHorizontal size={18} weight="fill" />, label: '参数优化' },
+      { key: '/comparison', icon: <ChartBar size={18} weight="fill" />, label: '策略对比' },
+    ],
+  },
+  {
+    title: '市场数据',
+    items: [
+      { key: '/monitor', icon: <Eye size={18} weight="fill" />, label: '盯盘' },
+      { key: '/data', icon: <Database size={18} weight="fill" />, label: '数据管理' },
+      { key: '/portfolio', icon: <TrendUp size={18} weight="fill" />, label: '投资组合' },
+      { key: '/trading', icon: <CurrencyCircleDollar size={18} weight="fill" />, label: '交易' },
+    ],
+  },
+  {
+    title: 'AI 助手',
+    items: [
+      { key: '/ai-chat', icon: <ChatCenteredText size={18} weight="fill" />, label: 'AI 对话' },
+    ],
+  },
+  {
+    title: '系统管理',
+    items: [
+      { key: '/admin/users', icon: <Users size={18} weight="fill" />, label: '用户管理' },
+      { key: '/settings', icon: <Gear size={18} weight="fill" />, label: '系统设置' },
+      { key: '/admin/scheduler', icon: <House size={18} weight="fill" />, label: '调度器' },
+      { key: '/admin/audit', icon: <ChartBar size={18} weight="fill" />, label: '审计日志' },
+      { key: '/memory', icon: <Brain size={18} weight="fill" />, label: 'AI 记忆' },
+      { key: '/hallucination', icon: <ShieldCheck size={18} weight="fill" />, label: '反幻觉' },
+      { key: '/ai-pipeline', icon: <Funnel size={18} weight="fill" />, label: 'AI 管线' },
+    ],
+  },
 ]
+
+// 拍平菜单项列表
+const ALL_MENU_ITEMS: MenuItem[] = []
+menuGroups.forEach(g => ALL_MENU_ITEMS.push(...g.items))
+
+function canSee(item: MenuItem, role: string | undefined): boolean {
+  if (!item.roles || item.roles.length === 0) return true
+  return item.roles.includes(role || 'VIEWER')
+}
 
 interface Props {
   children: React.ReactNode
@@ -47,13 +101,14 @@ interface Props {
 
 export default function AppLayout({ children }: Props) {
   const navigate = useNavigate()
-  const location = useLocation()
+  const { user, isAuthenticated, logout } = useAuthStore()
   const [time, setTime] = useState(new Date())
   const [apiLatency, setApiLatency] = useState<number | null>(null)
   const [backendAvailable, setBackendAvailable] = useState(false)
 
   const { messages: notifMessages } = useWebSocket(backendAvailable ? '/ws/notification' : null)
 
+  // 通知
   useEffect(() => {
     if (notifMessages.length === 0) return
     const latest = notifMessages[notifMessages.length - 1]
@@ -68,11 +123,13 @@ export default function AppLayout({ children }: Props) {
     }
   }, [notifMessages])
 
+  // 时钟
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
 
+  // 健康检查
   useEffect(() => {
     const check = async () => {
       const start = performance.now()
@@ -90,7 +147,39 @@ export default function AppLayout({ children }: Props) {
     return () => clearInterval(interval)
   }, [])
 
-  const visibleItems = menuItems.filter((m) => !m.hidden)
+  // 筛选可见菜单项
+  const role = user?.role
+  ALL_MENU_ITEMS.filter(item => canSee(item, role))
+
+  // 构建分组菜单数据
+  const menuData = menuGroups
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => canSee(item, role)),
+    }))
+    .filter(group => group.items.length > 0)
+
+  // 用户菜单
+  const userRole = ROLE_META[role || 'VIEWER'] || ROLE_META.VIEWER
+  const userMenuItems = [
+    {
+      key: 'profile',
+      icon: <User size={16} weight="fill" />,
+      label: <span>{user?.username}</span>,
+      disabled: true,
+    },
+    { type: 'divider' as const },
+    {
+      key: 'logout',
+      icon: <SignOut size={16} weight="fill" />,
+      label: '退出登录',
+      danger: true,
+      onClick: () => {
+        logout()
+        navigate('/login')
+      },
+    },
+  ]
 
   const siderStyle: React.CSSProperties = {
     overflow: 'auto',
@@ -146,26 +235,39 @@ export default function AppLayout({ children }: Props) {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider width={220} style={siderStyle}>
+        {/* Logo 区 */}
         <div style={brandStyle}>
           <ChartPie size={24} weight="fill" />
           <span>STOCKQUANT</span>
           <span style={{ color: 'var(--color-text-tertiary)', fontWeight: 400, fontSize: 11, marginLeft: 'auto' }}>v2.0</span>
         </div>
+
+        {/* 分组菜单 */}
         <Menu
           mode="inline"
-          items={visibleItems}
+          items={menuData.map(group => ({
+            type: 'group',
+            label: group.title && <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 600, letterSpacing: '0.05em' }}>{group.title}</span>,
+            key: `group-${group.title}`,
+            children: group.items.map(item => ({
+              ...item,
+              label: item.label,
+            })),
+          }))}
           selectedKeys={[location.pathname]}
-          onClick={({ key }) => navigate(key)}
+          onClick={({ key }) => { if (!key.includes('group-')) navigate(key) }}
           style={menuStyle}
         />
       </Sider>
 
       <Layout style={{ marginLeft: 220, minHeight: '100vh', background: 'var(--color-bg-base)' }}>
+        {/* 顶部栏 */}
         <Header style={headerStyle}>
           <span style={{ fontSize: 13, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
             Institutional Quantitative Trading Platform
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            {/* 后端状态 */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{
                 width: 7,
@@ -178,12 +280,32 @@ export default function AppLayout({ children }: Props) {
                 {apiLatency !== null ? `${apiLatency}ms` : '离线'}
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Badge dot />
-              <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-                {time.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-              </span>
-            </div>
+
+            {/* 时间 */}
+            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}>
+              {time.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+
+            {/* 角色徽标 */}
+            {isAuthenticated && user && (
+              <Badge
+                count={
+                  <span style={{ fontSize: 11, color: '#fff', fontWeight: 600 }}>
+                    {userRole.icon} {userRole.label}
+                  </span>
+                }
+                style={{
+                  backgroundColor: `${userRole.color}22`,
+                  borderColor: userRole.color,
+                  borderWidth: 1,
+                  borderStyle: 'solid',
+                  borderRadius: 4,
+                  padding: '2px 8px',
+                }}
+              />
+            )}
+
+            {/* GitHub */}
             <a
               href="https://github.com/fssl168/StockQuant"
               target="_blank"
@@ -204,9 +326,33 @@ export default function AppLayout({ children }: Props) {
             >
               <ArrowSquareOut size={16} weight="bold" />
             </a>
+
+            {/* 用户菜单 */}
+            {isAuthenticated && user && (
+              <Dropdown
+                menu={{ items: userMenuItems }}
+                placement="bottomRight"
+                arrow
+              >
+                <Space
+                  style={{ cursor: 'pointer', paddingLeft: 4, paddingRight: 4 }}
+                  onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.8' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
+                >
+                  <Avatar size="small" style={{ backgroundColor: userRole.color }}>
+                    {userRole.icon}
+                  </Avatar>
+                  <span style={{ fontSize: 13, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                    {user.username}
+                  </span>
+                  <CaretDown size={12} weight="fill" />
+                </Space>
+              </Dropdown>
+            )}
           </div>
         </Header>
 
+        {/* 内容区 */}
         <Content style={contentStyle}>
           {children}
         </Content>

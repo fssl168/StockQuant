@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """F029 依赖注入 — 配置、认证"""
 
-from __future__ import annotations
-
 import os
 from enum import Enum
 from typing import Optional

@@ -9,9 +9,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 
-from stockquant.api.schemas import UpdateDataRequest, CollectDataRequest
+from stockquant.api.deps import get_current_user
+from stockquant.api.schemas import UpdateDataRequest, CollectDataRequest, UserToken
 from stockquant.persistence.persistent_store import CollectTaskStore
 from stockquant.config import DataProvider, get_config
 
@@ -138,25 +139,25 @@ def _dynamic_sources() -> List[Dict[str, Any]]:
 # ------------------------------------------------------------------
 
 @router.get("/data/sources", summary="获取数据源列表")
-async def get_sources():
+async def get_sources(_user: UserToken = Depends(get_current_user)):
     """Return dynamically resolved data sources."""
     return _dynamic_sources()
 
 
 @router.post("/data/sources", summary="获取数据源列表")
-async def update_source(payload: UpdateDataRequest) -> Dict[str, Any]:
+async def update_source(payload: UpdateDataRequest, _user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
     """Update data source config."""
     return {"success": True, "provider": payload.provider}
 
 
 @router.put("/data/sources/{provider}", summary="获取数据源列表")
-async def update_source_by_provider(provider: str, payload: UpdateDataRequest) -> Dict[str, Any]:
+async def update_source_by_provider(provider: str, payload: UpdateDataRequest, _user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
     """Update data source config."""
     return {"success": True, "provider": provider}
 
 
 @router.delete("/data/sources/{provider}", summary="删除数据源")
-async def delete_source(provider: str):
+async def delete_source(provider: str, _user: UserToken = Depends(get_current_user)):
     """Remove a data source (no-op for now - sources are dynamic)."""
     return {"success": True, "provider": provider}
 
@@ -168,7 +169,7 @@ async def get_cache_stats():
 
 
 @router.delete("/data/cache", summary="清除缓存")
-async def clear_cache():
+async def clear_cache(_user: UserToken = Depends(get_current_user)):
     """Clear all K-line cache."""
     if _app_data_service is not None:
         _app_data_service.cache.clear()
@@ -236,7 +237,7 @@ async def get_kline(
 
 
 @router.post("/data/collect", summary="手动触发数据采集")
-async def collect_data(payload: CollectDataRequest) -> Dict[str, Any]:
+async def collect_data(payload: CollectDataRequest, _user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
     """Start data collection task."""
     symbol = payload.symbol
     if not symbol:
@@ -395,7 +396,7 @@ async def download_data(provider: str = Query(..., description="数据源名称"
 
 
 @router.post("/data/upload-csv", summary="上传 CSV 数据文件")
-async def upload_csv(file: UploadFile = File(..., description="CSV文件")):
+async def upload_csv(file: UploadFile = File(..., description="CSV文件"), _user: UserToken = Depends(get_current_user)):
     """Upload and import CSV K-line data."""
     import pandas as pd
 

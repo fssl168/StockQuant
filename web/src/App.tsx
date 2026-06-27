@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AppLayout from './components/AppLayout'
 import { useAuthStore } from './stores/authStore'
 import Login from './pages/Login'
+import Forbidden from './pages/Forbidden'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 // 创建 React Query 客户端
@@ -28,7 +29,6 @@ const Monitor = lazy(() => import('./pages/Monitor'))
 const AIChat = lazy(() => import('./pages/AIChat'))
 const Portfolio = lazy(() => import('./pages/Portfolio'))
 const Settings = lazy(() => import('./pages/Settings'))
-const TradingDemo = lazy(() => import('./pages/Trading'))
 const Trading = lazy(() => import('./pages/Trading'))
 const Optimize = lazy(() => import('./pages/Optimize'))
 const Comparison = lazy(() => import('./pages/Comparison'))
@@ -76,7 +76,7 @@ function RoleRoute({
   }
   
   if (!hasPermission(requiredRoles, userRoles)) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/403" replace state={{ required: requiredRoles }} />
   }
   return <>{children}</>
 }
@@ -118,6 +118,7 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/403" element={<Forbidden />} />
             <Route
               path="/*"
               element={
@@ -133,17 +134,16 @@ export default function App() {
                         <Route path="/monitor" element={<Monitor />} />
                         <Route path="/portfolio" element={<Portfolio />} />
                         <Route path="/ai-chat" element={<AIChat />} />
-                        {/* 交易页面 */}
-                        <Route path="/trading" element={<Trading />} />
+                        {/* 交易页面 - 仅 TRADER/ADMIN */}
+                        <Route path="/trading" element={<RoleRoute requiredRoles={['TRADER', 'ADMIN']}><Trading /></RoleRoute>} />
                         {/* 设置页面 - 仅 ADMIN 可访问 */}
                         <Route path="/settings" element={<RoleRoute requiredRoles={['ADMIN']}><Settings /></RoleRoute>} />
                         <Route path="/optimize" element={<Optimize />} />
-                        <Route path="/trading-demo" element={<TradingDemo />} />
                         <Route path="/comparison" element={<Comparison />} />
                         {/* AI 基础设施页面 - 仅 ADMIN 可访问 */}
-                        <Route path="/memory" element={<Memory />} />
-                        <Route path="/hallucination" element={<Hallucination />} />
-                        <Route path="/ai-pipeline" element={<AIPipeline />} />
+                        <Route path="/memory" element={<RoleRoute requiredRoles={['ADMIN']}><Memory /></RoleRoute>} />
+                        <Route path="/hallucination" element={<RoleRoute requiredRoles={['ADMIN']}><Hallucination /></RoleRoute>} />
+                        <Route path="/ai-pipeline" element={<RoleRoute requiredRoles={['ADMIN']}><AIPipeline /></RoleRoute>} />
                       </Routes>
                     </Suspense>
                   </AppLayout>

@@ -89,6 +89,35 @@ export default function Login() {
               <Text style={{ color: '#52525b', fontSize: 12 }}>默认账户: admin / admin123</Text>
             </div>
           )}
+
+          {!isRegister && (
+            <div style={{ marginTop: 16 }}>
+              <Text style={{ color: '#71717a', fontSize: 12, display: 'block', marginBottom: 8 }}>演示账号快捷登录</Text>
+              <Space direction="vertical" style={{ width: '100%' }} size={6}>
+                <Button
+                  size="small"
+                  onClick={() => { form.setFieldsValue({ username: 'admin', password: 'admin123' }); handleSubmit({ username: 'admin', password: 'admin123' }) }}
+                  style={{ width: '100%', justifyContent: 'flex-start', fontSize: 11 }}
+                >
+                  管理员 admin / admin123
+                </Button>
+                <Button
+                  size="small"
+                  onClick={() => { form.setFieldsValue({ username: 'trader', password: 'trader123' }); handleSubmit({ username: 'trader', password: 'trader123' }) }}
+                  style={{ width: '100%', justifyContent: 'flex-start', fontSize: 11 }}
+                >
+                  交易员 trader / trader123
+                </Button>
+                <Button
+                  size="small"
+                  onClick={() => { form.setFieldsValue({ username: 'viewer', password: 'viewer123' }); handleSubmit({ username: 'viewer', password: 'viewer123' }) }}
+                  style={{ width: '100%', justifyContent: 'flex-start', fontSize: 11 }}
+                >
+                  观察者 viewer / viewer123
+                </Button>
+              </Space>
+            </div>
+          )}
         </Space>
       </Card>
     </div>

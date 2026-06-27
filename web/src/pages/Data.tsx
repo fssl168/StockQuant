@@ -7,11 +7,13 @@ import { useDataStore } from '@/stores/dataStore'
 import { dataApi } from '@/api/data'
 import client from '@/api/client'
 import CacheStats from '@/components/Data/CacheStats'
+import { usePermission } from '@/hooks/usePermission'
 
 const { Title, Text } = Typography
 
 export default function Data() {
   const { sources, cacheStats, fetchSources, fetchCacheStats } = useDataStore()
+  const { canManage } = usePermission()
 
   useEffect(() => {
     fetchSources()
@@ -149,17 +151,19 @@ export default function Data() {
     { title: '操作', key: 'action', width: 160, render: (_: any, r: any) => (
       <Space>
         <Button size="small" icon={<Download size={14} />} onClick={() => handleDownload(r.provider)}>下载</Button>
-        <Button
-          size="small"
-          icon={<CloudArrowDown size={14} />}
-          loading={collectingProvider === r.provider}
-          onClick={() => {
-            setCollectTargetProvider(r.provider)
-            setCollectModalOpen(true)
-          }}
-        >
-          采集
-        </Button>
+        {canManage && (
+          <Button
+            size="small"
+            icon={<CloudArrowDown size={14} />}
+            loading={collectingProvider === r.provider}
+            onClick={() => {
+              setCollectTargetProvider(r.provider)
+              setCollectModalOpen(true)
+            }}
+          >
+            采集
+          </Button>
+        )}
       </Space>
     )},
   ]
@@ -201,9 +205,11 @@ export default function Data() {
           symbolCount={cacheStats?.symbolCount ?? 0}
           lastUpdate={cacheStats?.lastUpdate ?? '-'}
         />
-        <Button size="small" danger onClick={handleClearCache} loading={clearingCache}>
-          清除缓存
-        </Button>
+        {canManage && (
+          <Button size="small" danger onClick={handleClearCache} loading={clearingCache}>
+            清除缓存
+          </Button>
+        )}
       </div>
 
       {/* K-line query */}

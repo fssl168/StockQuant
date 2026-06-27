@@ -521,7 +521,7 @@ async def get_account() -> Dict[str, Any]:
 
 
 @router.post("/trading/order", summary="下单")
-async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get_admin_user)) -> Dict[str, Any]:
+async def place_order(payload: PlaceOrderRequest, _user: UserToken = Depends(get_trader_user)) -> Dict[str, Any]:
     """提交订单 — 通过 PaperBroker 撮合"""
     # 幂等性检查：如果相同 idempotency_key 已提交，返回之前的订单结果
     idempotency_key = payload.idempotency_key
