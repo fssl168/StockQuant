@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
 from ..pipeline.collection import RawArticle
 
 from .corrector import FiveStepCorrector
+from .cross_validator import CrossValidator
 from .modes import VerificationMode, get_checkpoints, get_threshold
 
 logger = logging.getLogger("stockquant.ai.hallucination")
@@ -24,6 +26,54 @@ class HallucinationPipeline:
     def __init__(self, strict_mode: bool = False) -> None:
         self._strict = strict_mode
         self._corrector = FiveStepCorrector()
+        self._cross_validator: Optional[CrossValidator] = None
+
+    def _get_cross_validator(self) -> Optional[CrossValidator]:
+        """懒加载 CrossValidator（构造可能失败，如未配置 LLM 适配器）"""
+        if self._cross_validator is None:
+            try:
+                self._cross_validator = CrossValidator()
+            except Exception as exc:
+                logger.debug("CrossValidator 初始化失败（多模型交叉验证不可用）: %s", exc)
+                self._cross_validator = None
+        return self._cross_validator
+
+    def _cross_validate_sync(self, claim: str) -> Optional[Dict[str, Any]]:
+        """同步包装的多模型交叉验证
+
+        尝试运行异步的 CrossValidator.verify()。如果当前已有事件循环运行
+        （如在 FastAPI 异步上下文中），则跳过并返回 None（调用方可自行
+        在异步上下文中直接调用 CrossValidator.verify）。
+
+        Returns:
+            交叉验证结果字典，或 None（不可用/跳过/失败时）
+        """
+        validator = self._get_cross_validator()
+        if validator is None or not claim:
+            return None
+
+        try:
+            # 检查是否有运行中的事件循环
+            try:
+                asyncio.get_running_loop()
+                # 已有事件循环运行，同步包装会失败 — 跳过
+                logger.debug("当前已有事件循环运行，跳过同步交叉验证")
+                return None
+            except RuntimeError:
+                pass  # 无运行中的事件循环，可以安全使用 asyncio.run
+
+            result = asyncio.run(validator.verify(claim))
+            return {
+                "consensus": result.consensus,
+                "verified": result.verified,
+                "conflict": result.conflict,
+                "needs_human_review": result.needs_human_review,
+                "avg_confidence": result.avg_confidence,
+                "model_count": len(result.per_model_results),
+            }
+        except Exception as exc:
+            logger.debug("多模型交叉验证失败: %s", exc)
+            return None
 
     def execute(self, articles: List[RawArticle]) -> Dict[str, Any]:
         """执行反幻觉检查"""
@@ -124,6 +174,22 @@ class HallucinationPipeline:
             if correction.get("passed"):
                 result["passed"] = True
                 result["score"] = max(result["score"], correction.get("score", 0.0))
+
+        # 多模型交叉验证（Phase E2 集成）
+        # 提取待验证的主声明（从 output/content 字段）
+        claim_text = data.get("output", "") or data.get("content", "") or ""
+        if claim_text:
+            cv_result = self._cross_validate_sync(claim_text[:500])  # 限制长度避免超长 prompt
+            if cv_result is not None:
+                result["cross_validator"] = cv_result
+                # 如果多模型一致认为不可信，降低综合评分
+                if cv_result.get("conflict"):
+                    result["passed"] = False
+                    result["score"] = min(result["score"], 0.3)
+                    result["issues"] = result.get("issues", [])
+                    result["issues"].append(
+                        f"cross_validator: 模型分歧 (consensus={cv_result.get('consensus')})"
+                    )
 
         return result
 

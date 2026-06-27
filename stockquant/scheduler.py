@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """F030 定时调度器 — 基于 schedule 库 + 交易日检查"""
 
-from __future__ import annotations
-
 import logging
 import time
 import threading

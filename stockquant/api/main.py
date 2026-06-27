@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 """F029 FastAPI 应用入口"""
 
-from __future__ import annotations
-
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 # 最早加载 .env 文件，使所有配置生效
@@ -29,6 +28,11 @@ from stockquant.api.routers import monitoring as monitoring_router
 from stockquant.api.routers import memory as memory_router
 from stockquant.api.routers import hallucination as hallucination_router
 from stockquant.api.routers import pipeline as pipeline_router
+# F020 GAP-M5/M6/M7/L2：4 个新 API 路由（管线调度器/采集审计/反幻觉验证/用户风险偏好）
+from stockquant.api.routers import pipeline_scheduler as pipeline_scheduler_router
+from stockquant.api.routers import pipeline_audit as pipeline_audit_router
+from stockquant.api.routers import hallucination_verify as hallucination_verify_router
+from stockquant.api.routers import profiling as profiling_router
 from stockquant.api.websocket import ws_manager
 from stockquant.config import get_config
 
@@ -61,10 +65,32 @@ _startup_time: float = time.time()
 def create_app() -> FastAPI:
     """创建 FastAPI 应用实例"""
 
+    # lifespan: 启动/停止 PipelineScheduler（F020 GAP-H3 修复）
+    @asynccontextmanager
+    async def _lifespan(app: FastAPI):
+        try:
+            from stockquant.ai.scheduler import get_scheduler
+            scheduler = get_scheduler()
+            try:
+                await scheduler.start()
+                logger.info("PipelineScheduler 已启动")
+            except Exception as exc:
+                logger.warning("PipelineScheduler 启动失败（不阻塞主应用）: %s", exc)
+            yield
+            try:
+                await scheduler.stop()
+                logger.info("PipelineScheduler 已停止")
+            except Exception as exc:
+                logger.warning("PipelineScheduler 停止失败: %s", exc)
+        except ImportError:
+            logger.debug("PipelineScheduler 模块未安装，跳过启动")
+            yield
+
     app = FastAPI(
         title="StockQuant 2.0",
         description="机构级中国 A 股量化交易平台",
         version=_APP_VERSION,
+        lifespan=_lifespan,
     )
 
     # CORS 中间件 — 从环境变量 CORS_ORIGINS 读取允许的源（逗号分隔）
@@ -113,6 +139,12 @@ def create_app() -> FastAPI:
     app.include_router(memory_router.router, prefix="/api", tags=["记忆系统"])
     app.include_router(hallucination_router.router, prefix="/api", tags=["反幻觉系统"])
     app.include_router(pipeline_router.router, prefix="/api", tags=["AI 信息管线"])
+
+    # F020 GAP-M5/M6/M7/L2：注册 4 个新 API 路由
+    app.include_router(pipeline_scheduler_router.router, prefix="/api", tags=["管线调度器"])
+    app.include_router(pipeline_audit_router.router, prefix="/api", tags=["采集审计日志"])
+    app.include_router(hallucination_verify_router.router, prefix="/api", tags=["反幻觉验证"])
+    app.include_router(profiling_router.router, prefix="/api", tags=["用户风险偏好"])
 
     # WebSocket 端点 — 统一路径 /ws/*
     @app.websocket("/ws")
@@ -370,6 +402,26 @@ def create_app() -> FastAPI:
             pipeline = InformationProcessingPipeline()
         pipeline_router.init_pipeline(pipeline)
         logger.info("AI 信息管线已初始化")
+
+        # F020 GAP-H3：将 pipeline 绑定到 PipelineScheduler，实现自动调度
+        try:
+            from stockquant.ai.scheduler import get_scheduler, ScheduleSpec
+            scheduler = get_scheduler()
+            # pipeline.run 是同步方法，包装为协程以适配 scheduler.bind_pipeline
+            async def _pipeline_runner(symbols):
+                return pipeline.run(symbols)
+            scheduler.bind_pipeline(_pipeline_runner)
+            # 注入默认调度任务（首次启动时）
+            if not scheduler.list_tasks():
+                scheduler.add_task(ScheduleSpec(
+                    name="realtime_news",
+                    level="realtime",
+                    interval_seconds=300,  # 5 分钟（避免过频）
+                    symbols=["sh600519", "sz000858"],
+                ))
+            logger.info("PipelineScheduler 已绑定 AI 信息管线")
+        except Exception as exc:
+            logger.warning("PipelineScheduler 绑定 pipeline 失败（非致命）: %s", exc)
     except Exception as e:
         logger.warning("AI 信息管线初始化失败（非致命）: %s", e)
 

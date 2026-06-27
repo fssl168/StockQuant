@@ -445,7 +445,8 @@ class L3Store:
 
             metadata = item.get("metadata", {})
             if not isinstance(metadata, str):
-                metadata = json.dumps(metadata, ensure_ascii=False)
+                # 使用紧凑格式（无空格），确保 LIKE 查询模式 '%"type":"xxx"%' 能匹配
+                metadata = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
 
             user_id = item.get("user_id") or self._user_id
             now_iso = datetime.now().isoformat()

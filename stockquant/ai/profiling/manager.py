@@ -33,11 +33,40 @@ logger = logging.getLogger("stockquant.ai.profiling.manager")
 
 
 def _default_db_url() -> str:
-    """获取默认数据库 URL"""
-    return os.environ.get(
-        "DATABASE_URL",
-        "postgresql+asyncpg://stockquant:stockquant_secret@localhost:5432/stockquant",
-    )
+    """获取默认数据库 URL
+
+    优先级：
+    1. 显式加载 .env 文件后从 DATABASE_URL 环境变量读取（最权威）
+    2. 项目配置 stockquant.config.get_config().database.url（pydantic-settings 已加载 .env）
+    3. fallback SQLite 默认值（与 persistence.models 一致）
+
+    注意：返回的 URL 会被 _init_db() 转换为 async 版本：
+    - postgresql:// → postgresql+asyncpg://
+    - sqlite:// → sqlite+aiosqlite://（如果安装了 aiosqlite）
+    """
+    # 1. 显式加载 .env 文件（确保 os.environ 包含 .env 中的 DATABASE_URL）
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+
+    # 2. 从 DATABASE_URL 环境变量读取（.env 已加载）
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        return url
+
+    # 3. 项目配置 fallback（pydantic-settings 已自动加载 .env）
+    try:
+        from stockquant.config import get_config
+        url = get_config().database.url
+        if url:
+            return url
+    except Exception:
+        pass
+
+    # 4. 最终 fallback：SQLite 默认值
+    return "sqlite:///./stockquant.db"
 
 
 class ProfilingManager:
@@ -70,15 +99,30 @@ class ProfilingManager:
     # ── 初始化 ────────────────────────────────────────────────────────
 
     def _init_db(self) -> None:
-        """初始化 PostgreSQL 后端，失败时降级为内存存储"""
+        """初始化数据库后端，失败时降级为内存存储
+
+        支持的方言：
+        - PostgreSQL：通过 asyncpg（postgresql+asyncpg://）
+        - SQLite：通过 aiosqlite（sqlite+aiosqlite://），若未安装则降级
+        """
         try:
             url = self._db_url
+            # 转换为 async 版本
             if url.startswith("postgresql://"):
                 url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
             elif url.startswith("postgresql+psycopg2://"):
                 url = url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+            elif url.startswith("sqlite:///") and "+aiosqlite" not in url:
+                url = url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+            elif url.startswith("sqlite://") and "+aiosqlite" not in url:
+                url = url.replace("sqlite://", "sqlite+aiosqlite://", 1)
 
-            self._engine = create_async_engine(url, echo=False, pool_size=5)
+            # SQLite 不支持 pool_size 参数
+            engine_kwargs = {"echo": False}
+            if not url.startswith("sqlite"):
+                engine_kwargs["pool_size"] = 5
+
+            self._engine = create_async_engine(url, **engine_kwargs)
             self._session_factory = sessionmaker(
                 self._engine, class_=AsyncSession, expire_on_commit=False,
             )
@@ -95,13 +139,21 @@ class ProfilingManager:
                 asyncio.run(self._ensure_tables())
             except Exception:
                 raise
-            self._backend = "postgresql"
-            logger.info("ProfilingManager 使用 PostgreSQL 后端")
+
+            # 判断后端类型
+            if url.startswith("postgresql"):
+                self._backend = "postgresql"
+                logger.info("ProfilingManager 使用 PostgreSQL 后端")
+            else:
+                self._backend = "sqlite"
+                logger.info("ProfilingManager 使用 SQLite 后端")
             return
         except ImportError:
-            logger.warning("asyncpg/SQLAlchemy 未安装，ProfilingManager 降级为内存存储")
+            logger.warning(
+                "数据库驱动未安装（asyncpg/aiosqlite），ProfilingManager 降级为内存存储",
+            )
         except Exception as exc:
-            logger.warning("PostgreSQL 连接失败: %s，ProfilingManager 降级为内存存储", exc)
+            logger.warning("数据库连接失败: %s，ProfilingManager 降级为内存存储", exc)
 
         self._engine = None
         self._session_factory = None
@@ -118,7 +170,7 @@ class ProfilingManager:
     def get_profile(self, user_id: Optional[str] = None) -> RiskProfile:
         """读取用户风险偏好"""
         uid = user_id or self._user_id
-        if self._backend == "memory":
+        if self._backend in ("memory",):
             return self._get_profile_memory(uid)
         try:
             loop = asyncio.get_event_loop()
@@ -152,7 +204,7 @@ class ProfilingManager:
         """
         uid = user_id or self._user_id
         ctx = context or TransitionContext(user_target=new_profile)
-        if self._backend == "memory":
+        if self._backend in ("memory",):
             return self._update_profile_memory(uid, new_profile, trigger, ctx)
         try:
             loop = asyncio.get_event_loop()
@@ -204,7 +256,7 @@ class ProfilingManager:
     ) -> list[Dict[str, Any]]:
         """获取用户风险偏好转换历史"""
         uid = user_id or self._user_id
-        if self._backend == "memory":
+        if self._backend in ("memory",):
             return list(self._cache.get(uid, {}).get("history", []))[:limit]
         try:
             loop = asyncio.get_event_loop()
@@ -326,7 +378,7 @@ class ProfilingManager:
 
     def _get_last_transition_at(self, user_id: str) -> Optional[datetime]:
         """获取上次转换时间（用于冷却期判断）"""
-        if self._backend == "memory":
+        if self._backend in ("memory",):
             entry = self._cache.get(user_id)
             if not entry or not entry.get("updated_at"):
                 return None

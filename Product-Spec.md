@@ -4,7 +4,7 @@
 > **版本**：2.0.3-dev
 > **创建日期**：2026-06-14
 > **更新日期**：2026-06-27
-> **状态**：~96% 综合完成度 — F020 FinMem 三模块架构增强已落地，pytest 1250 passed / 11 skipped，vitest 225 passed (26 files)
+> **状态**：\~96% 综合完成度 — F020 FinMem 三模块架构增强已落地，pytest 1250 passed / 11 skipped，vitest 225 passed (26 files)
 > **参考**：[全面差距评估报告](product-spec-gap-assessment.md) · [机构级重构计划](product-spec-gap-implement.md) · [F020 FinMem 增强计划](.trae/documents/F020-FinMem三模块架构增强计划.md)
 
 ***
@@ -144,7 +144,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 ### F002 订单管理系统 OMS (P0) \[✅ Done]
 
-> **2026-06-21 修复**：STOP/STOP_LIMIT 订单类型已功能化实现（详见 gap-assessment.md 修复记录）。
+> **2026-06-21 修复**：STOP/STOP\_LIMIT 订单类型已功能化实现（详见 gap-assessment.md 修复记录）。
 
 **用户场景**：策略发出买入指令后，订单进入 OMS 管理，经历"提交 → 排队 → 部分成交 → 全部成交"的完整生命周期。支持限价单、市价单、止损单、止损限价单。
 
@@ -167,7 +167,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 ### F003 投资组合模拟（P0） \[✅ Done]
 
-> **2026-06-21 修复**：保证金交易操作性实现已补充（leverage/margin_used/margin_call_price + RiskManager.check_margin/deduct_margin_interest/check_margin_call）。
+> **2026-06-21 修复**：保证金交易操作性实现已补充（leverage/margin\_used/margin\_call\_price + RiskManager.check\_margin/deduct\_margin\_interest/check\_margin\_call）。
 
 **用户场景**：用户同时持有 10 只股票，投资组合跟踪每只股票的持仓数量、成本价、市值、盈亏，以及总现金、总权益、权益曲线。
 
@@ -209,7 +209,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 ### F005 回测统计指标（P0） \[✅ Done]
 
-> **2026-06-21 修复**：`Avg Drawdown Recovery` bug 已修复（dd_recovery_count 状态转换计数器纠正）。
+> **2026-06-21 修复**：`Avg Drawdown Recovery` bug 已修复（dd\_recovery\_count 状态转换计数器纠正）。
 
 **用户场景**：回测结束后，一键生成包含 30+ 指标的完整报告，包括收益、风险、风险调整后收益、交易统计等。
 
@@ -619,12 +619,12 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 **核心设计**：信息处理全流程 + 记忆系统 + 反幻觉系统三位一体，记忆与反幻觉不是外挂模块，而是每个环节的内建能力。
 
-**F020 实施状态**（2026-06-27）：FinMem 三模块架构（Profiling / Memory / Decision）已完整落地，覆盖 Phase A-F 全部 15 个新文件、18 个修改文件。新增 427 测试用例，全部通过。
+**F020 实施状态**（2026-06-27）：三模块架构（Profiling / Memory / Decision）已完整落地，覆盖 Phase A-F 全部 15 个新文件、18 个修改文件。新增 427 测试用例，全部通过。
 
 - **Profiling 模块**：RiskProfile 枚举 + ProfileTransitioner（7 天冷却期）+ UserProfileHistory 表持久化
 - **Memory 模块**：分层记忆（shallow 3d / intermediate 90d / deep 365d / working 1d）+ RecallScorer 三因子评分 + WorkingMemory 三组件（Summarization / Observation / Reflection）
 - **反幻觉系统**：ClaimVerifier 六类声明验证 + CrossValidator 多模型并行验证（幻觉率 8.3% → 3.2%）
-- **采集端**：3 个新采集器（research/financial/exchange）+ FAKE_SOURCES 黑名单 + SHA-256 指纹变更检测 + CollectorAuditLog 审计日志
+- **采集端**：3 个新采集器（research/financial/exchange）+ FAKE\_SOURCES 黑名单 + SHA-256 指纹变更检测 + CollectorAuditLog 审计日志
 - **管线四阶段**：采集 → 降噪（5 步）→ 总结（6 步）→ 升华（5 步），全程注入反幻觉检查和记忆系统
 - **决策与上下文**：InsightsBridge 三层记忆检索 + ProfileParams 自动止损止盈 + 仓位上限告警
 - **配置与调度**：`config/data_sources.yaml` 配置化 + DataSourceConfig 加载器 + 基于 asyncio 的 4 级 PipelineScheduler（realtime/minute/hourly/daily）
@@ -909,7 +909,7 @@ StockQuant 2.0 不是简单的"量化框架 + AI 插件"，而是以 AI Agent �
 
 #### 20.6 全局反幻觉机制（贯穿全部四个环节）
 
-> **2026-06-21 修复**：LLM Prompt+Response 审计追踪已实现（AuditLogModel 新增 6 字段：llm_model/prompt/response/reasoning/tokens/cost），DecisionAgent 传递 LLM 细节到持久层。
+> **2026-06-21 修复**：LLM Prompt+Response 审计追踪已实现（AuditLogModel 新增 6 字段：llm\_model/prompt/response/reasoning/tokens/cost），DecisionAgent 传递 LLM 细节到持久层。
 
 反幻觉机制作为信息处理全流程的质量守卫，在每一个环节都执行对应的验证检查：
 
@@ -1497,22 +1497,22 @@ GET    /api/settings/whitelist  # 仅暴露白名单结构（不含 value），�
 
 ### NFR004 安全性
 
-| 要求   | 描述                        |
-| ---- | ------------------------- |
-| 配置加密 | API Key、Token 等敏感信息支持加密存储（Fernet 安全降级） |
+| 要求   | 描述                                               |
+| ---- | ------------------------------------------------ |
+| 配置加密 | API Key、Token 等敏感信息支持加密存储（Fernet 安全降级）           |
 | 交易审计 | 所有订单操作记录审计日志 + LLM Prompt/Response/Reasoning 可追溯 |
-| 风控熔断 | 异常行情自动暂停交易                |
-| 权限控制 | RBAC 全员点强制执行（ADMIN/TRADER/VIEWER 三级角色） |
+| 风控熔断 | 异常行情自动暂停交易                                       |
+| 权限控制 | RBAC 全员点强制执行（ADMIN/TRADER/VIEWER 三级角色）           |
 
 > **2026-06-21 修复**：NFR004 从 75% 提升至 100%。所有端点 RBAC 强制执行 + API Key 加密降级机制加固 + LLM Prompt+Response 审计追踪完整实现。
 
 ### NFR005 可维护性
 
-| 要求     | 描述                    |
-| ------ | --------------------- |
-| 测试覆盖率  | 765 测试覆盖核心模块（测试全部通过）      |
-| 代码规范   | 遵循 PEP 8，类型标注 68% 覆盖率（待补全至 100%） |
-| API 文档 | 自动生成 API 文档（Sphinx）   |
+| 要求     | 描述                                       |
+| ------ | ---------------------------------------- |
+| 测试覆盖率  | 765 测试覆盖核心模块（测试全部通过）                     |
+| 代码规范   | 遵循 PEP 8，类型标注 68% 覆盖率（待补全至 100%）         |
+| API 文档 | 自动生成 API 文档（Sphinx）                      |
 | 变更日志   | Product-Spec-CHANGELOG.md + CHANGELOG.md |
 
 ### NFR006 兼容性
@@ -1525,12 +1525,12 @@ GET    /api/settings/whitelist  # 仅暴露白名单结构（不含 value），�
 
 ### NFR007 可用性
 
-| 要求   | 描述                            |
-| ---- | ----------------------------- |
-| 安装   | `pip install stockquant` 一键安装 |
-| 上手   | 5 分钟完成第一个回测（含 v1_migration_guide.md） |
-| 文档   | 完整的 Product-Spec.md + API 文档（Sphinx） |
-| 中文友好 | 全部中文文档和错误提示                   |
+| 要求   | 描述                                     |
+| ---- | -------------------------------------- |
+| 安装   | `pip install stockquant` 一键安装          |
+| 上手   | 5 分钟完成第一个回测（含 v1\_migration\_guide.md） |
+| 文档   | 完整的 Product-Spec.md + API 文档（Sphinx）   |
+| 中文友好 | 全部中文文档和错误提示                            |
 
 ### NFR008 AI 性能与成本
 
@@ -1549,20 +1549,20 @@ GET    /api/settings/whitelist  # 仅暴露白名单结构（不含 value），�
 
 ### NFR009 AI 可靠性
 
-| 要求          | 描述                                  |
-| ----------- | ----------------------------------- |
-| 情感分析准确率     | ≥ 75%（与人工标注对比）                      |
-| 信息抽取准确率     | ≥ 85%（实体识别 + 事件分类）                  |
-| AI 信号一致性    | AI 建议与策略信号的一致性 ≥ 70%（不矛盾）           |
+| 要求          | 描述                                                                   |
+| ----------- | -------------------------------------------------------------------- |
+| 情感分析准确率     | ≥ 75%（与人工标注对比）                                                       |
+| 信息抽取准确率     | ≥ 85%（实体识别 + 事件分类）                                                   |
+| AI 信号一致性    | AI 建议与策略信号的一致性 ≥ 70%（不矛盾）                                            |
 | LLM 输出可追溯   | **✅ 已实现** — 审计日志完整记录 LLM model/prompt/response/reasoning/tokens/cost |
-| 可解释性        | AI 决策必须附带推理过程（Chain-of-Thought）     |
-| 幻觉防护        | AI 生成的交易建议必须引用数据来源，无来源标注时标记为"低置信度"  |
-| 人工确认        | 全自动模式下关键操作仍需人工确认（防 LLM 幻觉）          |
-| **事实验证通过率** | ≥ 99%（AI 输出的数据与数据源一致）               |
-| **来源验证准确率** | 对已采集数据源 100% 准确                     |
-| **推理幻觉检出率** | ≥ 80%（与人工标记对比）                      |
-| **用户纠正确认率** | 纠正后同类错误再犯率 ≤ 5%                     |
-| **连续幻觉告警**  | 连续 3 次幻觉自动触发紧急模式                    |
+| 可解释性        | AI 决策必须附带推理过程（Chain-of-Thought）                                      |
+| 幻觉防护        | AI 生成的交易建议必须引用数据来源，无来源标注时标记为"低置信度"                                   |
+| 人工确认        | 全自动模式下关键操作仍需人工确认（防 LLM 幻觉）                                           |
+| **事实验证通过率** | ≥ 99%（AI 输出的数据与数据源一致）                                                |
+| **来源验证准确率** | 对已采集数据源 100% 准确                                                      |
+| **推理幻觉检出率** | ≥ 80%（与人工标记对比）                                                       |
+| **用户纠正确认率** | 纠正后同类错误再犯率 ≤ 5%                                                      |
+| **连续幻觉告警**  | 连续 3 次幻觉自动触发紧急模式                                                     |
 
 > **2026-06-21 修复**：NFR009 从 75% 提升至 100%。LLM Prompt+Response 审计追踪完整实现，推理链内容持久化到 AuditLogModel。
 
@@ -1753,6 +1753,7 @@ StockQuant 2.0 前端采用 **React 18 + TypeScript + Vite** 技术栈，组件�
 **架构分层**：
 
 ```
+
 ┌──────────────────────────────────────────────────────┐
 │                    Web 浏览器                         │
 │                                                      │
@@ -1785,35 +1786,40 @@ StockQuant 2.0 前端采用 **React 18 + TypeScript + Vite** 技术栈，组件�
 │  ├── Axios REST 客户端 (异步请求)                     │
 │  └── WebSocket 客户端 (实时行情/通知/回测进度)        │
 └──────────────────────────────────────────────────────┘
+
 ```
 
 **前后端交互模式**：
 
 ```
+
 浏览器 (React)                  FastAPI 后端                  量化引擎
-  │                                │                            │
-  │  HTTP POST /api/backtest      │                            │
-  │  ← 202 {task_id: "xxx"}       │                            │
-  │                                │                            │
-  │  WS connect /ws/backtest/xxx  │──── 启动回测任务 ──→       │
-  │                                │                            │
-  │  WS ← {"type": "progress",    │←── on_bar 派发 ──→        │
-  │              "progress": 45}   │    策略执行                │
-  │                                │                            │
-  │  WS ← {"type": "metrics",     │← on_finish 聚合 ──→       │
-  │              "sharpe": 1.2}    │    指标计算                 │
-  │                                │                            │
-  │  HTTP GET /api/backtest/xxx   │── 返回结果 ──→             │
-  │  ← {metrics, trades, equity}  │                            │
+│                                │                            │
+│  HTTP POST /api/backtest      │                            │
+│  ← 202 {task\_id: "xxx"}       │                            │
+│                                │                            │
+│  WS connect /ws/backtest/xxx  │──── 启动回测任务 ──→       │
+│                                │                            │
+│  WS ← {"type": "progress",    │←── on\_bar 派发 ──→        │
+│              "progress": 45}   │    策略执行                │
+│                                │                            │
+│  WS ← {"type": "metrics",     │← on\_finish 聚合 ──→       │
+│              "sharpe": 1.2}    │    指标计算                 │
+│                                │                            │
+│  HTTP GET /api/backtest/xxx   │── 返回结果 ──→             │
+│  ← {metrics, trades, equity}  │                            │
+
 ```
 
 **实时数据流**：
 
 ```
+
 行情数据 → NetEase/Tushare → DataCache → WebSocketHandler (FastAPI)
-  → WS broadcast → browser (useWebSocket hook)
-  → marketStore.update() → 页面自动更新（ECharts 实时渲染）
-```
+→ WS broadcast → browser (useWebSocket hook)
+→ marketStore.update() → 页面自动更新（ECharts 实时渲染）
+
+````
 
 ### 5.3 API 网关（FastAPI）\[✅ 已实现]\*\*
 
@@ -1866,7 +1872,7 @@ StockQuant 2.0 前端采用 **React 18 + TypeScript + Vite** 技术栈，组件�
   "data": { ... },
   "timestamp": "2026-06-14T10:30:00Z"
 }
-```
+````
 
 **WebSocket 端点**：6 个（/ws, /ws/notification, /ws/monitor, /ws/backtest/{task\_id}, /ws/chat/{conversation\_id}, /ws/optimize/{task\_id}）
 
@@ -2023,7 +2029,7 @@ InformationProcessingPipeline (信息处理全流程 — 核心编排)
 | **P2** | F014  | 内置策略模板 7 套        | 2 周                                           | 开箱即用                                             |
 | **P1** | F015  | 自定义指标 DSL         | 1 周                                           | @indicator 装饰器（与 F004 同步开发）                      |
 | **P2** | F016  | Web Dashboard     | ✅ 已实现 (React SPA)                             | <br />                                           |
-| **P2** | F017  | 券商 API 实盘         | 3 周                                           | XTP/QMT/CTP 已实现（`execution/brokers/`）                   |
+| **P2** | F017  | 券商 API 实盘         | 3 周                                           | XTP/QMT/CTP 已实现（`execution/brokers/`）            |
 | **P2** | F027  | AI 策略对比 Agent     | ✅ 已实现 (comparison\_agent.py + 前端页面)           | <br />                                           |
 | **P2** | F028  | AI 自然语言交互界面       | ✅ 已实现 (chat\_agent + 6 模式 + SSE 流式)           | <br />                                           |
 | **P0** | F019  | 信号管线系统            | 2 周                                           | AI 信号↔策略信号转换 + A股规则校验                            |
@@ -2035,7 +2041,7 @@ InformationProcessingPipeline (信息处理全流程 — 核心编排)
 
 **总估时**：约 40-52 周（10-13 个月）
 
-> **当前进度**：功能维度 ~97% 完成（30/30 功能全部实现，含部分）。综合完成度 ~94%（功能 97%，NFR 89%）。F017 券商 API（XTP/QMT/CTP 均已实现）。测试全部通过（765 passed / 0 failed / 6 skipped）。Trading 和 Comparison 为额外 bonus 页面。
+> **当前进度**：功能维度 \~97% 完成（30/30 功能全部实现，含部分）。综合完成度 \~94%（功能 97%，NFR 89%）。F017 券商 API（XTP/QMT/CTP 均已实现）。测试全部通过（765 passed / 0 failed / 6 skipped）。Trading 和 Comparison 为额外 bonus 页面。
 
 > **机构级重构计划**：详见 [product-spec-gap-implement.md](product-spec-gap-implement.md) — 4 阶段 16-20 周重构路线图，目标：多租户安全 + 数据持久化 + 专业交易终端 + 运维合规就绪。
 
@@ -2332,7 +2338,7 @@ const response = await aiApi.chat({
 
 ## 9. 向后兼容策略
 
-> **2026-06-21 修复**：v1_compat 模块 + Migration Guide 已完整实现（见 gap-assessment.md 修复记录 #3、#R2-3、#R2-4）。
+> **2026-06-21 修复**：v1\_compat 模块 + Migration Guide 已完整实现（见 gap-assessment.md 修复记录 #3、#R2-3、#R2-4）。
 
 ### 9.1 Breaking Change 处理
 
@@ -2341,7 +2347,7 @@ const response = await aiApi.chat({
 - **StockQuant v1.x** 标记为 EOL（End of Life），不再更新
 - **StockQuant v2.0** 全新 API，与 v1 不兼容
 - 提供 **Migration Guide** 文档（`docs/v1_migration_guide.md`），说明 v1 → v2 的迁移方法
-- 提供 **v1_compat** 模块（`v1_compat/__init__.py`）：包装 v1 风格策略，使其可在 v2 引擎中运行（有限支持，仅单标的日线回测）
+- 提供 **v1\_compat** 模块（`v1_compat/__init__.py`）：包装 v1 风格策略，使其可在 v2 引擎中运行（有限支持，仅单标的日线回测）
 
 ### 9.2 迁移指南核心要点
 
@@ -2380,22 +2386,22 @@ cerebro.run()
 
 ### 10.1 当前测试状态
 
-| 模块                    | 测试文件                                                                                                                          | 测试数  | 状态     |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---- | ------ |
-| engine/               | test\_engine.py, ...                                                                                                          | 120+ | ✅ 已覆盖  |
-| strategy/             | test\_strategy\_agent.py, test\_signal\_evaluator.py, ...                                                                     | 80+  | ✅ 已覆盖  |
-| indicators/           | test\_indicators.py, test\_indicator\_agent.py                                                                                | 60+  | ✅ 已覆盖  |
-| data/                 | test\_calendar.py, test\_fetcher\_manager.py, test\_standardize.py, test\_retry.py                                            | 50+  | ✅ 已覆盖  |
-| agent/                | test\_llm\_adapter.py, test\_tool\_registry.py, test\_react\_agent.py                                                         | 40+  | ✅ 已覆盖  |
-| ai/                   | test\_strategy\_agent.py, test\_decision\_agent.py, test\_backtest\_agent.py, test\_risk\_agent.py, test\_indicator\_agent.py | 80+  | ✅ 已覆盖  |
-| analytics/            | test\_market\_review\.py, test\_report.py                                                                                     | 20+  | ✅ 已覆盖  |
-| execution/            | test\_notifier\_router.py                                                                                                     | 10+  | ✅ 已覆盖  |
+| 模块                    | 测试文件                                                                                                                          | 测试数  | 状态    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---- | ----- |
+| engine/               | test\_engine.py, ...                                                                                                          | 120+ | ✅ 已覆盖 |
+| strategy/             | test\_strategy\_agent.py, test\_signal\_evaluator.py, ...                                                                     | 80+  | ✅ 已覆盖 |
+| indicators/           | test\_indicators.py, test\_indicator\_agent.py                                                                                | 60+  | ✅ 已覆盖 |
+| data/                 | test\_calendar.py, test\_fetcher\_manager.py, test\_standardize.py, test\_retry.py                                            | 50+  | ✅ 已覆盖 |
+| agent/                | test\_llm\_adapter.py, test\_tool\_registry.py, test\_react\_agent.py                                                         | 40+  | ✅ 已覆盖 |
+| ai/                   | test\_strategy\_agent.py, test\_decision\_agent.py, test\_backtest\_agent.py, test\_risk\_agent.py, test\_indicator\_agent.py | 80+  | ✅ 已覆盖 |
+| analytics/            | test\_market\_review\.py, test\_report.py                                                                                     | 20+  | ✅ 已覆盖 |
+| execution/            | test\_notifier\_router.py                                                                                                     | 10+  | ✅ 已覆盖 |
 | persistence/          | test\_persistence.py                                                                                                          | 15+  | ✅ 已覆盖 |
-| agent/strategy\_tools | test\_strategy\_tools\_sandbox.py                                                                                             | 14   | ✅ 已覆盖  |
+| agent/strategy\_tools | test\_strategy\_tools\_sandbox.py                                                                                             | 14   | ✅ 已覆盖 |
 
 **当前总计：765 passed / 0 failed / 6 skipped（99.2% 通过率）**
 
-> **2026-06-27 统计更新**：测试数从 763 增至 765（+2），全部通过零回归；AI Service 统一编排层（156 行）+ repository_v2 持久化基础设施（427 行）完善。
+> **2026-06-27 统计更新**：测试数从 763 增至 765（+2），全部通过零回归；AI Service 统一编排层（156 行）+ repository\_v2 持久化基础设施（427 行）完善。
 
 ### 10.2 测试策略
 
@@ -2465,23 +2471,23 @@ cerebro.run()
 
 ## 13. 风险与缓解
 
-| 风险                  | 影响            | 缓解措施                                                                               | 状态                                   |
-| ------------------- | ------------- | ---------------------------------------------------------------------------------- | ------------------------------------ |
-| TA-Lib C 库安装失败      | 安装困难          | 提供 pandas-ta 纯 Python 替代                                                           | ✅ 已解决                                |
-| BaoStock API 变动     | 历史数据中断        | 本地缓存 + AkShare 备用 + 自动故障切换                                                         | ✅ 已解决                                |
-| 网易 API 变动           | 实时数据中断        | 多数据源冗余（AkShare）                                                                    | ✅ 已解决                                |
-| XTP API 集成复杂        | 实盘延迟          | execution/brokers/ 已实现 XTP/QMT/CTP 三个券商接入 + Mock SDK 层                                         | ✅ 已实现（XTP/QMT/CTP 均已实现 + Mock SDK）  |
-| 项目周期过长              | 人员变动风险        | 分版本发布，当前 30/30 功能已实现，综合 ~94% 完成，112 路由全部正常                                     | ✅ 已大幅缓解（综合 ~94%，30/30 功能已实现，765 测试通过）       |
-| 文档不足                | 用户学习成本高       | 本文档 + README + 代码文档同步维护                                                            | ✅ 已缓解                                |
-| **LLM API 不可用/成本高** | AI 功能失效/成本超支  | 模型回退链 + 本地模型降级 + json\_repair 兜底                                                   | ✅ 已解决                                |
-| **爬虫被反爬**           | 数据采集中断        | 多源冗余 + 十次重试 + 失败告警                                                                 | ✅ 已解决                                |
-| **AI 幻觉导致错误交易**     | 资金损失          | ReAct 验证链 + 沙箱隔离 + 风控层二次验证                                                         | ✅ 已解决                                |
-| **AI 决策不透明**        | 合规风险          | 审计日志持久化 + Chain-of-Thought 可追溯                                                     | ✅ 已解决                                |
-| **LLM 供应商锁定**       | 迁移困难          | LLMAdapter 抽象层 + litellm 多供应商                                                      | ✅ 已解决                                |
-| **exec 沙箱逃逸**       | 安全风险          | 模块白名单 + 受限 \_\_import\_\_ + \_\_builtins\_\_ 隔离                                    | ✅ 已解决                                |
-| **前端构建依赖冲突**        | 前端 npm 依赖版本冲突 | 前端已使用 Vite 构建，13 页面完整开发                                                            | ✅ 已解决（前端已完整开发，13 页面）                 |
-| **CORS 跨域问题**       | 前后端分离部署时的跨域   | Nginx 反向代理 + 前端已完整开发                                                               | ✅ 已解决（前端已完整开发）                       |
-| 测试失败 0 项           | —             | 已全部修复（persistence/pipeline 的 SQLAlchemy session 配置问题已解决）                           | ✅ 已解决                                |
+| 风险                  | 影响            | 缓解措施                                                     | 状态                                     |
+| ------------------- | ------------- | -------------------------------------------------------- | -------------------------------------- |
+| TA-Lib C 库安装失败      | 安装困难          | 提供 pandas-ta 纯 Python 替代                                 | ✅ 已解决                                  |
+| BaoStock API 变动     | 历史数据中断        | 本地缓存 + AkShare 备用 + 自动故障切换                               | ✅ 已解决                                  |
+| 网易 API 变动           | 实时数据中断        | 多数据源冗余（AkShare）                                          | ✅ 已解决                                  |
+| XTP API 集成复杂        | 实盘延迟          | execution/brokers/ 已实现 XTP/QMT/CTP 三个券商接入 + Mock SDK 层   | ✅ 已实现（XTP/QMT/CTP 均已实现 + Mock SDK）     |
+| 项目周期过长              | 人员变动风险        | 分版本发布，当前 30/30 功能已实现，综合 \~94% 完成，112 路由全部正常              | ✅ 已大幅缓解（综合 \~94%，30/30 功能已实现，765 测试通过） |
+| 文档不足                | 用户学习成本高       | 本文档 + README + 代码文档同步维护                                  | ✅ 已缓解                                  |
+| **LLM API 不可用/成本高** | AI 功能失效/成本超支  | 模型回退链 + 本地模型降级 + json\_repair 兜底                         | ✅ 已解决                                  |
+| **爬虫被反爬**           | 数据采集中断        | 多源冗余 + 十次重试 + 失败告警                                       | ✅ 已解决                                  |
+| **AI 幻觉导致错误交易**     | 资金损失          | ReAct 验证链 + 沙箱隔离 + 风控层二次验证                               | ✅ 已解决                                  |
+| **AI 决策不透明**        | 合规风险          | 审计日志持久化 + Chain-of-Thought 可追溯                           | ✅ 已解决                                  |
+| **LLM 供应商锁定**       | 迁移困难          | LLMAdapter 抽象层 + litellm 多供应商                            | ✅ 已解决                                  |
+| **exec 沙箱逃逸**       | 安全风险          | 模块白名单 + 受限 \_\_import\_\_ + \_\_builtins\_\_ 隔离          | ✅ 已解决                                  |
+| **前端构建依赖冲突**        | 前端 npm 依赖版本冲突 | 前端已使用 Vite 构建，13 页面完整开发                                  | ✅ 已解决（前端已完整开发，13 页面）                   |
+| **CORS 跨域问题**       | 前后端分离部署时的跨域   | Nginx 反向代理 + 前端已完整开发                                     | ✅ 已解决（前端已完整开发）                         |
+| 测试失败 0 项            | —             | 已全部修复（persistence/pipeline 的 SQLAlchemy session 配置问题已解决） | ✅ 已解决                                  |
 
 ***
 
@@ -2489,37 +2495,37 @@ cerebro.run()
 
 ## 14. 成功指标
 
-| 指标                  | 目标值                                                 | <br />                                              |
-| ------------------- | --------------------------------------------------- | :-------------------------------------------------- |
-| 测试覆盖率               | 99.2%（765 passed / 0 failed / 6 skipped，远超 90% 目标） | <br />                                              |
-| 回测速度与 backtrader 持平 | ± 20% 以内                                            | <br />                                              |
-| 回测指标与 vectorbt 结果一致 | ± 0.1% 以内                                           | <br />                                              |
-| 新用户 30 分钟完成第一个回测    | 通过用户测试验证                                            | <br />                                              |
-| PyPI 下载量（发布 6 个月内）  | ≥ 5000                                              | <br />                                              |
-| GitHub Star         | ≥ 2000                                              | <br />                                              |
-| 内置策略模板              | ≥ 7 套                                               | <br />                                              |
-| 支持数据源               | ≥ 5 种                                               | <br />                                              |
-| AI 情感分析准确率          | ≥ 75%                                               | <br />                                              |
-| 数据采集源数量             | ≥ 20 个                                              | <br />                                              |
-| LLM 供应商支持           | ≥ 2 种（OpenAI + Claude）                              | <br />                                              |
-| AI 决策可追溯率           | 100%（所有调用记录审计日志）                                    | <br />                                              |
-| 记忆检索响应时间            | < 200ms                                             | <br />                                              |
-| 信息压缩核心事实保留率         | ≥ 95%                                               | <br />                                              |
-| 幻觉纠正通过率（严格模式）       | ≥ 99%（通过事实验证的建议）                                    | <br />                                              |
-| 幻觉模式识别准确率           | ≥ 80%                                               | <br />                                              |
-| 用户纠正后同类错误再犯率        | ≤ 5%                                                | <br />                                              |
-| Web 首屏加载时间          | < 3 秒（已实现，16 个页面全部加载）                               | <br />                                              |
-| API 响应延迟（P95）       | < 200ms（15 个 REST router + 6 个 WebSocket 端点已部署）     | <br />                                              |
-| WebSocket 实时推送延迟    | < 500ms（6 个 WebSocket 端点在线）                         | <br />                                              |
-| Cypress E2E 测试通过率   | 待实施（前端 21 个测试文件已编写，E2E 测试待补充）                       | <br />                                              |
-| 技术债务修复              | —                                                   | 765 项失败测试 0 项，所有测试已修复                                    |
+| 指标                  | 目标值                                                | <br />                |
+| ------------------- | -------------------------------------------------- | :-------------------- |
+| 测试覆盖率               | 99.2%（765 passed / 0 failed / 6 skipped，远超 90% 目标） | <br />                |
+| 回测速度与 backtrader 持平 | ± 20% 以内                                           | <br />                |
+| 回测指标与 vectorbt 结果一致 | ± 0.1% 以内                                          | <br />                |
+| 新用户 30 分钟完成第一个回测    | 通过用户测试验证                                           | <br />                |
+| PyPI 下载量（发布 6 个月内）  | ≥ 5000                                             | <br />                |
+| GitHub Star         | ≥ 2000                                             | <br />                |
+| 内置策略模板              | ≥ 7 套                                              | <br />                |
+| 支持数据源               | ≥ 5 种                                              | <br />                |
+| AI 情感分析准确率          | ≥ 75%                                              | <br />                |
+| 数据采集源数量             | ≥ 20 个                                             | <br />                |
+| LLM 供应商支持           | ≥ 2 种（OpenAI + Claude）                             | <br />                |
+| AI 决策可追溯率           | 100%（所有调用记录审计日志）                                   | <br />                |
+| 记忆检索响应时间            | < 200ms                                            | <br />                |
+| 信息压缩核心事实保留率         | ≥ 95%                                              | <br />                |
+| 幻觉纠正通过率（严格模式）       | ≥ 99%（通过事实验证的建议）                                   | <br />                |
+| 幻觉模式识别准确率           | ≥ 80%                                              | <br />                |
+| 用户纠正后同类错误再犯率        | ≤ 5%                                               | <br />                |
+| Web 首屏加载时间          | < 3 秒（已实现，16 个页面全部加载）                              | <br />                |
+| API 响应延迟（P95）       | < 200ms（15 个 REST router + 6 个 WebSocket 端点已部署）    | <br />                |
+| WebSocket 实时推送延迟    | < 500ms（6 个 WebSocket 端点在线）                        | <br />                |
+| Cypress E2E 测试通过率   | 待实施（前端 21 个测试文件已编写，E2E 测试待补充）                      | <br />                |
+| 技术债务修复              | —                                                  | 765 项失败测试 0 项，所有测试已修复 |
 
 ***
 
 ## 15. 参考文档
 
-| 文档 | 描述 |
-|------|------|
-| [product-spec-gap-assessment.md](product-spec-gap-assessment.md) | 全面差距评估报告（2026-06-20），逐功能/逐 NFR 源码审计，三轮修复记录 |
-| [product-spec-gap-implement.md](product-spec-gap-implement.md) | 机构级重构计划（4 阶段 16-20 周），等保三级合规路线图 |                                    |
+| 文档                                                             | 描述                                                               | <br />                                     |
+| -------------------------------------------------------------- | ---------------------------------------------------------------- | :----------------------------------------- |
+| <br />                                                         | [product-spec-gap-assessment.md](product-spec-gap-assessment.md) | 全面差距评估报告（2026-06-20），逐功能/逐 NFR 源码审计，三轮修复记录 |
+| [product-spec-gap-implement.md](product-spec-gap-implement.md) | 机构级重构计划（4 阶段 16-20 周），等保三级合规路线图                                  | <br />                                     |
 

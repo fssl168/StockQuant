@@ -5,8 +5,6 @@ Config priority: env vars > .env file > defaults
 Supports AI providers, Redis, multi-source structured config
 """
 
-from __future__ import annotations
-
 import os
 from enum import Enum
 from typing import Any, Dict, Optional

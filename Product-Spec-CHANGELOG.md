@@ -2,13 +2,13 @@
 
 > 产品需求变更记录
 
----
+***
 
-### v2.0.3 — F020 FinMem 三模块架构增强（2026-06-27）
+### v2.0.3 — F020 落地记忆三模块架构增强（2026-06-27）
 
-> 落地 FinMem 三模块架构（Profiling / Memory / Decision），新增反幻觉与管线调度能力。
+> 落地 记忆三模块架构（Profiling / Memory / Decision），新增反幻觉与管线调度能力。
 
-**综合完成度**：~96%
+**综合完成度**：\~96%
 
 **测试状态**：pytest 1250 passed / 11 skipped；vitest 225 passed (26 files)
 
@@ -19,32 +19,26 @@
   - `transition.py`：ProfileTransitioner（7 天冷却期 + 触发器）
   - `manager.py`：用户风险偏好管理器
   - 持久化：`persistence/models.py` 增加 `UserProfileHistory` 表
-
 - **Memory 模块**（分层记忆，`stockquant/ai/memory/`）：
   - `recall_scorer.py`：三因子召回评分（α·relevance + β·recency + γ·importance）
   - `l2_store.py` + `l3_store.py`：浅层（3d）/ 中层（90d）/ 深层（365d）/ 工作层（1d）
   - `working.py`：WorkingMemory 三组件（Summarization / Observation / Reflection）
   - `system.py`：MemorySystem 统一入口
   - `compressor.py` + `forgetting.py`：压缩与遗忘
-
 - **反幻觉系统**（`stockquant/ai/hallucination/`）：
-  - `claim_verifier.py`：FINGROUND 六类声明验证（numeric/temporal/entity_attr/comparative/regulatory/computational）
+  - `claim_verifier.py`：FINGROUND 六类声明验证（numeric/temporal/entity\_attr/comparative/regulatory/computational）
   - `cross_validator.py`：多模型并行验证（majority vote，幻觉率 8.3% → 3.2%）
   - `pipeline.py` + `modes.py` + `checkpoints.py` + `database.py`
-
 - **采集端增强**（`stockquant/ai/collectors/`）：
   - `research_collector.py` / `financial_collector.py` / `exchange_collector.py`：3 个新采集器
-  - `verifier.py`：FAKE_SOURCES 黑名单 + SHA-256 指纹变更检测
+  - `verifier.py`：FAKE\_SOURCES 黑名单 + SHA-256 指纹变更检测
   - `audit_log.py`（Phase F3）：CollectorAuditLog 内存环形缓冲 + 持久化回调
-
 - **管线四阶段**（`stockquant/ai/pipeline/`）：
   - `collection.py` + `denoise.py` + `summarize.py` + `elevate.py`：5+6+5 步完整化
   - `pipeline_orchestrator.py`：InformationProcessingPipeline 编排器
-
 - **决策与上下文**：
   - `insights_bridge.py`：F025 决策上下文组装（3 层记忆检索 + Reflection）
   - `decision_agent.py`：ProfileParams 自动止损止盈 + 仓位上限告警
-
 - **配置与调度**：
   - `config/data_sources.yaml`（Phase F2）：6 通道 + 4 级调度配置
   - `stockquant/ai/data_source_config.py`：DataSourceConfig 加载器（69 测试）
@@ -75,13 +69,13 @@
 
 - 旧版管线文件 `pipeline/denoiser.py`、`elevator.py`、`summarizer.py`、`orchestrator.py`（能力已合并到新版）
 
----
+***
 
 ### v2.0.2 — AI 子系统完善 + API 对齐 + 前端修复（2026-06-27）
 
-> 完善 AI 基础设施层，补齐 repository_v2 持久化层和 AIService 统一编排层，对齐前端 API 类型。
+> 完善 AI 基础设施层，补齐 repository\_v2 持久化层和 AIService 统一编排层，对齐前端 API 类型。
 
-**综合完成度**：~94%（功能 97%，NFR 89%）
+**综合完成度**：\~94%（功能 97%，NFR 89%）
 
 **测试状态**：765 passed / 0 failed / 6 skipped（99.2%）
 
@@ -90,68 +84,63 @@
 - **AIService 统一编排层**（`ai/service.py`，156 行新增）：
   - Agent Orchestrator + Memory + Hallucination + Pipeline 一体化入口
   - 统一 AI 服务调用接口，各 Agent 通过 AIService 协调
-
-- **repository_v2 全新持久化层**（`persistence/repository_v2.py`，427 行新增）：
+- **repository\_v2 全新持久化层**（`persistence/repository_v2.py`，427 行新增）：
   - 18 个 ORM 模型（数据库 schema 完整化）
   - 完整 CRUD 操作封装
   - 审计日志自动持久化
-
 - **API 端点对齐**：
   - `auth.py`：JWT 认证逻辑优化（113 行变更）
   - `data.py`：数据管理端点优化
   - `trading.py`：交易执行端点对齐
-
 - **引擎层重构**：
   - `broker.py`：Broker 抽象层优化（48 行变更）
   - `cerebro.py`：事件引擎优化
   - `matching.py`：撮合引擎优化
   - `events.py`：事件模型优化（44 行新增）
-
 - **券商接入优化**：
   - `xtp_broker.py`：XTP 接入逻辑优化（35 行变更）
   - `qmt_broker.py`：QMT 接入优化
   - `ctp_broker.py`：CTP 接入优化
-
 - **前端修复**（`web/`）：
   - `types/index.ts`：类型定义对齐后端 API（22 行变更）
   - `stores/`：tradingStore / aiStore / backtestStore / strategyStore 对齐
   - `api/`：ai.ts / backtest.ts / dashboard.ts / signal.ts 对齐
   - `pages/`：Dashboard / Data / Trading 页面修复
-
 - **持久化层统一**：
   - `persistence/models.py`：ORM 模型优化
   - `persistence/persistent_store.py`：存储层优化
   - `persistence/repository.py`：CRUD 操作优化
 
 **架构演进**：
-  - `agent/` 基础设施层（LLMAdapter, ReActAgent, ToolRegistry）稳定
-  - `ai/` 服务层通过 AIService 统一编排（新增）
-  - `persistence/` 通过 repository_v2 补齐完整数据访问层
-  - `api/` 端点全面对齐前端类型
 
----
+- `agent/` 基础设施层（LLMAdapter, ReActAgent, ToolRegistry）稳定
+- `ai/` 服务层通过 AIService 统一编排（新增）
+- `persistence/` 通过 repository\_v2 补齐完整数据访问层
+- `api/` 端点全面对齐前端类型
+
+***
 
 ### v2.0.2 — 差距评估修复冲刺 + 机构级重构路线图（2026-06-21）
 
 > 基于 [product-spec-gap-assessment.md](product-spec-gap-assessment.md) 和 [product-spec-gap-implement.md](product-spec-gap-implement.md)，完成全部差距修复并添加机构级重构路线图。
 
-**综合完成度**：~94%（功能 97%，NFR 89%）
+**综合完成度**：\~94%（功能 97%，NFR 89%）
 
 **测试状态**：761 passed / 0 failed / 6 skipped（99.2%）
 
 **功能差距修复**（30/30 全部实现）：
 
-- **F002 STOP/STOP_LIMIT**（🔴）：BacktestBroker + PaperBroker 添加止损单触发逻辑
-- **F003 保证金交易**（🟡）：Account 添加 leverage/margin_used/margin_call_price；RiskManager 添加 check_margin/deduct_margin_interest/check_margin_call
-- **F005 Avg Drawdown Recovery**（🟡）：修复 _drawdown_metrics() 状态转换计数器
-- **F008 并行优化深拷贝**（🟡）：_clone_feed() 改用 copy.deepcopy()
+- **F002 STOP/STOP\_LIMIT**（🔴）：BacktestBroker + PaperBroker 添加止损单触发逻辑
+- **F003 保证金交易**（🟡）：Account 添加 leverage/margin\_used/margin\_call\_price；RiskManager 添加 check\_margin/deduct\_margin\_interest/check\_margin\_call
+- **F005 Avg Drawdown Recovery**（🟡）：修复 \_drawdown\_metrics() 状态转换计数器
+- **F008 并行优化深拷贝**（🟡）：\_clone\_feed() 改用 copy.deepcopy()
 - **F013 回撤曲线+月度热力图**（🟡）：ReportGenerator 新增 Canvas 回撤图 + CSS Grid 热力图
-- **F012 模拟盘 vs 回测对比**（🟢）：PaperBroker 新增 compare_with_backtest() + API 端点
+- **F012 模拟盘 vs 回测对比**（🟢）：PaperBroker 新增 compare\_with\_backtest() + API 端点
 - **F026 风控报告 API**（🟢）：新增 GET /api/trading/risk/report
 
 **AI 可靠性修复**（🔴）：
 
-- **NFR009 LLM Prompt+Response 审计**：AuditLogModel 新增 6 字段（llm_model/prompt/response/reasoning/tokens/cost），DecisionAgent 传递 LLM 细节
+- **NFR009 LLM Prompt+Response 审计**：AuditLogModel 新增 6 字段（llm\_model/prompt/response/reasoning/tokens/cost），DecisionAgent 传递 LLM 细节
 
 **安全修复**（🔴→✅）：
 
@@ -162,21 +151,21 @@
 
 **向后兼容修复**（0%→100%）：
 
-- **v1_compat 模块**：v1_compat/__init__.py（141 行嵌入式字符串）+ docs/v1_migration_guide.md 独立迁移文档
+- **v1\_compat 模块**：v1\_compat/__init__.py（141 行嵌入式字符串）+ docs/v1\_migration\_guide.md 独立迁移文档
 
 **NFR 达标率提升**：
 
-| NFR | 修复前 | 修复后 |
-|-----|--------|--------|
-| NFR001 性能 | ⚠️ 80% | ⚠️ 80%（基准测试仍缺失）|
-| NFR002 可靠性 | ⚠️ 70% | ⚠️ 70% |
-| NFR003 可扩展性 | ✅ 100% | ✅ 100% |
-| NFR004 安全性 | 75% | ✅ 100%（RBAC + LLM 审计 + API Key 加固）|
-| NFR005 可维护性 | ⚠️ 75% | ⚠️ 75%（类型标注 68%）|
-| NFR006 兼容性 | ✅ 100% | ✅ 100% |
-| NFR007 可用性 | ⚠️ 60% | ⚠️ 60% |
-| NFR008 AI 性能 | ✅ 95% | ✅ 95% |
-| NFR009 AI 可靠性 | 75% | ✅ 100%（LLM Prompt+Response 可追溯）|
+| NFR           | 修复前    | 修复后                                |
+| ------------- | ------ | ---------------------------------- |
+| NFR001 性能     | ⚠️ 80% | ⚠️ 80%（基准测试仍缺失）                    |
+| NFR002 可靠性    | ⚠️ 70% | ⚠️ 70%                             |
+| NFR003 可扩展性   | ✅ 100% | ✅ 100%                             |
+| NFR004 安全性    | 75%    | ✅ 100%（RBAC + LLM 审计 + API Key 加固） |
+| NFR005 可维护性   | ⚠️ 75% | ⚠️ 75%（类型标注 68%）                   |
+| NFR006 兼容性    | ✅ 100% | ✅ 100%                             |
+| NFR007 可用性    | ⚠️ 60% | ⚠️ 60%                             |
+| NFR008 AI 性能  | ✅ 95%  | ✅ 95%                              |
+| NFR009 AI 可靠性 | 75%    | ✅ 100%（LLM Prompt+Response 可追溯）    |
 
 **机构级重构路线图**（详见 [product-spec-gap-implement.md](product-spec-gap-implement.md)）：
 
@@ -192,10 +181,10 @@
 - 测试数 687 → 761
 - 应用路由 112（全部正常工作）
 - 新增参考文档链接（gap-assessment.md + gap-implement.md）
-- Section 9 向后兼容添加 v1_compat + Migration Guide 记录
+- Section 9 向后兼容添加 v1\_compat + Migration Guide 记录
 - 功能实际实现说明补充所有修复记录
 
----
+***
 
 ### v2.0.6 — MVP 占位符补齐 + Streamlit 旧版清理（2026-06-19）
 
@@ -212,7 +201,7 @@
 - **AlphaFeed 收集器**（3 文件）：更新注释为正式接口保留声明
 - **静默异常**（`ai/decision_agent.py`）：8 处 `except: pass` → `logger.debug()`
 - **持久化静默**（`persistence/persistent_store.py`）：17 处 `pass` → `logger.debug()`
-- **Streamlit 旧版 App**（12 文件）：**删除整个 `stockquant/app/` 目录**（React SPA 已完全替代）
+- **Streamlit 旧版 App**（12 文件）：**删除整个** **`stockquant/app/`** **目录**（React SPA 已完全替代）
 - **Auth MVP 兼容**（`api/routers/auth.py`）：移除 PostgreSQL 环境下直接返回默认管理员的兼容分支
 
 ```
@@ -241,15 +230,15 @@
 
 ### v2.0.4 — 实施现状更新（2026-06-18）
 
-> 基于实际代码状态全面更新产品文档，反映项目当前 ~95% 完成度。
+> 基于实际代码状态全面更新产品文档，反映项目当前 \~95% 完成度。
 
 **变更内容**：
 
 - **功能状态变更**（6 个功能从 Planned 升级为 Done）：
   - F016 Web Dashboard（原 Streamlit 规划 → React SPA 实际已实现）
-  - F024 AI 实时盯盘 Agent（monitor_agent.py 1382 行，含技术指标/情绪分析/异常检测/信号融合）
-  - F027 AI 策略回测对比 Agent（comparison_agent.py + 前端页面）
-  - F028 AI 自然语言交互界面（chat_agent.py + AIChat 页面 + 6 种对话模式 + SSE 流式）
+  - F024 AI 实时盯盘 Agent（monitor\_agent.py 1382 行，含技术指标/情绪分析/异常检测/信号融合）
+  - F027 AI 策略回测对比 Agent（comparison\_agent.py + 前端页面）
+  - F028 AI 自然语言交互界面（chat\_agent.py + AIChat 页面 + 6 种对话模式 + SSE 流式）
   - F029 Web Dashboard 前端（13 页面 / 26 组件 / 11 API 客户端 / 8 Zustand stores）
   - F030 前后端集成部署（Dockerfile + docker-compose.yml + .env.example）
 - **架构命名变更**：
@@ -272,9 +261,8 @@
 - **测试状态**：664 passed / 25 failed / 4 skipped（96.2% 通过率）
   - 失败分布：persistence (10), pipeline (7), AI reliability (4), API (2), plotting (2)
   - 失败原因：SQLAlchemy session/async 配置问题、LLM 集成（无 API Key 时预期失败）
-- **总完成度**：~97%（30 功能中 26+ 已完成）
+- **总完成度**：\~97%（30 功能中 26+ 已完成）
 - **剩余工作**：部分 MVP 占位符（mock 数据/近似节假日）、Streamlit 旧版 app 清理
-
 
 ## v2.0.0 — AI 驱动全流程闭环增强
 
@@ -310,16 +298,16 @@
 
 ### 关键设计决策
 
-| 决策 | 理由 |
-|------|------|
-| AI Agent 作为独立模块（`ai/`），不与核心引擎耦合 | 核心回测/交易功能不依赖 AI 可用性，LLM 不可用时降级为规则引擎 |
-| LLM 提供商抽象层 | 避免供应商锁定，支持 OpenAI/Claude/本地模型热切换 |
-| 情感分析双方案（本地 HuggingFace 模型 + LLM 降级） | 本地模型零成本但准确率有限，LLM 准确率高但有成本，双方案平衡 |
-| 全自动模式需人工确认 | 防止 LLM 幻觉导致误交易，合规要求 |
-| AI 决策必须引用来源 | 可追溯性，避免 AI 编造数据 |
-| 爬虫多源冗余 | 单一数据源被反爬时不影响整体数据采集 |
-| AI 功能 P0/P1/P2 分级 | 数据采集 + 策略生成 + 辅助决策为 P0（核心差异），其余逐步推进 |
-| **AI 记忆 + 反幻觉内建于全流程** | 记忆和反幻觉不再是独立模块，而是深度嵌入采集→降噪→总结→升华 每个环节。每个环节都有对应的记忆读写和反幻觉检查点 |
+| 决策                                  | 理由                                                        |
+| ----------------------------------- | --------------------------------------------------------- |
+| AI Agent 作为独立模块（`ai/`），不与核心引擎耦合     | 核心回测/交易功能不依赖 AI 可用性，LLM 不可用时降级为规则引擎                       |
+| LLM 提供商抽象层                          | 避免供应商锁定，支持 OpenAI/Claude/本地模型热切换                          |
+| 情感分析双方案（本地 HuggingFace 模型 + LLM 降级） | 本地模型零成本但准确率有限，LLM 准确率高但有成本，双方案平衡                          |
+| 全自动模式需人工确认                          | 防止 LLM 幻觉导致误交易，合规要求                                       |
+| AI 决策必须引用来源                         | 可追溯性，避免 AI 编造数据                                           |
+| 爬虫多源冗余                              | 单一数据源被反爬时不影响整体数据采集                                        |
+| AI 功能 P0/P1/P2 分级                   | 数据采集 + 策略生成 + 辅助决策为 P0（核心差异），其余逐步推进                       |
+| **AI 记忆 + 反幻觉内建于全流程**               | 记忆和反幻觉不再是独立模块，而是深度嵌入采集→降噪→总结→升华 每个环节。每个环节都有对应的记忆读写和反幻觉检查点 |
 
 ### v2.0.1 — 项目经理复核修复（2026-06-14）
 
@@ -371,20 +359,21 @@
 
 - **参考源**：
   - `D:\projects\autoquant\frontend\src\views\Settings.vue`（暗色科技感 UI + 向导/专家双模式）
-  - `D:\projects\autoquant\src\utils\runtime.py`（ALLOWED_SETTINGS 白名单 14 分组 + 完整 UI 元数据）
+  - `D:\projects\autoquant\src\utils\runtime.py`（ALLOWED\_SETTINGS 白名单 14 分组 + 完整 UI 元数据）
   - `D:\projects\autoquant\src\web\api\settings_api.py`（Settings RESTful API）
   - `D:\projects\autoquant\config\settings.py`（Pydantic Settings 配置结构）
 - **新增 Settings 页设计**（嵌入 F029 Web Dashboard 前端章节）：
   - 14 个配置分组完整映射表（autoquant 14 分组 → StockQuant 14 分组，按实际功能精简参数）
   - 后台 API 设计：5 个端点（GET /api/settings, POST /api/settings/save, DELETE /api/settings/:key, GET /api/settings/whitelist）
-  - API 响应格式 JSON Schema 示例（groups + items 结构，含完整 UI 元数据：value_type/when/slider/secret/scale/unit/options/order 等）
+  - API 响应格式 JSON Schema 示例（groups + items 结构，含完整 UI 元数据：value\_type/when/slider/secret/scale/unit/options/order 等）
   - 前端 Settings 页面实现规格（React + Ant Design 复刻 Element Plus 布局）：
     - 暗色主题 CSS Variables + 紫色渐变横幅 + 毛玻璃效果
     - 专家模式：Collapse 折叠 + grid 布局（label | control | status | action）
     - 向导模式：Steps 分步导航（6 步）
-    - 动态控件：value_type → Select/Switch/InputNumber+Slider/Input.Password/TimePicker/Textarea
+    - 动态控件：value\_type → Select/Switch/InputNumber+Slider/Input.Password/TimePicker/Textarea
     - 条件显隐（when 依赖字段）
     - 密钥掩码（secret 字段）
     - Dirty 追踪 + 浮动保存条
     - 管理员口令二次确认（Modal）
 - **页面组件更新**：`pages/Settings.tsx` 描述扩展为完整配置中心设计
+

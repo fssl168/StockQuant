@@ -2,11 +2,50 @@
 """F020 反幻觉检查点 — 8 个独立验证函数"""
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Dict, List, Tuple
 
+from .claim_verifier import ClaimType, ClaimVerifier
+
+logger = logging.getLogger("stockquant.ai.hallucination.checkpoints")
+
 # 检查点返回类型: (passed, score, reason)
 CheckpointResult = Tuple[bool, float, str]
+
+# 懒加载的 ClaimVerifier 实例（避免重复创建）
+_claim_verifier: ClaimVerifier | None = None
+
+
+def _get_claim_verifier() -> ClaimVerifier:
+    """懒加载 ClaimVerifier 实例（同步分类，不做异步 memory 查询）"""
+    global _claim_verifier
+    if _claim_verifier is None:
+        _claim_verifier = ClaimVerifier()
+    return _claim_verifier
+
+
+def _extract_claims(text: str) -> List[str]:
+    """从文本中提取声明（按句子切分）
+
+    简单按中文标点切分，每句视为一个原子声明。
+    """
+    if not text:
+        return []
+    # 按中文句号/问号/感叹号/英文句点切分
+    sentences = re.split(r'[。！？.!?]', text)
+    # 过滤空句和过短句
+    return [s.strip() for s in sentences if s.strip() and len(s.strip()) > 4]
+
+
+# 可验证的声明类型（这些类型可通过数据库/记忆系统交叉验证）
+_VERIFIABLE_TYPES = {
+    ClaimType.NUMERIC,
+    ClaimType.TEMPORAL,
+    ClaimType.COMPUTATIONAL,
+    ClaimType.COMPARATIVE,
+    ClaimType.REGULATORY,
+}
 
 # 可信来源白名单
 TRUSTED_SOURCES = {"eastmoney", "sina", "cninfo", "xueqiu", "sse", "szse", "news_searcher", "cls"}
@@ -40,15 +79,21 @@ def source_verify(data: Dict[str, Any]) -> CheckpointResult:
 
 
 def fact_screen(data: Dict[str, Any]) -> CheckpointResult:
-    """检查点 2: 事实初筛 — 对照已知事实库筛查
+    """检查点 2: 事实初筛 — FINGROUND 六类声明分类 + 极端断言检测
 
-    检查内容是否包含与已知事实矛盾的信息。
+    集成 ClaimVerifier 对内容中的声明进行 FINGROUND 六类分类
+    （NUMERIC/TEMPORAL/ENTITY_ATTR/COMPARATIVE/REGULATORY/COMPUTATIONAL），
+    统计可验证声明占比，并保留原有的极端断言检测作为补充。
     """
     items = _extract_items(data)
     if not items:
         return (True, 1.0, "无数据需要筛查")
 
+    verifier = _get_claim_verifier()
     valid = 0
+    total_verifiable_claims = 0
+    claim_type_counts: Dict[str, int] = {}
+
     for item in items:
         content = item.get("content", "") or item.get("title", "")
         # 简单检查：内容不为空且长度合理
@@ -58,9 +103,27 @@ def fact_screen(data: Dict[str, Any]) -> CheckpointResult:
             if not has_extreme:
                 valid += 1
 
+            # FINGROUND 六类声明分类
+            claims = _extract_claims(content)
+            for claim_text in claims:
+                try:
+                    claim_type = ClaimVerifier.classify_claim(claim_text)
+                    type_name = claim_type.value
+                    claim_type_counts[type_name] = claim_type_counts.get(type_name, 0) + 1
+                    if claim_type in _VERIFIABLE_TYPES:
+                        total_verifiable_claims += 1
+                except Exception:
+                    logger.debug("声明分类失败: %s", claim_text[:50])
+
     score = valid / len(items)
     passed = score >= 0.6
-    reason = f"事实初筛: {valid}/{len(items)} 条通过 (score={score:.2f})"
+    # 构建包含六类声明统计的 reason
+    type_summary = ", ".join(f"{t}={c}" for t, c in sorted(claim_type_counts.items()))
+    reason = (
+        f"事实初筛: {valid}/{len(items)} 条通过 (score={score:.2f}); "
+        f"FINGROUND 声明分类: {total_verifiable_claims} 可验证"
+        + (f" [{type_summary}]" if type_summary else "")
+    )
     return (passed, score, reason)
 
 

@@ -8,8 +8,6 @@
 4. 策略版本管理和回滚
 """
 
-from __future__ import annotations
-
 import ast
 import hashlib
 import logging

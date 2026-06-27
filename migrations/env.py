@@ -8,6 +8,14 @@ from alembic import context
 # Add the project root to sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# 显式加载 .env 文件，确保 DATABASE_URL 等环境变量可用
+# （alembic 命令行进程不会自动加载 .env，必须在此显式加载）
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Import your models
 from stockquant.persistence.models import Base
 from stockquant.config import get_config

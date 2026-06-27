@@ -21,6 +21,7 @@ from stockquant.ai.collectors.research_collector import ResearchCollector      #
 from stockquant.ai.collectors.financial_collector import FinancialCollector    # C2
 from stockquant.ai.collectors.exchange_collector import ExchangeCollector      # C3
 from stockquant.ai.collectors.verifier import SourceVerifier
+from stockquant.ai.insights_bridge import InsightsBridge, DecisionContext       # F020→F025 桥接 (GAP-M8)
 from stockquant.ai.signal_fusion import SignalFusion, SourceSignal, FusedSignal
 
 logger = logging.getLogger("stockquant.ai.orchestrator")
@@ -157,12 +158,32 @@ class AgentOrchestrator:
 
     # ── 多 Agent 协作 ──────────────────────────────────────
 
-    async def orchestrate_signal_evaluation(self, symbol: str, signal_data: Dict) -> Dict[str, Any]:
-        """编排信号评估流程 (F024→F025)
+    async def orchestrate_signal_evaluation(
+        self,
+        symbol: str,
+        signal_data: Optional[Dict] = None,
+        user_id: Optional[str] = None,
+        pre_insights: Optional[List[Dict[str, Any]]] = None,
+        memory_system: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """编排信号评估流程 (F024→F025 + F020→F025 桥接)
 
-        流程: MonitorAgent 扫描 → DecisionAgent 评估 → 返回决策建议
+        流程: MonitorAgent 扫描 → InsightsBridge 构建 F020 上下文 → DecisionAgent 评估
+
+        Parameters
+        ----------
+        symbol : str
+            股票代码
+        signal_data : dict | None
+            保留参数（向后兼容），当前未使用
+        user_id : str | None
+            用户 ID（GAP-M8 新增）。若提供，查询用户风险偏好并注入决策
+        pre_insights : list[dict] | None
+            预先收集的 F020 洞察列表（GAP-M8 新增）。若提供，传给 InsightsBridge
+        memory_system : Any | None
+            MemorySystem 实例（GAP-M8 新增）。若提供，InsightsBridge 用于检索历史记忆
         """
-        results = {}
+        results: Dict[str, Any] = {}
 
         # Step 1: MonitorAgent 扫描异动
         monitor_agent = self._agents.get("monitor_agent")
@@ -173,7 +194,38 @@ class AgentOrchestrator:
             except Exception as e:
                 logger.error("MonitorAgent 扫描失败: %s", e)
 
-        # Step 2: DecisionAgent 评估信号
+        # Step 2: F020→F025 桥接 — 构建 DecisionContext（GAP-M8）
+        decision_context: Optional[DecisionContext] = None
+        user_profile = None
+        insights = pre_insights or []
+        try:
+            bridge = InsightsBridge()
+            decision_context = bridge.build_context(
+                symbol=symbol,
+                insights=insights,
+                memory_system=memory_system,
+            )
+            results["decision_context"] = {
+                "symbol": decision_context.symbol,
+                "insight_count": len(decision_context.insights),
+                "memory_count": len(decision_context.memory_retrieval),
+                "reflection": decision_context.reflection[:200] if decision_context.reflection else "",
+                "reflection_confidence": decision_context.reflection_confidence,
+                "timestamp": decision_context.timestamp,
+            }
+        except Exception as exc:
+            logger.warning("F020→F025 桥接失败，降级为原 evaluate: %s", exc)
+
+        # Step 2.5: 查询用户风险偏好（若提供 user_id）
+        if user_id:
+            try:
+                from stockquant.ai.profiling import ProfilingManager
+                user_profile = ProfilingManager().get_profile(user_id)
+                results["user_profile"] = getattr(user_profile, "value", str(user_profile))
+            except Exception as exc:
+                logger.warning("查询用户风险偏好失败（user_id=%s）: %s", user_id, exc)
+
+        # Step 3: DecisionAgent 评估信号（注入 F020 洞察 + Profiling + DecisionContext）
         decision_agent = self._agents.get("decision_agent")
         if decision_agent and results.get("scan"):
             try:
@@ -185,7 +237,12 @@ class AgentOrchestrator:
                     confidence=results["scan"].get("confidence", 0.5),
                     reason=results["scan"].get("reason", ""),
                 )
-                decision = await decision_agent.evaluate(signal)
+                decision = await decision_agent.evaluate(
+                    signal,
+                    insights=insights or None,
+                    user_profile=user_profile,
+                    decision_context=decision_context,
+                )
                 results["decision"] = decision
             except Exception as e:
                 logger.error("DecisionAgent 评估失败: %s", e)

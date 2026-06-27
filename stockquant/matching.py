@@ -8,8 +8,6 @@
 支持限价单、市价单、止损单的撮合逻辑。
 """
 
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass
 from datetime import datetime

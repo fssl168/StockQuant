@@ -317,7 +317,8 @@ class L2Store:
                     metadata.setdefault("sentiment_score", item["sentiment_score"])
                 if item.get("scope"):
                     metadata.setdefault("scope", item["scope"])
-                metadata = json.dumps(metadata, ensure_ascii=False)
+                # 使用紧凑格式（无空格），确保 LIKE 查询模式能匹配
+                metadata = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
 
             user_id = item.get("user_id") or self._user_id
 

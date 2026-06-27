@@ -4,8 +4,6 @@
 提供基于 Redis Pub/Sub 的事件分发，支持同进程异步事件和跨进程分布式事件。
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from enum import Enum

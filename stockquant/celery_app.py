@@ -7,8 +7,6 @@
 - 数据采集任务
 """
 
-from __future__ import annotations
-
 import os
 from celery import Celery
 
