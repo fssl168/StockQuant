@@ -1,7 +1,7 @@
-﻿import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Tabs, Button, Space, message, Typography, Divider, Card } from 'antd'
 import { SaveOutlined, ExpandOutlined, CompressOutlined } from '@ant-design/icons'
-import { GeneralSettings, TradingSettings, AISettings, NotifierSettings, BrokerSettings } from '@/components/Settings'
+import { GeneralSettings, TradingSettings, AISettings, NotifierSettings, BrokerSettings, SoundSettings, DisplaySettings, RiskControlSettings } from '@/components/Settings'
 import { useAuthStore } from '@/stores/authStore'
 import client from '@/api/client'
 
@@ -190,10 +190,31 @@ export default function Settings(_props: SettingsProps) {
               <NotifierSettings values={values} onChange={handleValueChange} />
             ),
           },
+          {
+            key: 'sound',
+            label: '声音',
+            children: (
+              <SoundSettings />
+            ),
+          },
+          {
+            key: 'display',
+            label: '显示偏好',
+            children: (
+              <DisplaySettings />
+            ),
+          },
+          {
+            key: 'risk_control',
+            label: '风控',
+            children: (
+              <RiskControlSettings />
+            ),
+          },
         ].filter(tab => {
-          // 专家模式显示所有标签，简化模式显示券商和通知
+          // 专家模式显示所有标签，简化模式显示券商/通知/声音/显示/风控
           if (viewMode === 'wizard') {
-            return ['broker', 'notification'].includes(tab.key as string)
+            return ['broker', 'notification', 'sound', 'display', 'risk_control'].includes(tab.key as string)
           }
           // 非管理员隐藏系统设置
           if (!isAdmin && tab.key === 'system') {

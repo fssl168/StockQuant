@@ -30,6 +30,7 @@ const AIChat = lazy(() => import('./pages/AIChat'))
 const Portfolio = lazy(() => import('./pages/Portfolio'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Trading = lazy(() => import('./pages/Trading'))
+const ConditionalOrders = lazy(() => import('./pages/ConditionalOrders'))
 const Optimize = lazy(() => import('./pages/Optimize'))
 const Comparison = lazy(() => import('./pages/Comparison'))
 const Memory = lazy(() => import('./pages/Memory'))
@@ -139,6 +140,8 @@ export default function App() {
                         <Route path="/ai-chat" element={<AIChat />} />
                         {/* 交易页面 - 仅 TRADER/ADMIN */}
                         <Route path="/trading" element={<RoleRoute requiredRoles={['TRADER', 'ADMIN']}><Trading /></RoleRoute>} />
+                        {/* 条件单页面 - 仅 TRADER/ADMIN */}
+                        <Route path="/conditional-orders" element={<RoleRoute requiredRoles={['TRADER', 'ADMIN']}><ConditionalOrders /></RoleRoute>} />
                         {/* 设置页面 - 仅 ADMIN 可访问 */}
                         <Route path="/settings" element={<RoleRoute requiredRoles={['ADMIN']}><Settings /></RoleRoute>} />
                         <Route path="/optimize" element={<Optimize />} />

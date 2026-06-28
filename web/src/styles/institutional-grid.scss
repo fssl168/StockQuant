@@ -1,0 +1,146 @@
+/* ── 机构级网格布局 ──────────────────────────────────────
+ * 用于交易终端的多面板布局，将屏幕划分为多个 zone。
+ * 边框 1px 分隔，背景色与主题 token 联动。
+ *
+ * 使用方式：
+ *   <div className="institutional-grid">
+ *     <div data-zone="watchlist">…</div>
+ *     <div data-zone="kline">…</div>
+ *     <div data-zone="order">…</div>
+ *   </div>
+ *
+ * 子 zone 可使用 [data-zone] 选择器定位。
+ * ────────────────────────────────────────────────────────── */
+
+/* ── 基础网格 ─────────────────────────────────────────── */
+
+.institutional-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  overflow: hidden;
+  background: var(--color-border-default);
+  min-height: 100%;
+}
+
+/* 3 列等宽，4 列等宽，6 列等宽 */
+.institutional-grid.cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.institutional-grid.cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.institutional-grid.cols-6 {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+/* ── 纵向分割（一行多面板竖排） ───────────────────────── */
+
+.institutional-grid.rows-2 {
+  grid-template-rows: repeat(2, 1fr);
+}
+
+.institutional-grid.rows-3 {
+  grid-template-rows: repeat(3, 1fr);
+}
+
+/* ── 区域容器 ─────────────────────────────────────────── */
+
+.institutional-grid > [data-zone] {
+  background: var(--color-bg-base);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0; /* 防止 grid 子项溢出 */
+  min-height: 0;
+}
+
+/* 区域标题栏 */
+.institutional-grid > [data-zone] > [data-zone-header] {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.03em;
+  user-select: none;
+}
+
+/* 区域内容区 */
+.institutional-grid > [data-zone] > [data-zone-body] {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* ── 分割条（resizable splitter） ─────────────────────── */
+
+.zone-splitter {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--transition-fast);
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 10;
+
+  &:hover,
+  &:active {
+    background: var(--color-brand-primary);
+  }
+}
+
+.zone-splitter-vertical {
+  width: 100%;
+  height: 4px;
+  cursor: row-resize;
+  cursor: ns-resize;
+
+  &:hover,
+  &:active {
+    background: var(--color-brand-primary);
+  }
+}
+
+/* ── 拖拽中的全局光标覆盖 ─────────────────────────────── */
+
+.institutional-grid.resizing {
+  cursor: col-resize !important;
+  user-select: none;
+
+  * {
+    cursor: inherit !important;
+    user-select: none;
+  }
+}
+
+/* ── 响应式降级 ────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .institutional-grid,
+  .institutional-grid.cols-2,
+  .institutional-grid.cols-3,
+  .institutional-grid.cols-4,
+  .institutional-grid.cols-6 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .institutional-grid,
+  .institutional-grid.cols-2,
+  .institutional-grid.cols-3,
+  .institutional-grid.cols-4,
+  .institutional-grid.cols-6 {
+    grid-template-columns: 1fr;
+  }
+}

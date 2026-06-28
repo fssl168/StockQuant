@@ -12,7 +12,9 @@ import random
 from collections import Counter
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from stockquant.api.deps import get_current_user
+from stockquant.api.schemas import UserToken
 from fastapi.responses import StreamingResponse
 
 from stockquant.api.schemas import ChatRequest, SaveMessageRequest, GenerateStrategyRequest

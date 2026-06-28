@@ -11,7 +11,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from stockquant.api.deps import get_current_user
 from stockquant.persistence.repository_v2 import Repository
 
-router = APIRouter(tags=["auth"])
+router = APIRouter(tags=["认证"])
 
 _repo = Repository.instance()
 

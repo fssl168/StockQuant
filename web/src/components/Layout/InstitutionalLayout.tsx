@@ -2,7 +2,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useLayoutStore } from '@/stores/layoutStore'
 import { useAuthStore } from '@/stores/authStore'
-import { openMultiScreenLayout } from '@/utils/multiScreen'
+import { openMultiScreenLayout, closeMultiScreen, onSyncMessage } from '@/utils/multiScreen'
 import { useInfoFilter } from '@/hooks/useInfoFilter'
 import { Monitor, DeviceTablet, XCircle, Sidebar, AppWindow, ArrowBendDownRight } from '@phosphor-icons/react'
 
@@ -145,6 +145,20 @@ export default function InstitutionalLayout({ primaryContent, secondaryContent, 
     }
   }, [draggingSplitter, setZoneRatio])
 
+  // 监听跨窗口标的同步：通过 BroadcastChannel 接收 'symbol' 消息，
+  // 派发自定义事件通知子组件（Watchlist、Kline 等）切换标的
+  useEffect(() => {
+    const unsubscribe = onSyncMessage('symbol', (msg) => {
+      const symbol = msg.payload.symbol as string | undefined
+      if (symbol) {
+        window.dispatchEvent(
+          new CustomEvent('stockquant-symbol-sync', { detail: { symbol } })
+        )
+      }
+    })
+    return unsubscribe
+  }, [])
+
   const isTraderOrAdmin = user?.role === 'TRADER' || user?.role === 'ADMIN'
 
   const handleOpenMultiScreen = useCallback(() => {
@@ -153,6 +167,7 @@ export default function InstitutionalLayout({ primaryContent, secondaryContent, 
   }, [])
 
   const handleCloseMultiScreen = useCallback(() => {
+    closeMultiScreen()
     setExpanded(false)
   }, [])
 
@@ -339,6 +354,7 @@ export default function InstitutionalLayout({ primaryContent, secondaryContent, 
             <div
               key={zone.key}
               className="inst-zone"
+              data-zone-key={zone.key}
               style={{
                 display: 'flex',
                 flexDirection: 'column',

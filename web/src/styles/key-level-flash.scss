@@ -1,0 +1,40 @@
+/* ── 关键价位突破闪烁效果 ─────────────────────────────────
+ * 用于价格突破关键支撑/阻力位时的视觉提醒。
+ * 默认绿色（突破上涨），danger 红色（突破下跌）。
+ *
+ * 使用方式：
+ *   <div className="key-level-flash">…</div>
+ *   <div className="key-level-flash-danger">…</div>
+ * ────────────────────────────────────────────────────────── */
+
+/* 绿色：上涨突破 */
+@keyframes key-level-flash {
+  0%, 100% {
+    border-color: transparent;
+    box-shadow: none;
+  }
+  25%, 75% {
+    border-color: var(--color-success);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  }
+}
+
+/* 红色：下跌突破 */
+@keyframes key-level-flash-danger {
+  0%, 100% {
+    border-color: transparent;
+    box-shadow: none;
+  }
+  25%, 75% {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+  }
+}
+
+.key-level-flash {
+  animation: key-level-flash 0.8s ease-in-out 3;
+}
+
+.key-level-flash-danger {
+  animation: key-level-flash-danger 0.8s ease-in-out 3;
+}

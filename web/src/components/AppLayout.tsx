@@ -24,6 +24,7 @@ import {
   WarningCircle,
   AppWindow,
   XCircle,
+  ListChecks,
 } from '@phosphor-icons/react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useWebSocket } from '@/hooks/useWebSocket'
@@ -53,7 +54,13 @@ interface MenuItem {
   roles?: string[]  // 如果为空数组则表示全部角色可见
 }
 
-const menuGroups: { title?: string; items: MenuItem[] }[] = [
+interface MenuGroup {
+  title?: string
+  roles?: string[]  // 组级角色限制：不传则所有角色可见
+  items: MenuItem[]
+}
+
+const menuGroups: MenuGroup[] = [
   {
     title: '交易研究',
     items: [
@@ -70,7 +77,8 @@ const menuGroups: { title?: string; items: MenuItem[] }[] = [
       { key: '/monitor', icon: <Eye size={18} weight="fill" />, label: '盯盘' },
       { key: '/data', icon: <Database size={18} weight="fill" />, label: '数据管理' },
       { key: '/portfolio', icon: <TrendUp size={18} weight="fill" />, label: '投资组合' },
-      { key: '/trading', icon: <CurrencyCircleDollar size={18} weight="fill" />, label: '交易' },
+      { key: '/trading', icon: <CurrencyCircleDollar size={18} weight="fill" />, label: '交易', roles: ['TRADER', 'ADMIN'] },
+      { key: '/conditional-orders', icon: <ListChecks size={18} weight="fill" />, label: '条件单', roles: ['TRADER', 'ADMIN'] },
     ],
   },
   {
@@ -81,6 +89,7 @@ const menuGroups: { title?: string; items: MenuItem[] }[] = [
   },
   {
     title: '系统管理',
+    roles: ['ADMIN'],  // 仅 ADMIN 可见
     items: [
       { key: '/admin/users', icon: <Users size={18} weight="fill" />, label: '用户管理' },
       { key: '/settings', icon: <Gear size={18} weight="fill" />, label: '系统设置' },
@@ -102,8 +111,185 @@ function canSee(item: MenuItem, role: string | undefined): boolean {
   return item.roles.includes(role || 'VIEWER')
 }
 
+function canSeeGroup(group: MenuGroup, role: string | undefined): boolean {
+  if (!group.roles || group.roles.length === 0) return true
+  return group.roles.includes(role || 'VIEWER')
+}
+
 interface Props {
   children: React.ReactNode
+}
+
+// ─── 副屏一：指数迷你面板（占位 mock，等后端 /ws/indices 上线后接入真实数据） ─────
+const MOCK_INDICES = [
+  { code: 'sh000001', name: '上证指数', value: 3205.12, change: 0.85 },
+  { code: 'sz399001', name: '深证成指', value: 10512.34, change: -0.42 },
+  { code: 'sz399006', name: '创业板指', value: 2103.78, change: 1.20 },
+  { code: 'sh000300', name: '沪深 300', value: 3825.61, change: 0.33 },
+]
+
+function IndicesMiniPanel() {
+  return (
+    <div style={{ padding: 12, height: '100%', overflowY: 'auto' }}>
+      <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <ChartBar size={12} weight="fill" /> 大盘指数
+      </div>
+      <div style={{ display: 'grid', gap: 6 }}>
+        {MOCK_INDICES.map((idx) => {
+          const up = idx.change >= 0
+          return (
+            <div
+              key={idx.code}
+              style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '6px 8px', borderRadius: 4,
+                background: 'var(--color-bg-elevated)',
+                border: '1px solid var(--color-border-default)',
+                fontSize: 11,
+              }}
+            >
+              <span>
+                <span style={{ color: 'var(--color-text-secondary)' }}>{idx.name}</span>
+                <div style={{ fontSize: 9, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}>{idx.code}</div>
+              </span>
+              <span style={{ textAlign: 'right' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, display: 'block' }}>
+                  {idx.value.toFixed(2)}
+                </span>
+                <span style={{ color: up ? '#ef4444' : '#10b981', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                  {up ? '+' : ''}{idx.change.toFixed(2)}%
+                </span>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ fontSize: 9, color: 'var(--color-text-tertiary)', marginTop: 8, textAlign: 'center' }}>
+        mock 数据 · 待接入 /ws/indices
+      </div>
+    </div>
+  )
+}
+
+// ─── 副屏二：快速下单 + 持仓快照 ─────────────────────────────────────
+function QuickOrderPanel() {
+  const { positions } = useTradingStore()
+  const placeOrder = useTradingStore((s) => s.placeOrder)
+  const [symbol, setSymbol] = useState('')
+  const [side, setSide] = useState<'BUY' | 'SELL'>('BUY')
+  const [qty, setQty] = useState(100)
+  const [submitting, setSubmitting] = useState(false)
+  const [messageApi, contextHolder] = Modal.useModal()
+
+  const handleSubmit = async () => {
+    if (!symbol.trim()) {
+      messageApi.warning({ title: '请填写股票代码' })
+      return
+    }
+    setSubmitting(true)
+    try {
+      await placeOrder({
+        symbol: symbol.trim(),
+        side,
+        type: 'MARKET' as const,
+        price: 0,
+        quantity: qty,
+      })
+      messageApi.info({ title: '已提交（市价）' })
+    } catch (e) {
+      messageApi.error({ title: '下单失败', content: (e as Error)?.message ?? '' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div style={{ padding: 12, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {contextHolder}
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <CurrencyCircleDollar size={12} weight="fill" /> 快速下单
+      </div>
+      <input
+        value={symbol}
+        onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+        placeholder="代码（sh600519）"
+        style={{ fontSize: 11, padding: '4px 8px', borderRadius: 4, border: '1px solid var(--color-border-default)', background: 'var(--color-bg-elevated)', color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)', width: '100%' }}
+      />
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button
+          onClick={() => setSide('BUY')}
+          style={{
+            flex: 1, padding: '4px 0', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            border: `1px solid ${side === 'BUY' ? '#ef4444' : 'var(--color-border-default)'}`,
+            background: side === 'BUY' ? 'rgba(239,68,68,0.15)' : 'transparent',
+            color: side === 'BUY' ? '#ef4444' : 'var(--color-text-secondary)',
+            borderRadius: 4,
+          }}
+        >买入</button>
+        <button
+          onClick={() => setSide('SELL')}
+          style={{
+            flex: 1, padding: '4px 0', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            border: `1px solid ${side === 'SELL' ? '#10b981' : 'var(--color-border-default)'}`,
+            background: side === 'SELL' ? 'rgba(16,185,129,0.15)' : 'transparent',
+            color: side === 'SELL' ? '#10b981' : 'var(--color-text-secondary)',
+            borderRadius: 4,
+          }}
+        >卖出</button>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+        <span style={{ color: 'var(--color-text-secondary)' }}>数量</span>
+        <input
+          type="number"
+          value={qty}
+          onChange={(e) => setQty(Math.max(100, Number(e.target.value) || 0))}
+          step={100}
+          min={100}
+          style={{ flex: 1, fontSize: 11, padding: '4px 8px', borderRadius: 4, border: '1px solid var(--color-border-default)', background: 'var(--color-bg-elevated)', color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
+        />
+      </div>
+      <button
+        onClick={handleSubmit}
+        disabled={submitting}
+        style={{
+          padding: '6px 0', fontSize: 11, fontWeight: 600, cursor: submitting ? 'not-allowed' : 'pointer',
+          border: 'none', borderRadius: 4,
+          background: side === 'BUY' ? '#ef4444' : '#10b981',
+          color: '#fff', opacity: submitting ? 0.6 : 1,
+        }}
+      >
+        {submitting ? '提交中…' : `${side === 'BUY' ? '买入' : '卖出'} ${symbol || '--'}`}
+      </button>
+
+      <div style={{ marginTop: 8, fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <CurrencyCircleDollar size={12} weight="fill" /> 持仓快照
+      </div>
+      <div style={{ display: 'grid', gap: 4 }}>
+        {positions.length === 0 ? (
+          <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', textAlign: 'center', padding: 8 }}>暂无持仓</div>
+        ) : (
+          positions.slice(0, 8).map((p) => {
+            const pnl = (p as { pnl?: number }).pnl ?? 0
+            return (
+              <div
+                key={(p as { symbol: string }).symbol}
+                style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '4px 6px', fontSize: 10,
+                  background: 'var(--color-bg-elevated)', borderRadius: 3,
+                }}
+              >
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{(p as { symbol: string }).symbol}</span>
+                <span style={{ color: pnl >= 0 ? '#ef4444' : '#10b981', fontFamily: 'var(--font-mono)' }}>
+                  {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
+                </span>
+              </div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function AppLayout({ children }: Props) {
@@ -213,10 +399,11 @@ export default function AppLayout({ children }: Props) {
 
   // 筛选可见菜单项
   const role = user?.role
-  ALL_MENU_ITEMS.filter(item => canSee(item, role))
+  void ALL_MENU_ITEMS.filter(item => canSee(item, role)) // unused, kept for reference
 
-  // 构建分组菜单数据
+  // 构建分组菜单数据（组级 + 项级双重过滤）
   const menuData = menuGroups
+    .filter(group => canSeeGroup(group, role))
     .map(group => ({
       ...group,
       items: group.items.filter(item => canSee(item, role)),
@@ -467,8 +654,8 @@ export default function AppLayout({ children }: Props) {
           {institutionalEnabled ? (
             <InstitutionalLayout
               primaryContent={children}
-              secondaryContent={<div style={{ textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 11, paddingTop: 40 }}>大盘副屏<br /><span style={{ opacity: 0.6 }}>指数 · 热力图</span></div>}
-              tertiaryContent={<div style={{ textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 11, paddingTop: 40 }}>交易副屏<br /><span style={{ opacity: 0.6 }}>下单 · 持仓</span></div>}
+              secondaryContent={<IndicesMiniPanel />}
+              tertiaryContent={<QuickOrderPanel />}
             />
           ) : (
             children

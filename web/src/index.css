@@ -291,24 +291,7 @@ body {
   animation: key-level-flash-danger 1.2s ease-in-out 3;
 }
 
-/* Institutional Grid Layout */
-.institutional-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  overflow: hidden;
-  background: var(--color-border-default);
-  min-height: 100%;
-}
-
-.institutional-grid > [data-zone] {
-  background: var(--color-bg-base);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Splitter handle */
+/* Splitter handle — 由 institutional-grid.scss 提供 .institutional-grid 和 [data-zone] 样式 */
 .zone-splitter {
   width: 4px;
   cursor: col-resize;

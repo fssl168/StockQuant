@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Table, Button, Input, Card, Row, Col, Typography, Tag, Space, Switch, InputNumber, Modal, message } from 'antd'
-import { Plus, Play, Stop, Trash, Sparkle, ChartBar } from '@phosphor-icons/react'
+import { Table, Button, Input, Card, Row, Col, Typography, Tag, Space, Modal, message, Tooltip } from 'antd'
+import { Plus, Play, Stop, Trash, Sparkle, ChartBar, Lightning } from '@phosphor-icons/react'
 import { useMarketStore } from '@/stores/marketStore'
 import { monitorApi } from '@/api/monitor'
 import { dataApi } from '@/api/data'
 import client from '@/api/client'
 import { useNotificationStore } from '@/stores/notificationStore'
 import { useWebSocket } from '@/hooks/useWebSocket'
+import { useNetworkStatus } from '@/hooks/useNetworkStatus'
+import { useTickLevelRefresh } from '@/hooks/useTickLevelRefresh'
 import StockTicker from '@/components/Monitor/StockTicker'
 import RealtimeKline from '@/components/Chart/RealtimeKline'
 import SentimentPanel from '@/components/Monitor/SentimentPanel'
+import AlertConfigPanel from '@/components/Monitor/AlertConfigPanel'
 import SignalCard from '@/components/AI/SignalCard'
 
 const { Title, Text, Paragraph } = Typography
@@ -30,12 +33,6 @@ export default function Monitor() {
   const notifications = useNotificationStore((s) => s.notifications)
   const [livePrices, setLivePrices] = useState<Record<string, { price: number; change: number }>>({})
   const priceTimer = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [alertRules, setAlertRules] = useState({
-    priceChangeEnabled: true,
-    priceChangeThreshold: 3,
-    volumeEnabled: false,
-    volumeMultiplier: 3,
-  })
 
   // Task 2.5: 收盘总结
   const [closingSummary, setClosingSummary] = useState('')
@@ -85,9 +82,63 @@ export default function Monitor() {
       .catch((e: any) => console.warn('[Monitor] 获取风控参数失败:', e?.message))
   }, [])
 
-  const { messages: wsMessages, connected: wsConnected } = useWebSocket(
-    running ? '/ws/monitor' : null
+  const { messages: wsMessages, connected: wsConnected, send: wsSend } = useWebSocket(
+    running ? '/ws/monitor' : null,
+    { onReconnect: (ts) => { console.log('[Monitor] reconnecting, rejoin since:', ts); } }
   )
+
+  // ── Phase D1: 逐笔级刷新管线 ──────────────────────────────────
+  const { isTickMode, forceTickMode } = useTickLevelRefresh(selectedSymbol || '')
+
+  // ── Phase D3: 网络状态检测 + 断线重连 ──────────────────────────
+  // Phase D3: latency display is in AppLayout header; hook registered for reconnect callback
+  useNetworkStatus()
+  const wsLastTimestampRef = useRef<string | null>(null)
+
+  // 记录最后一条 WS 消息时间戳
+  useEffect(() => {
+    if (wsMessages.length > 0) {
+      wsLastTimestampRef.current = wsMessages[wsMessages.length - 1].timestamp
+    }
+  }, [wsMessages])
+  // ── /Phase D3 ─────────────────────────────────────────────────
+
+  // ── Phase D1: 逐笔级刷新管线集成 ──────────────────────────────
+  // 监听 CustomEvent: useTickLevelRefresh 通过它通知父组件发送 tick 订阅
+  useEffect(() => {
+    const onTickMode = (e: CustomEvent) => {
+      if (running && wsConnected) {
+        const { symbol } = e.detail
+        wsMessages.length && wsMessages[wsMessages.length - 1] // force re-eval not needed
+        // 通过 WebSocket 发送 tick 模式订阅（需后端支持 mode: "tick"）
+        const evt = new CustomEvent('stockquant-ws-send', {
+          detail: { type: 'subscribe', symbol, mode: 'tick' as const },
+        })
+        window.dispatchEvent(evt)
+      }
+    }
+    window.addEventListener('stockquant-tick-mode' as any, onTickMode as any)
+    return () => window.removeEventListener('stockquant-tick-mode' as any, onTickMode as any)
+  }, [running, wsConnected, wsMessages.length])
+
+  // 监听 WebSocket send 自定义事件（与 useTickLevelRefresh 解耦）
+  const wsSendRef = useRef<((data: unknown) => void) | null>(null)
+  // 将 useWebSocket.send 注入 wsSendRef，使 CustomEvent 通道可以触发 WS 发送
+  useEffect(() => {
+    wsSendRef.current = wsSend
+  }, [wsSend])
+  useEffect(() => {
+    const onWsSend = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail && wsSendRef.current) {
+        wsSendRef.current(detail)
+      }
+    }
+    window.addEventListener('stockquant-ws-send', onWsSend)
+    return () => window.removeEventListener('stockquant-ws-send', onWsSend)
+  }, [])
+  // ── /Phase D1 ─────────────────────────────────────────────────
+
   // 处理 WS 消息 — Task 2.4: 实时行情 + alert通知 + 异动检测集成
   useEffect(() => {
     if (wsMessages.length === 0) return
@@ -439,6 +490,18 @@ export default function Monitor() {
                     停止扫描
                   </Button>
                 )}
+                <Tooltip title={isTickMode ? '点击退出逐笔模式' : '点击进入逐笔模式（100ms 级刷新）'}>
+                  <Button
+                    block
+                    size="small"
+                    type={isTickMode ? 'primary' : 'default'}
+                    icon={<Lightning size={14} weight="fill" />}
+                    onClick={() => forceTickMode()}
+                    disabled={!running}
+                  >
+                    {isTickMode ? '逐笔模式（开启）' : '逐笔模式'}
+                  </Button>
+                </Tooltip>
                 <Text type="secondary" style={{ fontSize: 11 }}>
                   {symbols.length} 只标的
                 </Text>
@@ -542,23 +605,10 @@ export default function Monitor() {
             )}
           </Card>
 
-          {/* Alert rules */}
-          <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>告警规则</span>} style={{ marginTop: 12 }}>
-            <Space direction="vertical" style={{ width: '100%' }} size={10}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={{ fontSize: 12 }}>涨跌幅超限提醒</Text>
-                <Switch size="small" checked={alertRules.priceChangeEnabled} onChange={(v) => setAlertRules(prev => ({ ...prev, priceChangeEnabled: v }))} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <Text style={{ fontSize: 12 }}>阈值</Text>
-                <InputNumber size="small" min={0.1} max={10} step={0.1} value={alertRules.priceChangeThreshold} onChange={(v) => setAlertRules(prev => ({ ...prev, priceChangeThreshold: v ?? 3 }))} suffix="%" style={{ width: 80 }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={{ fontSize: 12 }}>成交量异常检测</Text>
-                <Switch size="small" checked={alertRules.volumeEnabled} onChange={(v) => setAlertRules(prev => ({ ...prev, volumeEnabled: v }))} />
-              </div>
-            </Space>
-          </Card>
+          {/* Alert rules — 由 AlertConfigPanel 接管，支持 4 种预警类型 CRUD */}
+          <div style={{ marginTop: 12 }}>
+            <AlertConfigPanel />
+          </div>
 
           {/* Sentiment monitoring */}
           <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>情绪监控</span>} style={{ marginTop: 12 }}>

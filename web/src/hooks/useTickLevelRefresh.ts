@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 
 /**
  * 逐笔级数据刷新 Hook
@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
  * 避免 React 因高频数据更新而过度重渲染。
  *
  * 使用示例:
- *   const { forceTickMode, latestTick, updateCount } = useTickLevelRefresh('sh600519')
+ *   const { forceTickMode, latestTick, latestBySymbol, updateCount } = useTickLevelRefresh('sh600519')
  */
 
 export interface TickData {
@@ -22,6 +22,8 @@ export interface TickData {
 interface UseTickLevelRefreshResult {
   /** 最新逐笔数据 */
   latestTick: TickData | null
+  /** 按 symbol 分组的最新 tick（去重后） */
+  latestBySymbol: Map<string, TickData>
   /** 已接收数据点数（调试用） */
   updateCount: number
   /** 强制切换为 tick 模式 */
@@ -36,9 +38,12 @@ interface UseTickLevelRefreshResult {
 
 const MAX_BATCH_SIZE = 10
 const FLUSH_INTERVAL_MS = 100 // 最多 100ms 才渲染一次
+/** 超过此时间的 tick 视为过期，丢弃 */
+const MAX_STALENESS_MS = 5000
 
 export function useTickLevelRefresh(_symbol: string): UseTickLevelRefreshResult {
   const [latestTick, setLatestTick] = useState<TickData | null>(null)
+  const [latestBySymbol, setLatestBySymbol] = useState<Map<string, TickData>>(new Map())
   const [updateCount, setUpdateCount] = useState(0)
   const [isTickMode, setIsTickMode] = useState(false)
 
@@ -70,9 +75,25 @@ export function useTickLevelRefresh(_symbol: string): UseTickLevelRefreshResult 
       return
     }
 
-    // 取最新的
-    const last = buffer.current[buffer.current.length - 1]
-    setLatestTick(last)
+    // 按 symbol 分组去重，保留每个 symbol 最新 timestamp 的 tick
+    const now = Date.now()
+    const dedup = new Map<string, TickData>()
+    for (const tick of buffer.current) {
+      // 丢弃过期数据
+      if (now - tick.timestamp > MAX_STALENESS_MS) continue
+      const prev = dedup.get(tick.symbol)
+      if (!prev || tick.timestamp > prev.timestamp) {
+        dedup.set(tick.symbol, tick)
+      }
+    }
+
+    if (dedup.size > 0) {
+      // 排序：timestamp 倒序
+      const allLatest = Array.from(dedup.values()).sort((a, b) => b.timestamp - a.timestamp)
+      setLatestTick(allLatest[0])
+      setLatestBySymbol(dedup)
+    }
+
     buffer.current = []
     timerRef.current = null
   }, [])
@@ -102,7 +123,15 @@ export function useTickLevelRefresh(_symbol: string): UseTickLevelRefreshResult 
     }
   }, [])
 
-  return { latestTick, updateCount, forceTickMode, isTickMode, addTick: addTick as never, flush }
+  return {
+    latestTick,
+    latestBySymbol,
+    updateCount,
+    forceTickMode,
+    isTickMode,
+    addTick: addTick as never,
+    flush,
+  }
 }
 
 /**
@@ -114,9 +143,6 @@ export function useTickLevelRefresh(_symbol: string): UseTickLevelRefreshResult 
  */
 export function useLatestData<T>(rawData: T[], options?: { maxStaleness?: number }): T[] {
   const { maxStaleness = 50 } = options ?? {}
-
-  // 只取最近 N 条，避免数据无限增长
-  const stableData = rawData.slice(-maxStaleness)
-
-  return stableData
+  // useMemo 确保引用稳定，避免每次渲染都返回新数组
+  return useMemo(() => rawData.slice(-maxStaleness), [rawData, maxStaleness])
 }

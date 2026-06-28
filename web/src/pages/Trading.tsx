@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   Card, Table, Button, Input, Select, Typography, Tag, Space, Row, Col,
   Radio, Modal, message, Statistic, Segmented, Tooltip, Divider, Badge,
-  Alert, InputNumber,
+  Alert, InputNumber, Collapse,
 } from 'antd'
 import {
   CurrencyCircleDollar, Warning, ShoppingCart, XCircle,
@@ -10,7 +10,10 @@ import {
 } from '@phosphor-icons/react'
 import type { ColumnsType } from 'antd/es/table'
 
-import { useTradingStore } from '../stores/tradingStore'
+import { useTradingStore } from '@/stores/tradingStore'
+import { useLayoutStore } from '@/stores/layoutStore'
+import InstitutionalOrderPanel from '@/components/Trading/InstitutionalOrderPanel'
+import OrderSplitter from '@/components/Trading/OrderSplitter'
 import type { OrderSide, OrderType, OrderStatus, Order, TradeRecord } from '../types'
 
 const { Text } = Typography
@@ -27,6 +30,7 @@ export default function Trading() {
   const refreshAll = useTradingStore((s) => s.refreshAll)
   const placeOrder = useTradingStore((s) => s.placeOrder)
   const cancelOrder = useTradingStore((s) => s.cancelOrder)
+  const institutionalEnabled = useLayoutStore((s) => s.institutionalEnabled)
 
   // Order form state
   const [symbol, setSymbol] = useState('sh600519')
@@ -174,7 +178,34 @@ export default function Trading() {
       <Row gutter={[12, 12]}>
         {/* LEFT COLUMN */}
         <Col xs={24} lg={10}>
-          {/* Order Form */}
+          {/* Order Form — institutional mode uses InstitutionalOrderPanel + OrderSplitter; retail mode uses inline form */}
+          {institutionalEnabled ? (
+            <>
+              <InstitutionalOrderPanel
+                placeOrder={async (order) => {
+                  await placeOrder({
+                    symbol: order.symbol,
+                    side: order.side,
+                    type: order.type,
+                    price: order.price,
+                    quantity: order.quantity,
+                  })
+                  return { id: `${Date.now()}` }
+                }}
+              />
+              <Collapse
+                size="small"
+                style={{ marginBottom: 12 }}
+                items={[{
+                  key: 'splitter',
+                  label: <span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <ShoppingCart size={14} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> 拆单策略
+                  </span>,
+                  children: <OrderSplitter totalQty={quantity} />,
+                }]}
+              />
+            </>
+          ) : (
           <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
             <ShoppingCart size={14} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> 下单
           </span>} style={{ marginBottom: 12 }}>
@@ -264,6 +295,7 @@ export default function Trading() {
               </Button>
             </Space>
           </Card>
+          )}
 
           {/* Order Book */}
           <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>

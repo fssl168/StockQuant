@@ -1,0 +1,72 @@
+/* ── 警报与条件单样式 ──────────────────────────────────
+ * 预警规则卡片、条件单状态标签、预警类型颜色映射。
+ * ────────────────────────────────────────────────────────── */
+
+// 预警类型颜色映射
+$alert-type-colors: (
+  price: #3b82f6,              // 蓝色
+  depth_change: #f59e0b,      // 橙色
+  index_correlation: #8b5cf6,  // 紫色
+  sector_correlation: #ec4899  // 粉色
+);
+
+@each $type, $color in $alert-type-colors {
+  .alert-card[data-type='#{$type}'] {
+    border-left: 3px solid $color;
+
+    .alert-type-tag {
+      color: $color;
+      background: rgba($color, 0.12);
+      border: 1px solid rgba($color, 0.3);
+    }
+  }
+}
+
+// 条件单状态标签
+.cond-order-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+
+  &--active {
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  &--triggered {
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+  }
+
+  &--expired,
+  &--cancelled {
+    color: var(--color-text-tertiary);
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-default);
+  }
+}
+
+// 预警规则卡片
+.alert-card {
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+
+  &:hover {
+    border-color: var(--color-border-hover);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  &--disabled {
+    opacity: 0.5;
+  }
+}

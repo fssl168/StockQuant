@@ -7,6 +7,8 @@
  * 频道名称: 'stockquant-sync'
  */
 
+import type { ScreenZone } from '@/stores/layoutStore'
+
 export const SYNC_CHANNEL_NAME = 'stockquant-sync'
 
 export type SyncEventType =
@@ -24,6 +26,17 @@ export interface SyncMessage {
 }
 
 let _channel: BroadcastChannel | null = null
+
+/**
+ * 模块级 Window 引用表：保存通过 window.open 打开的子窗口引用。
+ * 不放入 layoutStore 是因为 Window 对象不可序列化（layoutStore 会 persist）。
+ */
+const windowRefs = new Map<ScreenZone, Window | null>()
+
+/**
+ * 心跳定时器句柄
+ */
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
 /**
  * 获取或创建 BroadcastChannel 实例
@@ -78,6 +91,27 @@ export function sendHeartbeat(source: string = window.location.href): void {
 }
 
 /**
+ * 启动心跳定时器（每 intervalMs 毫秒发送一次 heartbeat 消息）
+ * @param intervalMs 心跳间隔，默认 5000ms
+ */
+export function startHeartbeat(intervalMs: number = 5000): void {
+  stopHeartbeat()
+  heartbeatTimer = setInterval(() => {
+    sendHeartbeat()
+  }, intervalMs)
+}
+
+/**
+ * 停止心跳定时器
+ */
+export function stopHeartbeat(): void {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer)
+    heartbeatTimer = null
+  }
+}
+
+/**
  * 打开一个新的副屏窗口
  */
 export function openSubScreen(
@@ -105,13 +139,19 @@ export function openSubScreen(
  * 一键展开多屏模式
  *
  * 打开三个子窗口：主屏（盯盘）、副屏一（大盘）、副屏二（交易）
+ * 保存 Window 引用便于 closeMultiScreen 关闭
  */
 export function openMultiScreenLayout(): void {
   const primary = openSubScreen('/monitor?mode=watchlist', 'sq-primary', 1200, 800)
   const secondary = openSubScreen('/dashboard?mode=indices', 'sq-secondary', 1000, 800)
   const tertiary = openSubScreen('/trading?mode=order', 'sq-tertiary', 900, 800)
 
-  // 通过 layoutStore 保存窗口引用
+  // 保存 Window 引用（不可序列化，不存 layoutStore）
+  windowRefs.set('primary', primary)
+  windowRefs.set('secondary', secondary)
+  windowRefs.set('tertiary', tertiary)
+
+  // 通过 layoutStore 保存 BroadcastChannel 引用
   import('../stores/layoutStore').then(({ useLayoutStore }) => {
     useLayoutStore.getState().setBroadcastChannel(getSyncChannel())
   })
@@ -124,15 +164,35 @@ export function openMultiScreenLayout(): void {
     tertiary: tertiary?.name,
     ts: Date.now(),
   })
+
+  // 启动心跳检测
+  startHeartbeat()
 }
 
 /**
- * 关闭所有副屏
+ * 关闭所有副屏并停止心跳
+ *
+ * 主窗口调用：关闭所有子窗口
+ * 子窗口调用：仅关闭自身
  */
 export function closeMultiScreen(): void {
+  stopHeartbeat()
   postSyncMessage('layout', { mode: 'single', ts: Date.now() })
 
-  window.close()
+  // 关闭所有保存的子窗口引用
+  for (const [, win] of windowRefs) {
+    try {
+      win?.close()
+    } catch {
+      // 跨标签页或已关闭则忽略
+    }
+  }
+  windowRefs.clear()
+
+  // 自身也关闭（如果是子窗口）
+  if (isSubScreen()) {
+    window.close()
+  }
 }
 
 /**
@@ -146,6 +206,7 @@ export function isSubScreen(): boolean {
  * 关闭 BroadcastChannel（应用卸载时调用）
  */
 export function destroySyncChannel(): void {
+  stopHeartbeat()
   if (_channel) {
     _channel.close()
     _channel = null

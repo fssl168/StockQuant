@@ -123,9 +123,18 @@ export const useLayoutStore = create<LayoutState>()(
         })),
       isPanelHidden: (panel) => get().infoFilter.hidePanels.includes(panel),
       shouldShow: (panel) => {
-        const state = get()
-        if (!state.infoFilter.enabled) return true
-        if (state.infoFilter.hidePanels.includes(panel)) return false
+        const { enabled, hidePanels, coreOnly, collapseOnLowActivity, lowActivityHours } = get().infoFilter
+        if (!enabled) return true
+        if (collapseOnLowActivity) {
+          const hour = new Date().getHours()
+          const { start, end } = lowActivityHours
+          const inLowActivity = start < end
+            ? (hour >= start && hour < end)
+            : (hour >= start || hour < end)
+          if (inLowActivity && !coreOnly.includes(panel)) return false
+        }
+        if (coreOnly.length > 0 && !coreOnly.includes(panel)) return false
+        if (hidePanels.includes(panel)) return false
         return true
       },
 
@@ -157,6 +166,13 @@ export const useLayoutStore = create<LayoutState>()(
     {
       name: 'stockquant-layout',
       version: 1,
+      partialize: (state) => ({
+        mode: state.mode,
+        zoneRatios: state.zoneRatios,
+        infoFilter: state.infoFilter,
+        multiScreenWindows: state.multiScreenWindows,
+        institutionalEnabled: state.institutionalEnabled,
+      }),
     }
   )
 )

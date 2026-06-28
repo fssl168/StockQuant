@@ -1,0 +1,39 @@
+/* ── 多屏响应式适配 ──────────────────────────────────────
+ * 在不同分辨率下自动调整机构级布局。
+ * ≤1920px：三栏布局（默认）
+ * ≤1366px：两栏布局（合并 secondary 到 primary，仅隐藏副屏一）
+ * ≤1024px：单栏布局（垂直堆叠，仅显示主屏）
+ *
+ * 依赖 InstitutionalLayout.tsx 中 inst-zone 元素的 data-zone-key 属性。
+ * ────────────────────────────────────────────────────────── */
+
+@media (max-width: 1920px) {
+  .institutional-grid-wrapper {
+    // 默认三栏，无需覆盖
+  }
+}
+
+@media (max-width: 1366px) {
+  .institutional-grid-wrapper {
+    .inst-zone[data-zone-key='secondary'] {
+      display: none; // 隐藏副屏一
+    }
+  }
+}
+
+@media (max-width: 1024px) {
+  .institutional-grid-wrapper {
+    flex-direction: column !important;
+
+    .inst-zone {
+      flex: 1 1 auto !important;
+      min-height: 200px;
+      border-bottom: 1px solid var(--color-border-default);
+    }
+
+    .inst-zone[data-zone-key='secondary'],
+    .inst-zone[data-zone-key='tertiary'] {
+      display: none; // 窄屏仅显示主屏
+    }
+  }
+}
