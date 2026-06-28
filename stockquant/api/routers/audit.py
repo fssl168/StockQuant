@@ -19,7 +19,7 @@ async def list_audit_logs(
     limit: int = Query(50, ge=1, le=200),
 ) -> List[Dict[str, Any]]:
     """获取操作审计日志（仅 ADMIN 可查全部，其他用户查自己）。"""
-    if _user.get("role") != "ADMIN":
+    if _user.role != "ADMIN":
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
@@ -29,7 +29,7 @@ async def list_audit_logs(
         _repo = Repository.instance()
 
         db_url = _get_db_url()
-        user_id = _user.get("sub", "anonymous")
+        user_id = _user.sub
         logs = _repo.list_op_audit_logs(db_url, user_id=user_id, limit=limit)
         return logs
     except Exception as e:
@@ -45,7 +45,7 @@ async def list_all_audit_logs(
     resource_type: Optional[str] = Query(None),
 ) -> List[Dict[str, Any]]:
     """获取全部操作审计日志（需 ADMIN 权限）。"""
-    if _user.get("role") != "ADMIN":
+    if _user.role != "ADMIN":
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="需要管理员权限")
 

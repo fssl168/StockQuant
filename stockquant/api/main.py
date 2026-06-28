@@ -18,6 +18,8 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from stockquant.api.routers import backtest, strategy, dashboard, monitor, ai_chat, comparison, notification, data, settings, trading, portfolio, optimize
+from stockquant.api.routers import alerts as alerts_router
+from stockquant.api.routers import conditional_orders as conditional_orders_router
 from stockquant.data.service import DataService
 from stockquant.ai.service import AIService
 from stockquant.api.routers import auth as auth_router
@@ -129,6 +131,8 @@ def create_app() -> FastAPI:
     app.include_router(trading.router, prefix="/api", tags=["交易"])
     app.include_router(portfolio.router, prefix="/api", tags=["投资组合"])
     app.include_router(optimize.router, prefix="/api", tags=["参数优化"])
+    app.include_router(alerts_router.router, prefix="/api", tags=["预警规则"])
+    app.include_router(conditional_orders_router.router, prefix="/api", tags=["条件单"])
     app.include_router(auth_router.router, prefix="/api")
     app.include_router(signal_router.router, prefix="/api", tags=["信号管线"])
     app.include_router(scheduler_router.router, prefix="/api", tags=["调度器"])

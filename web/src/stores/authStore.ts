@@ -12,6 +12,7 @@ interface AuthState {
   user: User | null
   isAuthenticated: boolean
   loading: boolean
+  initialAuthChecked: boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => void
   checkAuth: () => Promise<void>
@@ -23,6 +24,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: !!localStorage.getItem('auth_token'),
   loading: false,
+  /** checkAuth() 完成前为 false，初始本地有 token 时也为 false（需远程验证） */
+  initialAuthChecked: false,
 
   login: async (username: string, password: string) => {
     set({ loading: true })
@@ -55,7 +58,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   checkAuth: async () => {
     const token = localStorage.getItem('auth_token')
     if (!token) {
-      set({ token: null, user: null, isAuthenticated: false })
+      set({ token: null, user: null, isAuthenticated: false, initialAuthChecked: true })
       return
     }
     try {
@@ -63,10 +66,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // /auth/me 直接返回 user 对象；拦截器返回裸数据，无需再读 .data
       const user = res as unknown as User
       user.role = user.roles?.[0]?.toUpperCase() || 'VIEWER'
-      set({ token, user, isAuthenticated: true })
+      set({ token, user, isAuthenticated: true, initialAuthChecked: true })
     } catch {
       localStorage.removeItem('auth_token')
-      set({ token: null, user: null, isAuthenticated: false })
+      set({ token: null, user: null, isAuthenticated: false, initialAuthChecked: true })
     }
   },
 

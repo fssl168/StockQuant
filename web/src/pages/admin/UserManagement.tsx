@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Table, Button, Modal, Form, Input, Select, Switch, Popconfirm, Space, Typography, message } from 'antd'
+import { Table, Button, Modal, Form, Input, Select, Switch, Popconfirm, Space, Typography } from 'antd'
+import { message } from '@/utils/message'
 import { UserPlus, User, Key } from '@phosphor-icons/react'
 import { useUserStore, type User as UserType } from '@/stores/userStore'
 import { RoleBadge } from '@/components/RoleBadge'

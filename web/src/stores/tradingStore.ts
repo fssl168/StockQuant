@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { BrokerMode, Order, AccountInfo, Position, TradeRecord, OrderSide, OrderType, OrderStatus } from '../types'
 import * as tradingApi from '../api/trading'
-import { message } from 'antd'
+import { messageError } from '@/utils/message'
 
 interface TradingState {
   brokerMode: BrokerMode
@@ -60,7 +60,7 @@ export const useTradingStore = create<TradingState>((set, get) => ({
       set({ account, positions })
     } catch (err) {
       console.error('[tradingStore] placeOrder failed:', err)
-      message.error('下单失败，请重试')
+      messageError('下单失败，请重试')
       set({ placingOrder: false })
     }
   },
@@ -70,7 +70,7 @@ export const useTradingStore = create<TradingState>((set, get) => ({
       await tradingApi.cancelOrder(orderId)
     } catch (err) {
       console.error('[tradingStore] cancelOrder failed:', err)
-      message.error('撤单失败')
+      messageError('撤单失败')
       return
     }
     set((s) => ({

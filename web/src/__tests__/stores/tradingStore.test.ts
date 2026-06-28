@@ -159,6 +159,8 @@ describe('TradingStore', () => {
       const account = useTradingStore.getState().account!
       expect(account).toHaveProperty('totalEquity')
       expect(account).toHaveProperty('cash')
+      expect(account).toHaveProperty('availableCash')
+      expect(account).toHaveProperty('positionValue')
       expect(account.totalEquity).toBeGreaterThan(0)
     })
   })

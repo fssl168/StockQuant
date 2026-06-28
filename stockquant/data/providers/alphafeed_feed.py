@@ -197,6 +197,36 @@ class AlphaFeedFeed(DataFeed):
         self._write_cache(symbol, bars)
         return bars
 
+    def fetch(self, symbol: str, timeframe: str = "", start: str = "", end: str = ""):
+        """动态获取单个标的的数据（供 DataService._fetch_from_feed 调用）
+
+        Args:
+            symbol: 股票代码
+            timeframe: 时间周期（可选，默认使用实例的 timeframe）
+            start: 开始日期（可选）
+            end: 结束日期（可选）
+        """
+        from datetime import datetime, timedelta
+
+        # 如果传入了 timeframe，更新实例的 timeframe
+        if timeframe:
+            self._timeframe = timeframe
+        # 如果传入了 start/end，更新实例的参数；否则使用默认最近 60 天
+        if start:
+            self._start = start
+        else:
+            self._start = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+        if end:
+            self._end = end
+        else:
+            self._end = datetime.now().strftime("%Y-%m-%d")
+
+        # 拉取数据
+        bars = self._fetch_single(symbol)
+        self._bars[symbol] = bars
+        self._dataframes[symbol] = self._bars_to_df(symbol)
+        return bars
+
     def _fetch_all_akshare(self):
         """降级: 使用 AkShare 拉取数据"""
         try:
@@ -449,6 +479,11 @@ class AlphaFeedFeed(DataFeed):
     @property
     def symbol(self) -> str:
         return ",".join(self._symbols)
+
+    @property
+    def symbols(self) -> List[str]:
+        """Required by DataService._fetch_from_feed to check if feed has symbols configured."""
+        return self._symbols
 
     @property
     def timeframe(self) -> str:

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Card, Space, Tag, Typography, Input, DatePicker, Switch, Modal, message } from 'antd'
+import { Table, Button, Card, Space, Tag, Typography, Input, DatePicker, Switch, Modal } from 'antd'
+import { message } from '@/utils/message'
 import { Database, Download, CloudArrowDown } from '@phosphor-icons/react'
 import ReactECharts from 'echarts-for-react'
 import dayjs from 'dayjs'
@@ -180,13 +181,13 @@ export default function Data() {
 
   const handleDownload = async (provider: string) => {
     try {
-      message.loading({ content: `${provider} 数据下载中...`, key: 'download', duration: 0 })
+      message.loading(`${provider} 数据下载中...`)
       await client.get(`/api/data/download?provider=${provider}`)
-      message.success({ content: `${provider} 数据下载完成`, key: 'download' })
+      message.success(`${provider} 数据下载完成`)
       fetchSources()
       fetchCacheStats()
     } catch {
-      message.error({ content: `${provider} 数据下载失败`, key: 'download' })
+      message.error(`${provider} 数据下载失败`)  
     }
   }
 

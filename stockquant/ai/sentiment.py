@@ -99,7 +99,16 @@ class SentimentAnalyzer:
         2. 中文专用模型 (uer/roberta-base-finetuned-jd-binary-chinese)
         3. 多语言备选模型 (lxyuan/distilbert-base-multilingual-cased-sentiments-student)
         4. 全部失败则降级为关键词规则
+
+        环境变量控制:
+        - SKIP_HF_MODEL=1: 跳过 HuggingFace 模型加载，直接使用关键词规则
         """
+        # 检查是否禁用 HuggingFace 模型
+        import os
+        if os.environ.get("SKIP_HF_MODEL", "").lower() in ("1", "true", "yes"):
+            logger.info("SKIP_HF_MODEL=1，跳过 HuggingFace 模型加载，使用关键词规则")
+            return
+
         candidates = [self._HF_MODEL_NAME, self._HF_FALLBACK_MODEL, self._HF_FALLBACK_MODEL_2]
         for model_name in candidates:
             try:

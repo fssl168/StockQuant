@@ -14,5 +14,8 @@ export type DashboardMetrics = {
     backtestCount?: number;
     latestBacktestStatus?: string;
     latestBacktestReturn?: string;
+    dataSource?: string;
+    availableCash?: number;
+    marketValue?: number;
 };
 

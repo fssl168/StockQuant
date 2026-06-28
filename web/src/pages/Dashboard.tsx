@@ -54,22 +54,22 @@ export default function Dashboard() {
     ]).finally(() => setLoading(false))
   }, [])
 
-  const annualizedReturn = typeof metrics['Annualized Return'] === 'number'
-    ? metrics['Annualized Return'] as number
-    : NaN
-
-  const maxDrawdown = typeof metrics['Max Drawdown'] === 'number'
-    ? metrics['Max Drawdown'] as number
-    : NaN
-
-  const sharpeRatio = typeof metrics['Sharpe Ratio'] === 'number'
-    ? metrics['Sharpe Ratio'] as number
-    : NaN
-
-  // 从聚合指标获取真实数据
+  // 从聚合指标获取真实数据（默认 0）
   const totalEquity = aggMetrics.totalEquity || 0
   const dailyPnl = aggMetrics.dailyPnl || 0
   const positionCount = aggMetrics.positionCount || 0
+  const sharpe = metrics['Sharpe Ratio'] || 0
+  const maxDD = metrics['Max Drawdown'] || 0
+  const annRet = metrics['Annualized Return'] || 0
+  const totalTrades = metrics['Total Trades'] || 0
+  const winRate = metrics['Win Rate'] || 0
+  const profitFactor = metrics['Profit Factor'] || 0
+  const dailyVol = metrics['Daily Volatility'] || 0
+  const calmarRatio = metrics['Calmar Ratio'] || 0
+  const sortinoRatio = metrics['Sortino Ratio'] || 0
+  const alpha = metrics['Alpha'] || 0
+  const beta = metrics['Beta'] || 0
+  const backtestCount = metrics['backtest_count'] || 0
 
   const formatMoney = (val: number) => {
     if (Math.abs(val) >= 1_000_000) return `¥${(val / 1_000_000).toFixed(2)}M`
@@ -80,44 +80,44 @@ export default function Dashboard() {
   const metricItems = [
     {
       title: '总权益',
-      value: totalEquity ? formatMoney(totalEquity) : '-',
+      value: formatMoney(totalEquity),
       prefix: <TrendUp size={20} weight="bold" />,
       valueStyle: { color: 'var(--color-text-primary)' },
     },
     {
       title: '今日盈亏',
-      value: dailyPnl ? formatMoney(dailyPnl) : '-',
+      value: formatMoney(dailyPnl),
       prefix: <ArrowUpRight size={20} weight="bold" />,
       valueStyle: { color: dailyPnl >= 0 ? '#10b981' : '#ef4444' },
     },
     {
       title: '持仓数',
-      value: positionCount > 0 ? String(positionCount) : '-',
+      value: String(positionCount),
       prefix: <Sparkle size={20} weight="bold" />,
       valueStyle: { color: 'var(--color-text-primary)' },
     },
     {
       title: '年化收益',
-      value: isNaN(annualizedReturn) ? '-' : annualizedReturn * 100,
-      suffix: isNaN(annualizedReturn) ? undefined : '%',
+      value: (annRet * 100).toFixed(1),
+      suffix: '%',
       precision: 1,
       prefix: <TrendUp size={20} weight="bold" />,
-      valueStyle: { color: isNaN(annualizedReturn) ? 'var(--color-text-tertiary)' : (annualizedReturn >= 0 ? '#10b981' : '#ef4444') },
+      valueStyle: { color: annRet >= 0 ? '#10b981' : '#ef4444' },
     },
     {
       title: '最大回撤',
-      value: isNaN(maxDrawdown) ? '-' : maxDrawdown * 100,
-      suffix: isNaN(maxDrawdown) ? undefined : '%',
+      value: (maxDD * 100).toFixed(1),
+      suffix: '%',
       precision: 1,
       prefix: <Warning size={20} weight="bold" />,
-      valueStyle: { color: isNaN(maxDrawdown) ? 'var(--color-text-tertiary)' : '#ef4444' },
+      valueStyle: { color: '#ef4444' },
     },
     {
       title: '夏普比率',
-      value: isNaN(sharpeRatio) ? '-' : sharpeRatio,
+      value: sharpe.toFixed(2),
       precision: 2,
       prefix: <TrendUp size={20} weight="bold" />,
-      valueStyle: { color: isNaN(sharpeRatio) ? 'var(--color-text-tertiary)' : (sharpeRatio >= 1 ? '#10b981' : sharpeRatio >= 0 ? '#f59e0b' : '#ef4444') },
+      valueStyle: { color: sharpe >= 1 ? '#10b981' : sharpe >= 0 ? '#f59e0b' : '#ef4444' },
     },
   ]
 
@@ -161,7 +161,7 @@ export default function Dashboard() {
       width: 120,
       render: (_: any, r: any) => {
         const ret = r.metrics?.['Annualized Return']
-        if (!ret) return <Text type="secondary">-</Text>
+        if (!ret) return <Text type="secondary">0.0%</Text>
         const num = typeof ret === 'string' ? parseFloat(ret) : ret
         return (
           <Text style={{ color: num >= 0 ? '#10b981' : '#ef4444', fontFamily: 'var(--font-mono)' }}>
@@ -179,7 +179,7 @@ export default function Dashboard() {
         return s ? (
           <Text style={{ fontFamily: 'var(--font-mono)' }}>{s}</Text>
         ) : (
-          <Text type="secondary">-</Text>
+          <Text type="secondary">0.00</Text>
         )
       },
     },

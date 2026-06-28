@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Card, Table, Button, Typography, Space, Tag, Modal, Form, Input, Select, Popconfirm, message } from 'antd'
+import { Card, Table, Button, Typography, Space, Tag, Modal, Form, Input, Select, Popconfirm } from 'antd'
+import { message } from '@/utils/message'
 import { Play, Stop, Plus, Clock, Trash, Code } from '@phosphor-icons/react'
 import client from '@/api/client'
 import dayjs from 'dayjs'

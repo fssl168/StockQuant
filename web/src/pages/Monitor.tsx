@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Table, Button, Input, Card, Row, Col, Typography, Tag, Space, Modal, message, Tooltip } from 'antd'
+import { Table, Button, Input, Card, Row, Col, Typography, Tag, Space, Modal, Tooltip } from 'antd'
+import { message } from '@/utils/message'
 import { Plus, Play, Stop, Trash, Sparkle, ChartBar, Lightning } from '@phosphor-icons/react'
 import { useMarketStore } from '@/stores/marketStore'
 import { monitorApi } from '@/api/monitor'
@@ -559,7 +560,7 @@ export default function Monitor() {
           {/* F025: 决策模式切换 */}
           <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>决策模式</span>} style={{ marginTop: 12 }}>
             <Space direction="vertical" style={{ width: '100%' }} size={6}>
-              <Button.Group style={{ width: '100%' }}>
+              <Space.Compact style={{ width: '100%' }}>
                 <Button
                   type={decisionMode === 'auto' ? 'primary' : 'default'}
                   onClick={() => setDecisionMode('auto')}
@@ -584,7 +585,7 @@ export default function Monitor() {
                 >
                   👁 只读
                 </Button>
-              </Button.Group>
+              </Space.Compact>
               <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
                 {decisionMode === 'auto' ? 'AI 自动执行交易信号' :
                  decisionMode === 'semi_auto' ? 'AI 建议，人工确认执行' :
@@ -676,7 +677,7 @@ export default function Monitor() {
         onCancel={() => setKlineSymbol(null)}
         footer={null}
         width={800}
-        destroyOnClose
+        destroyOnHidden
       >
         {klineLoading ? (
           <div style={{ textAlign: 'center', padding: 40 }}>加载中...</div>

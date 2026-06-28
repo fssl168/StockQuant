@@ -183,7 +183,78 @@ async def sentiment_analysis(symbol: str = Query("sh600519", description="股票
         }
 
 
-@router.post("/strategy/generate", summary="AI 生成策略代码")
+@router.post("/chat", summary="AI 流式对话（SSE）")
+def chat_sse(payload: ChatRequest, _user: UserToken = Depends(get_current_user)) -> StreamingResponse:
+    """流式对话（SSE）。供前端 /api/ai/chat 调用。"""
+    message = payload.message
+    conversation_id = payload.conversation_id
+    mode = payload.mode
+    system_prompt = _system_prompt_for_mode(mode)
+    db_url = None
+    try:
+        from stockquant.config import get_config
+        db_url = get_config().database.url
+    except Exception:
+        pass
+
+    def event_generator():
+        reply = ""
+        # 持久化用户消息
+        try:
+            from stockquant.persistence.repository_v2 import Repository
+            _repo = Repository.instance()
+            if db_url:
+                _repo.save_chat_message(engine_url=db_url, conversation_id=conversation_id, role="user", content=message)
+        except Exception:
+            pass
+
+        # 优先使用 AIService
+        ai_svc = _ai_service()
+        if ai_svc and ai_svc.is_configured:
+            try:
+                full_reply = ai_svc.chat(message, system_prompt=system_prompt)
+                reply = full_reply
+                if full_reply:
+                    evt = {"type": "token", "content": full_reply}
+                    yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
+            except Exception as e:
+                error_msg = f"AI 服务异常: {e}"
+                evt = {"type": "error", "content": error_msg}
+                yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
+                reply = error_msg
+        else:
+            try:
+                agent = _get_fallback_agent()
+                for chunk in agent.chat_stream(message, conversation_id, mode=mode):
+                    evt = {"type": "token", "content": chunk}
+                    yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
+                    reply += chunk
+            except Exception as e:
+                error_msg = f"AI 服务异常: {e}"
+                evt = {"type": "error", "content": error_msg}
+                yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
+                reply = error_msg
+
+        # 持久化回复消息
+        if reply:
+            try:
+                from stockquant.persistence.repository_v2 import Repository
+                _repo = Repository.instance()
+                if db_url:
+                    _repo.save_chat_message(engine_url=db_url, conversation_id=conversation_id, role="assistant", content=reply)
+            except Exception:
+                pass
+
+        yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/chat-nonstream", summary="AI 对话（非流式）")
 def chat_complete(payload: ChatRequest, _user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
     """发送消息获取 AI 回复（非流式）。"""
     message = payload.message
@@ -243,78 +314,6 @@ def chat_complete(payload: ChatRequest, _user: UserToken = Depends(get_current_u
         "reply": reply,
         "history": history[-10:],
     }
-
-
-@router.post("/strategy/generate", summary="AI 生成策略代码")
-def chat_stream(payload: ChatRequest, _user: UserToken = Depends(get_current_user)) -> StreamingResponse:
-    """流式对话（SSE 兼容）。"""
-    message = payload.message
-    conversation_id = payload.conversation_id
-    mode = payload.mode
-    system_prompt = _system_prompt_for_mode(mode)
-
-    def event_generator():
-        reply = ""
-        # 持久化用户消息
-        try:
-            from stockquant.persistence.repository_v2 import Repository
-            _repo = Repository.instance()
-            db_url = None
-            try:
-                from stockquant.config import get_config
-                db_url = get_config().database.url
-            except Exception:
-                pass
-            if db_url:
-                _repo.save_chat_message(engine_url=db_url, conversation_id=conversation_id, role="user", content=message)
-        except Exception:
-            pass
-
-        # 优先使用 AIService
-        ai_svc = _ai_service()
-        if ai_svc and ai_svc.is_configured:
-            try:
-                full_reply = ai_svc.chat(message, system_prompt=system_prompt)
-                reply = full_reply
-                # 直接 yield SSE 事件
-                if full_reply:
-                    evt = {"type": "token", "content": full_reply}
-                    yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
-            except Exception as e:
-                error_msg = f"AI 服务异常: {e}"
-                evt = {"type": "error", "content": error_msg}
-                yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
-                reply = error_msg
-        else:
-            # 降级到 ChatAgent
-            try:
-                agent = _get_fallback_agent()
-                for chunk in agent.chat_stream(message, conversation_id, mode=mode):
-                    evt = {"type": "token", "content": chunk}
-                    yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
-                    reply += chunk
-            except Exception as e:
-                error_msg = f"AI 服务异常: {e}"
-                evt = {"type": "error", "content": error_msg}
-                yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
-                reply = error_msg
-
-        # 持久化回复消息
-        if reply:
-            try:
-                if db_url:
-                    _repo.save_chat_message(engine_url=db_url, conversation_id=conversation_id, role="assistant", content=reply)
-            except Exception:
-                pass
-
-        evt = {"type": "done"}
-        yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
 
 
 @router.get("/conversations", summary="会话列表")

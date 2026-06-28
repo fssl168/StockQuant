@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Radio, Space, Typography, Tag, Popconfirm, message } from 'antd'
+import { Table, Button, Modal, Radio, Space, Typography, Tag, Popconfirm } from 'antd'
+import { message } from '@/utils/message'
 import { Plus, Trash, Warning, TrendUp, TrendDown } from '@phosphor-icons/react'
 import { useConditionalOrderStore, type ConditionalOrder } from '@/stores/conditionalOrderStore'
 import ConditionalOrderForm from '@/components/Trading/ConditionalOrderForm'
@@ -200,7 +201,7 @@ export default function ConditionalOrders() {
         onCancel={() => { setCreateModal(false); setEditingOrder(null) }}
         footer={null}
         width={720}
-        destroyOnClose
+        destroyOnHidden
       >
         <ConditionalOrderForm
           initialData={editingOrder}

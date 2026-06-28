@@ -73,11 +73,18 @@ class L3Store:
 
             # 检测 pgvector 扩展是否可用
             self._check_pgvector()
-            self._backend = "postgresql"
-            logger.info(
-                "L3 使用 PostgreSQL 后端 (pgvector=%s, url=%s)",
-                self._has_pgvector, url.split("@")[-1] if "@" in url else url,
-            )
+            # _check_pgvector 内部会设置 _backend，无需重复设置
+            if self._backend == "memory":
+                # 如果 _check_pgvector 检测到运行中事件循环，backend 已被设为 memory
+                logger.info(
+                    "L3 使用内存后端 (pgvector=%s, url=%s)",
+                    self._has_pgvector, url.split("@")[-1] if "@" in url else url,
+                )
+            else:
+                logger.info(
+                    "L3 使用 PostgreSQL 后端 (pgvector=%s, url=%s)",
+                    self._has_pgvector, url.split("@")[-1] if "@" in url else url,
+                )
             return
         except ImportError:
             logger.warning("asyncpg/SQLAlchemy 未安装，L3 降级为内存存储（重启后数据丢失）")
@@ -90,12 +97,37 @@ class L3Store:
 
     def _check_pgvector(self) -> None:
         """检测 pgvector 扩展是否可用"""
+        import asyncio
         try:
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(self._ensure_pgvector())
-        except Exception as exc:
-            logger.warning("PostgreSQL 表创建失败: %s，L3 降级为内存存储", exc)
-            raise
+            loop = asyncio.get_running_loop()
+            # 在已有事件循环中，调度异步初始化但不等待完成
+            async def _async_init():
+                try:
+                    await self._ensure_pgvector()
+                    self._backend = "postgresql"
+                    logger.info(
+                        "L3 异步初始化完成，使用 PostgreSQL 后端 (pgvector=%s)",
+                        self._has_pgvector,
+                    )
+                except Exception as exc:
+                    logger.warning("异步初始化失败: %s，L3 降级为内存存储", exc)
+                    self._backend = "memory"
+                    self._engine = None
+                    self._session_factory = None
+
+            # 调度异步任务（不阻塞）
+            loop.create_task(_async_init())
+            # 暂时使用 memory 后端，直到异步初始化完成
+            self._backend = "memory"
+            logger.info("检测到运行中的事件循环，pgvector 初始化异步进行中")
+        except RuntimeError:
+            # 没有运行中的事件循环（同步上下文），可以安全使用 run_until_complete
+            try:
+                asyncio.get_event_loop().run_until_complete(self._ensure_pgvector())
+                self._backend = "postgresql"
+            except Exception as exc:
+                logger.warning("PostgreSQL 表创建失败: %s，L3 降级为内存存储", exc)
+                raise
 
     async def _ensure_pgvector(self) -> None:
         """确保 pgvector 扩展已安装，并创建表结构和默认用户"""

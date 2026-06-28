@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 
 from stockquant.api.deps import get_current_user
+from stockquant.api.schemas import UserToken
 from stockquant.persistence.repository_v2 import Repository
 
 router = APIRouter(tags=["认证"])
@@ -181,9 +182,9 @@ async def register(payload: dict):
 
 
 @router.get("/auth/me", summary="获取当前用户信息")
-async def get_me(current_user: dict = Depends(get_current_user)):
+async def get_me(current_user: UserToken = Depends(get_current_user)):
     """获取当前登录用户信息 — 从数据库读取"""
-    username = current_user.get("sub", "anonymous")
+    username = current_user.sub
     db_url = _get_db_url()
     user_data = _repo.get_user(db_url, username)
     if user_data:
@@ -200,5 +201,5 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         }
     return {
         "username": username,
-        "roles": current_user.get("roles", []),
+        "roles": current_user.roles,
     }

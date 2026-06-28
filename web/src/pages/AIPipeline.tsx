@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Card, Typography, Button, Space, Input, Table, Tag, Row, Col, message } from 'antd'
+import { Card, Typography, Button, Space, Input, Table, Tag, Row, Col } from 'antd'
+import { message } from '@/utils/message'
 import { Funnel, Play, ArrowClockwise } from '@phosphor-icons/react'
 
 const { Text } = Typography

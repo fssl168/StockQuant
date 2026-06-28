@@ -30,6 +30,9 @@ from stockquant.models.bar import BarData
 from stockquant.models.order import Order, OrderSide, OrderType
 from stockquant.events import EventType as OrderStatus
 from stockquant.models.portfolio import Portfolio
+from stockquant.persistence.models import Position as PositionORM
+from stockquant.persistence.models import get_engine as _get_db_engine
+from stockquant.persistence.models import _default_db_url as _get_db_url
 
 logger = logging.getLogger("stockquant.api.trading")
 
@@ -720,12 +723,19 @@ async def cancel_order(order_id: str, _user: UserToken = Depends(get_trader_user
 
 @router.get("/trading/positions", summary="持仓列表")
 async def get_positions():
-    """获取当前持仓 — 从 Portfolio 模型读取"""
+    """获取当前持仓 — 从 Portfolio 模型（内存）和 数据库 合并读取。
+
+    内存持仓（_portfolio）由 PaperBroker 撮合产生，
+    数据库持仓（Position ORM）由持久化层维护，两者合并去重返回。
+    """
     result = []
+    seen = set()
+
+    # 1）内存持仓
     for symbol, pos in _portfolio.positions.items():
         if pos.quantity <= 0:
             continue
-        # 更新最新价格（使用缓存，避免频繁网络请求）
+        seen.add(symbol)
         price = _get_cached_price(symbol)
         if price:
             pos.update_price(price)
@@ -741,6 +751,33 @@ async def get_positions():
             "pnlPct": round((pos.current_price - pos.cost_price) / pos.cost_price * 100, 2)
                         if pos.cost_price > 0 else 0,
         })
+
+    # 2）数据库持仓（补充内存中未覆盖的）
+    try:
+        db_url = _get_db_url()
+        engine = _get_db_engine(db_url)
+        from sqlalchemy import select
+        from sqlalchemy.orm import Session
+        with Session(engine) as session:
+            stmt = select(PositionORM).where(PositionORM.quantity > 0)
+            rows = session.execute(stmt).scalars().all()
+            for row in rows:
+                if row.symbol in seen:
+                    continue
+                seen.add(row.symbol)
+                result.append({
+                    "symbol": row.symbol,
+                    "name": row.symbol,
+                    "shares": row.quantity,
+                    "cost": round(row.cost_price, 2),
+                    "price": round(row.cost_price, 2),  # DB 持仓暂无实时价格，先用成本价
+                    "marketValue": round(row.quantity * row.cost_price, 2),
+                    "pnl": 0.0,
+                    "pnlPct": 0.0,
+                })
+    except Exception as e:
+        logger.warning("从数据库加载持仓失败: %s", e)
+
     return result
 
 

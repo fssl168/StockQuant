@@ -106,7 +106,7 @@ export function useWebSocket(url: string | null, options?: UseWebSocketOptions):
           wsUrl = `${envUrl}${url}`
         } else {
           const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-          wsUrl = `${proto}//window.location.host${url}`
+          wsUrl = `${proto}//${window.location.host}${url}`
         }
       }
       // 附加 JWT token 以通过后端 WS 端点的 token 校验（后端 ?token= 查询参数）

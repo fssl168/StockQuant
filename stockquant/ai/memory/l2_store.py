@@ -125,6 +125,7 @@ class L2Store:
         """语义检索（同步）
 
         优先使用 TF-IDF（sklearn），不可用时降级为关键词匹配。
+        PostgreSQL 操作失败时自动降级为内存检索。
         """
         if self._backend == "memory":
             return self._search_memory(query, top_k)
@@ -136,8 +137,9 @@ class L2Store:
                 with concurrent.futures.ThreadPoolExecutor() as pool:
                     return pool.submit(self._search_sync, query, top_k).result()
             return loop.run_until_complete(self._search_async(query, top_k))
-        except RuntimeError:
-            return __import__("asyncio").run(self._search_async(query, top_k))
+        except (RuntimeError, Exception) as exc:
+            logger.warning("L2 PostgreSQL 检索失败，降级为内存检索: %s", exc)
+            return self._search_memory(query, top_k)
 
     def cleanup_expired(self) -> int:
         """清理过期条目"""

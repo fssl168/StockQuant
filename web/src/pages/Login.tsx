@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Form, Input, Button, Card, Typography, message, Space } from 'antd'
+import { Form, Input, Button, Card, Typography, Space } from 'antd'
+import { message } from '@/utils/message'
 import { User, Lock } from '@phosphor-icons/react'
 import { useAuthStore } from '@/stores/authStore'
 

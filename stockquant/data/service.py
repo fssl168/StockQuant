@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """DataService - 统一数据服务层"""
 
 from __future__ import annotations
@@ -232,14 +232,16 @@ class DataService:
     def _fetch_from_feed(
         self, feed, symbol: str, timeframe: str, start: str, end: str
     ) -> Optional[pd.DataFrame]:
-        if hasattr(feed, "get_dataframe"):
-            if hasattr(feed, "symbols") and feed.symbols:
-                return feed.get_dataframe()
-            else:
-                return feed.get_dataframe(symbol)
+        # 如果 feed 有 symbols 属性且非空，直接获取数据（feed 已配置好 symbols）
+        if hasattr(feed, "symbols") and feed.symbols:
+            return feed.get_dataframe()
+        # 如果 feed 没有 symbols 或 symbols 为空，尝试调用 fetch 获取数据
         if hasattr(feed, "fetch"):
             feed.fetch(symbol, timeframe, start, end)
-            return feed.get_dataframe() if hasattr(feed, "get_dataframe") else None
+            return feed.get_dataframe(symbol) if hasattr(feed, "get_dataframe") else None
+        if hasattr(feed, "get_dataframe"):
+            # 没有 fetch 方法但有 get_dataframe，尝试直接传入 symbol 获取
+            return feed.get_dataframe(symbol)
         return None
 
     def get_multiple_klines(
@@ -279,6 +281,23 @@ class DataService:
     def refresh_kline(self, symbol: str, timeframe: str = "1d") -> KlineResult:
         self.cache.invalidate(symbol, timeframe)
         return self.get_kline(symbol, timeframe)
+
+    def fetch(self, symbol: str, timeframe: str = "1d", days: int = 60) -> pd.DataFrame:
+        """获取单个标的的 K 线数据（供 MonitorAgent 使用）
+
+        Args:
+            symbol: 股票代码
+            timeframe: 时间周期，默认 "1d"
+            days: 获取最近 N 天的数据，默认 60
+
+        Returns:
+            DataFrame with OHLCV data
+        """
+        from datetime import datetime, timedelta
+        end = datetime.now().strftime("%Y-%m-%d")
+        start = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        result = self.get_kline(symbol, timeframe, start, end)
+        return result.data
 
     @property
     def _cache_dir(self) -> Path:

@@ -238,7 +238,7 @@ export default function Portfolio() {
         onCancel={() => { setEquitySymbol(null); setEquityCurveData(null) }}
         footer={null}
         width={700}
-        destroyOnClose
+        destroyOnHidden
       >
         {equityLoading ? <div style={{ textAlign: 'center', padding: 40 }}>加载中...</div> :
          equityCurveData ? <EquityChart data={equityCurveData.values} dates={equityCurveData.dates} height={300} /> :

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Row, Col, Card, Button, Typography, Tag, Alert, Skeleton, Dropdown, message } from 'antd'
+import { Row, Col, Card, Button, Typography, Tag, Alert, Skeleton, Dropdown } from 'antd'
+import { message } from '@/utils/message'
 import { ArrowCounterClockwise, DownloadSimple, FileHtml, FilePdf, FileText } from '@phosphor-icons/react'
 import { backtestApi } from '@/api/dashboard'
 import { analyzeBacktest, type StructuredInsight } from '@/api/ai'

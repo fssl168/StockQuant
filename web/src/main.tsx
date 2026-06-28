@@ -4,6 +4,17 @@ import { ConfigProvider, App as AntApp } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import App from './App'
 import 'antd/dist/reset.css'
+
+// 本地字体（@fontsource，完全离线，无需 Google Fonts CDN）
+import '@fontsource/inter/400.css'
+import '@fontsource/inter/500.css'
+import '@fontsource/inter/600.css'
+import '@fontsource/inter/700.css'
+import '@fontsource/jetbrains-mono/400.css'
+import '@fontsource/jetbrains-mono/500.css'
+import '@fontsource/jetbrains-mono/600.css'
+import '@fontsource/jetbrains-mono/700.css'
+
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

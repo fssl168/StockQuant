@@ -1,31 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Layout, Menu, Badge, Modal, Button, Dropdown, Avatar, Space, App as AntApp } from 'antd'
-import {
-  ChartPie,
-  Flask,
-  ChartBar,
-  ChatCenteredText,
-  Eye,
-  TrendUp,
-  Gear,
-  Code,
-  Database,
-  ArrowSquareOut,
-  CurrencyCircleDollar,
-  SlidersHorizontal,
-  Brain,
-  ShieldCheck,
-  Funnel,
-  Users,
-  House,
-  SignOut,
-  User,
-  CaretDown,
-  WarningCircle,
-  AppWindow,
-  XCircle,
-  ListChecks,
-} from '@phosphor-icons/react'
+import { messageSuccess, messageError, messageWarning } from '@/utils/message'
+import { ChartPie, Flask, ChartBar, ChatCenteredText, Eye, TrendUp, Gear, Code, Database, ArrowSquareOut, CurrencyCircleDollar, SlidersHorizontal, Brain, ShieldCheck, Funnel, Users, House, SignOut, User, CaretDown, WarningCircle, AppWindow, XCircle, ListChecks } from '@phosphor-icons/react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useNetworkStatus, getLatencyColorClass } from '@/hooks/useNetworkStatus'
@@ -372,7 +348,7 @@ export default function AppLayout({ children }: Props) {
         .map((p) => ({ symbol: p.symbol, shares: p.shares, price: p.price }))
 
       if (openPositions.length === 0) {
-        message.warning('当前无持仓可平')
+        messageWarning('当前无持仓可平')
         return
       }
 
@@ -382,11 +358,11 @@ export default function AppLayout({ children }: Props) {
       const failCount = results.length - successCount
 
       if (failCount === 0) {
-        message.success(`紧急平仓完成：成功平仓 ${successCount} 只`)
+        messageSuccess(`紧急平仓完成：成功平仓 ${successCount} 只`)
       } else if (successCount === 0) {
-        message.error(`紧急平仓失败：${failCount} 只持仓全部失败`)
+        messageError(`紧急平仓失败：${failCount} 只持仓全部失败`)
       } else {
-        message.warning(`部分平仓成功：${successCount} 只成功，${failCount} 只失败`)
+        messageWarning(`部分平仓成功：${successCount} 只成功，${failCount} 只失败`)
       }
       // 失败的明细写入控制台，便于排查
       if (failCount > 0) {
@@ -397,7 +373,7 @@ export default function AppLayout({ children }: Props) {
       await useTradingStore.getState().refreshAll()
     } catch (err) {
       console.error('紧急平仓失败:', err)
-      message.error(`紧急平仓异常：${(err as Error)?.message ?? '未知错误'}`)
+      messageError(`紧急平仓异常：${(err as Error)?.message ?? '未知错误'}`)
     } finally {
       setEmergencyClosing(false)
     }

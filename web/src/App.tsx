@@ -1,12 +1,22 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { Spin } from 'antd'
+import { Spin, App as AntApp } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AppLayout from './components/AppLayout'
 import { useAuthStore } from './stores/authStore'
 import Login from './pages/Login'
 import Forbidden from './pages/Forbidden'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { setMessageInstance } from './utils/message'
+
+// 初始化全局 message 实例的组件
+function MessageInit() {
+  const { message } = AntApp.useApp()
+  useEffect(() => {
+    setMessageInstance(message)
+  }, [message])
+  return null
+}
 
 // 创建 React Query 客户端
 const queryClient = new QueryClient({
@@ -87,11 +97,13 @@ function RoleRoute({
 
 /** 认证守卫 */
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, checkAuth } = useAuthStore()
+  const { isAuthenticated, checkAuth, initialAuthChecked } = useAuthStore()
   const location = useLocation()
 
   useEffect(() => {
-    checkAuth()
+    if (!initialAuthChecked) {
+      checkAuth()
+    }
     const onStorage = () => {
       if (!localStorage.getItem('auth_token')) {
         useAuthStore.setState({ token: null, user: null, isAuthenticated: false })
@@ -107,7 +119,12 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
       window.removeEventListener('storage', onStorage)
       clearInterval(timer)
     }
-  }, [checkAuth])
+  }, [checkAuth, initialAuthChecked])
+
+  // 等待初始 auth 验证完成，避免 token 未确认时发起需要认证的 API 请求
+  if (!initialAuthChecked) {
+    return null
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />
@@ -120,7 +137,9 @@ export default function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <Routes>
+          <AntApp>
+            <MessageInit />
+            <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/403" element={<Forbidden />} />
             <Route
@@ -161,6 +180,7 @@ export default function App() {
               }
             />
           </Routes>
+          </AntApp>
         </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>

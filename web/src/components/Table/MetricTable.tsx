@@ -31,10 +31,24 @@ const METRIC_GROUPS = [
 ]
 
 function formatMetric(key: string, value: unknown): React.ReactNode {
-  if (value === null || value === undefined) return <Text type="secondary">—</Text>
-
+  // 默认值：根据指标类型返回 0、0% 或 0天
   const num = typeof value === 'number' ? value : parseFloat(String(value))
-  if (isNaN(num)) return <Text>{String(value)}</Text>
+  if (isNaN(num) && value !== null && value !== undefined) return <Text type="secondary">{String(value)}</Text>
+  if (value === null || value === undefined) {
+    // 百分比指标
+    const isPct = [
+      'Annualized Return', '累计收益率', 'Win Rate', 'VaR (95%)', 'CVaR (95%)',
+      'Max Drawdown', 'Avg Drawdown', 'Avg Drawdown Recovery', 'Daily Volatility',
+      'Weekly Volatility', 'Volatility (Annual)', 'Total Return', 'Kelly %',
+      '超额收益率', 'Avg Trade Return',
+    ].includes(key)
+    if (isPct) return <Text style={{ color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}>0.00%</Text>
+    // 天数指标
+    const isDays = ['Max Drawdown Duration'].includes(key)
+    if (isDays) return <Text style={{ color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}>0 天</Text>
+    // 其他数值指标
+    return <Text style={{ color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}>0.00</Text>
+  }
 
   const isPct = [
     'Annualized Return', '累计收益率', 'Win Rate', 'VaR (95%)', 'CVaR (95%)',
@@ -70,7 +84,7 @@ export default function MetricTable({ metrics }: MetricTableProps) {
   return (
     <div style={{ padding: 16 }}>
       {METRIC_GROUPS.map((group) => {
-        const visibleRows = rows.filter((r) => group.keys.includes(r.key) && r.value != null)
+        const visibleRows = rows.filter((r) => group.keys.includes(r.key))
         if (visibleRows.length === 0) return null
         return (
           <div key={group.label} style={{ marginBottom: 16 }}>

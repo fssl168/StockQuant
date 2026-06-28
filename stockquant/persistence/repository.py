@@ -1182,7 +1182,7 @@ def save_user(engine_url: str, user_id: str, username: str, hashed_password: str
 
 
 def get_user(engine_url: str, user_id: str) -> Optional[Dict[str, Any]]:
-    """获取单个用户。"""
+    """获取单个用户（包含 hashed_password，供认证流程校验）。"""
     session_factory = _session_factory(engine_url)
 
     with session_factory() as session:
@@ -1191,6 +1191,7 @@ def get_user(engine_url: str, user_id: str) -> Optional[Dict[str, Any]]:
             return {
                 "id": user.id,
                 "username": user.username,
+                "hashed_password": user.hashed_password,
                 "roles": user.roles,
                 "disabled": bool(user.disabled),
                 "created_at": user.created_at.isoformat() if user.created_at else None,

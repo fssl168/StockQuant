@@ -33,6 +33,7 @@ async def get_dashboard_metrics() -> DashboardMetrics:
     返回聚合仪表盘指标。
     优先从 trading.py 获取实盘/模拟盘真实持仓数据；
     若无实盘数据，则从已完成回测任务中提取汇总数据。
+    持仓数据从数据库 persistence.models.Position 表补充。
     """
     # ── 优先：实盘/模拟盘真实持仓 ──────────────────────────────
     live_equity = 0.0
@@ -46,15 +47,46 @@ async def get_dashboard_metrics() -> DashboardMetrics:
         from stockquant.api.routers.trading import _portfolio
         acc = _portfolio.account
         positions = {s: p for s, p in _portfolio.positions.items() if p.quantity > 0}
+        pos_count = len(positions)
+        logger.info(f"dashboard: _portfolio positions={pos_count}, equity={acc.total_equity}, initial={acc.initial_cash}")
         if positions or acc.total_equity != acc.initial_cash:
             has_live_data = True
             live_equity = acc.total_equity
             live_pnl = acc.total_equity - acc.initial_cash
-            live_position_count = len(positions)
+            live_position_count = pos_count
             live_available_cash = acc.available_cash
             live_market_value = sum(p.market_value for p in positions.values())
     except Exception as e:
-        logger.debug(f"获取实盘数据失败，降级为回测数据: {e}")
+        logger.warning(f"获取实盘数据失败，降级为回测数据: {e}")
+
+    # ── 从数据库补充持仓（内存可能为空） ──────────────────────
+    db_pos_count = 0
+    try:
+        from stockquant.persistence.models import get_engine as _get_db_engine
+        from stockquant.persistence.models import _default_db_url as _default_db_url_str
+        from stockquant.persistence.models import Position as PositionORM
+        from sqlalchemy import select
+        from sqlalchemy.orm import Session
+
+        import os
+        db_url = os.environ.get("DATABASE_URL", _default_db_url_str)
+        engine = _get_db_engine(db_url)
+        logger.info(f"dashboard: db_url={db_url}")
+        with Session(engine) as session:
+            stmt = select(PositionORM).where(PositionORM.quantity > 0)
+            db_positions = session.execute(stmt).scalars().all()
+            db_pos_count = len(db_positions)
+            logger.info(f"dashboard: db positions={db_pos_count}")
+            if db_positions:
+                has_live_data = True
+                # 数据库持仓数量 + 内存持仓数量（去重）
+                live_position_count = db_pos_count
+                # 数据库暂无价格，用成本价估算市值
+                live_market_value = sum(p.quantity * p.cost_price for p in db_positions)
+    except Exception as e:
+        logger.warning(f"从数据库加载持仓失败: {e}")
+
+    logger.info(f"dashboard: has_live_data={has_live_data}, position_count={live_position_count}, db_positions={db_pos_count}")
 
     # ── 回测数据聚合 ──────────────────────────────────────────
     completed = [t for t in _tasks.values() if t.get("status") == "completed"]
@@ -115,11 +147,15 @@ async def get_dashboard_metrics() -> DashboardMetrics:
         total_pnl = live_pnl
         position_count = live_position_count
         data_source = "live"
+        available_cash = live_available_cash
+        market_value = live_market_value
     else:
         total_equity = bt_total_equity
         total_pnl = bt_total_pnl
         position_count = bt_position_count
         data_source = "backtest"
+        available_cash = 0
+        market_value = 0
 
     return {
         "total_equity": round(total_equity, 2),
@@ -132,8 +168,8 @@ async def get_dashboard_metrics() -> DashboardMetrics:
         "latest_backtest_status": latest_status,
         "latest_backtest_return": latest_return,
         "data_source": data_source,
-        "available_cash": round(live_available_cash, 2) if has_live_data else 0,
-        "market_value": round(live_market_value, 2) if has_live_data else 0,
+        "available_cash": round(available_cash, 2),
+        "market_value": round(market_value, 2),
     }
 
 

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Tabs, Button, Space, message, Typography, Divider, Card } from 'antd'
+import { Tabs, Button, Space, Typography, Divider, Card } from 'antd'
+import { message } from '@/utils/message'
 import { SaveOutlined, ExpandOutlined, CompressOutlined } from '@ant-design/icons'
 import { GeneralSettings, TradingSettings, AISettings, NotifierSettings, BrokerSettings, SoundSettings, DisplaySettings, RiskControlSettings } from '@/components/Settings'
 import { useAuthStore } from '@/stores/authStore'
@@ -74,14 +75,16 @@ export default function Settings(_props: SettingsProps) {
         const data = res.data as Record<string, unknown>
         
         const frontendValues: Record<string, unknown> = {}
-        Object.entries(data).forEach(([key, value]) => {
-          if (key === 'jwt' || key === 'system') return
-          const feKey = toFrontendKey(key)
-          frontendValues[feKey] = value
-        })
+        if (data && typeof data === 'object') {
+          Object.entries(data).forEach(([key, value]) => {
+            if (key === 'jwt' || key === 'system') return
+            const feKey = toFrontendKey(key)
+            frontendValues[feKey] = value
+          })
+        }
         
         // 处理嵌套的 system 配置
-        if (data.system && typeof data.system === 'object') {
+        if (data?.system && typeof data.system === 'object') {
           Object.entries(data.system as Record<string, unknown>).forEach(([key, value]) => {
             const feKey = toFrontendKey(`system.${key}`)
             frontendValues[feKey] = value
@@ -106,7 +109,7 @@ export default function Settings(_props: SettingsProps) {
       const backendValues: Record<string, unknown> = {}
       const systemValues: Record<string, unknown> = {}
 
-      Object.entries(values).forEach(([key, value]) => {
+      Object.entries(values ?? {}).forEach(([key, value]) => {
         const beKey = toBackendKey(key)
         if (beKey.startsWith('system.')) {
           systemValues[beKey.replace('system.', '')] = value

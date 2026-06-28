@@ -147,7 +147,7 @@ export default function AlertConfigPanel() {
         onCancel={() => { setCreateModal(false); setEditingRule(null) }}
         footer={null}
         width={560}
-        destroyOnClose
+        destroyOnHidden
       >
         <AlertRuleForm
           initialData={editingRule}

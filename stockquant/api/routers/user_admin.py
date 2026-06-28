@@ -104,7 +104,10 @@ async def create_user(
 
         roles = payload.get("roles", ["viewer"])
         if isinstance(roles, str):
-            roles = json.loads(roles)
+            try:
+                roles = json.loads(roles) if roles.strip() else []
+            except (json.JSONDecodeError, ValueError):
+                roles = []
         if not isinstance(roles, list) or not roles:
             roles = ["viewer"]
 
@@ -151,7 +154,10 @@ async def update_user(
         if "roles" in payload:
             roles = payload["roles"]
             if isinstance(roles, str):
-                roles = json.loads(roles)
+                try:
+                    roles = json.loads(roles) if roles.strip() else []
+                except (json.JSONDecodeError, ValueError):
+                    roles = []
             if not isinstance(roles, list) or not roles:
                 raise HTTPException(status_code=400, detail="roles 必须是非空列表")
             updates["roles"] = json.dumps(roles)

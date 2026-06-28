@@ -14,6 +14,8 @@
     "generate-api": "openapi --input http://localhost:8000/openapi.json --output ./src/generated --client axios --useOptions --useUnionTypes"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
     "@monaco-editor/react": "^4.7.0",
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.3.1",

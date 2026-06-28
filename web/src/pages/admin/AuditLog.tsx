@@ -85,7 +85,7 @@ export default function AuditLog() {
           <Text type="secondary" style={{ fontSize: 12 }}>查看系统操作审计记录</Text>
         </div>
         <Space>
-          <Button.Group size="small">
+          <Space.Compact size="small">
             <Button
               type={viewMode === 'mine' ? 'primary' : 'default'}
               onClick={() => setViewMode('mine')}
@@ -98,7 +98,7 @@ export default function AuditLog() {
             >
               全部日志
             </Button>
-          </Button.Group>
+          </Space.Compact>
         </Space>
       </div>
 

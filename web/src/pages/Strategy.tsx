@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Table, Button, Input, Card, Typography, Space, Modal, Tooltip, message, Select, InputNumber, Popconfirm } from 'antd'
+import { Table, Button, Input, Card, Typography, Space, Modal, Tooltip, Select, InputNumber, Popconfirm } from 'antd'
+import { message } from '@/utils/message'
 import { Plus, Code, Trash, Sparkle } from '@phosphor-icons/react'
 import client from '@/api/client'
 import { useStrategyStore } from '@/stores/strategyStore'

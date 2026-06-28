@@ -111,12 +111,16 @@ class DashboardMetrics(BaseSchemaModel):
 
     total_equity: float = 0.0
     daily_pnl: float = 0.0
+    position_count: int = 0
     sharpe: float = 0.0
     max_drawdown: float = 0.0
     total_trades: int = 0
     backtest_count: int = 0
     latest_backtest_status: str = ""
     latest_backtest_return: str = ""
+    data_source: str = ""
+    available_cash: float = 0.0
+    market_value: float = 0.0
 
 
 # ====================================================================
