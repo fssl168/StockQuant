@@ -24,16 +24,35 @@ depends_on = None
 
 
 def upgrade() -> None:
+    import sqlalchemy as sa
+    bind = op.get_bind()
+
+    # 先检查索引是否已存在
+    inspector = sa.inspect(bind)
+    existing_indexes = set()
+    if "orders" in inspector.get_table_names():
+        for idx in inspector.get_indexes("orders"):
+            existing_indexes.add(idx["name"])
+
     # orders 表复合索引 (user_id, status) — 优化按用户筛选特定状态订单的查询
-    try:
-        op.create_index(
-            "ix_orders_user_status",
-            "orders",
-            ["user_id", "status"],
-        )
-        print("[006_add_indexes] ix_orders_user_status created")
-    except Exception as exc:
-        print(f"[006_add_indexes] ix_orders_user_status skipped: {exc}")
+    if "ix_orders_user_status" in existing_indexes:
+        print("[006_add_indexes] ix_orders_user_status already exists, skip")
+    else:
+        try:
+            op.execute("SAVEPOINT sp_orders_user_status")
+            op.create_index(
+                "ix_orders_user_status",
+                "orders",
+                ["user_id", "status"],
+            )
+            op.execute("RELEASE SAVEPOINT sp_orders_user_status")
+            print("[006_add_indexes] ix_orders_user_status created")
+        except Exception as exc:
+            try:
+                op.execute("ROLLBACK TO SAVEPOINT sp_orders_user_status")
+            except Exception:
+                pass
+            print(f"[006_add_indexes] ix_orders_user_status skipped: {exc}")
 
     # positions 表已有 uq_position_user_symbol 唯一约束，无需重复创建
     # 如需额外非唯一索引可在此添加，但目前唯一约束已覆盖 (user_id, symbol) 查询
@@ -41,6 +60,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     try:
+        op.execute("SAVEPOINT sp_drop_idx")
         op.drop_index("ix_orders_user_status", table_name="orders")
+        op.execute("RELEASE SAVEPOINT sp_drop_idx")
     except Exception:
-        pass
+        try:
+            op.execute("ROLLBACK TO SAVEPOINT sp_drop_idx")
+        except Exception:
+            pass

@@ -18,8 +18,33 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.drop_index("ix_pending_order_user_id", table_name="pending_orders")
-    op.drop_table("pending_orders")
+    bind = op.get_bind()
+
+    # 检查表是否存在
+    inspector = sa.inspect(bind)
+    if "pending_orders" not in inspector.get_table_names():
+        print("[004_drop_pending_orders] pending_orders table does not exist, skip")
+        return
+
+    # 获取现有索引并删除
+    indexes = inspector.get_indexes("pending_orders")
+    for idx in indexes:
+        idx_name = idx["name"]
+        # 跳过主键索引
+        if idx.get("unique") and idx.get("name", "").endswith("_pkey"):
+            continue
+        try:
+            op.drop_index(idx_name, table_name="pending_orders")
+            print(f"[004_drop_pending_orders] dropped index: {idx_name}")
+        except Exception as exc:
+            print(f"[004_drop_pending_orders] drop index {idx_name} skipped: {exc}")
+
+    # 删除表
+    try:
+        op.drop_table("pending_orders")
+        print("[004_drop_pending_orders] dropped table: pending_orders")
+    except Exception as exc:
+        print(f"[004_drop_pending_orders] drop table skipped: {exc}")
 
 
 def downgrade() -> None:

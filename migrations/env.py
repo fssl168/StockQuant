@@ -27,6 +27,12 @@ config = context.config
 # Override sqlalchemy.url from config if available
 db_url = get_config().database.url
 if db_url:
+    # Convert async driver to sync driver for Alembic
+    # asyncpg -> psycopg2 (PostgreSQL sync driver)
+    if db_url.startswith("postgresql+asyncpg://"):
+        db_url = db_url.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+    elif db_url.startswith("postgresql+asyncmy://"):
+        db_url = db_url.replace("postgresql+asyncmy://", "postgresql+pymysql://", 1)
     config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
