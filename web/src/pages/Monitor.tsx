@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Table, Button, Input, Card, Row, Col, Typography, Tag, Space, Modal, message, Tooltip } from 'antd'
 import { Plus, Play, Stop, Trash, Sparkle, ChartBar, Lightning } from '@phosphor-icons/react'
 import { useMarketStore } from '@/stores/marketStore'
@@ -9,6 +9,8 @@ import { useNotificationStore } from '@/stores/notificationStore'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useNetworkStatus } from '@/hooks/useNetworkStatus'
 import { useTickLevelRefresh } from '@/hooks/useTickLevelRefresh'
+import { useInfoFilter } from '@/hooks/useInfoFilter'
+import { useAlertStore } from '@/stores/alertStore'
 import StockTicker from '@/components/Monitor/StockTicker'
 import RealtimeKline from '@/components/Chart/RealtimeKline'
 import SentimentPanel from '@/components/Monitor/SentimentPanel'
@@ -33,6 +35,9 @@ export default function Monitor() {
   const notifications = useNotificationStore((s) => s.notifications)
   const [livePrices, setLivePrices] = useState<Record<string, { price: number; change: number }>>({})
   const priceTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // 信息过滤：根据 infoFilter 配置决定非核心面板是否渲染
+  const { isVisible: isPanelVisible } = useInfoFilter()
 
   // Task 2.5: 收盘总结
   const [closingSummary, setClosingSummary] = useState('')
@@ -150,6 +155,8 @@ export default function Monitor() {
         newPrices[sym] = quote
       }
       setLivePrices(newPrices)
+      // P1-8: 真实预警触发管线 — 收到行情后检查预警规则
+      useAlertStore.getState().checkAndTriggerAlerts(newPrices)
     } else if (latest.type === 'alert') {
       const data = latest.data as { title?: string; message?: string; symbol?: string; type?: string; description?: string }
       // Task 2.4: 添加到通知 store
@@ -311,6 +318,46 @@ export default function Monitor() {
       setKlineLoading(false)
     }
   }
+
+  // K线分段加载：滚动到左边界时加载更早历史数据
+  const handleKlineLoadMore = async (direction: 'left' | 'right') => {
+    if (!klineSymbol || !klineData || klineData.length === 0) return []
+    if (direction === 'left') {
+      // 加载更早的历史数据
+      const earliestDate = klineData[0]?.date
+      if (!earliestDate) return []
+      try {
+        const start = new Date(new Date(earliestDate).getTime() - 90 * 86400000).toISOString().slice(0, 10)
+        const end = earliestDate
+        const result = await dataApi.fetchKline(klineSymbol, 'alphafeed', start, end)
+        const rawData = result?.data ?? result
+        const moreData = Array.isArray(rawData) ? rawData : []
+        if (moreData.length > 0) {
+          // 追加到 klineData 前面
+          setKlineData((prev) => [...moreData, ...prev])
+        }
+        return moreData
+      } catch {
+        return []
+      }
+    }
+    // right 方向：加载最新数据（预加载用）
+    return []
+  }
+
+  // 基于最近 K 线计算简单支撑/阻力位（近30根高低点）
+  const klineKeyLevels = useMemo<{ price: number; type: 'support' | 'resistance' }[]>(() => {
+    if (!klineData || klineData.length < 10) return []
+    const recent = klineData.slice(-30)
+    const highs = recent.map((d: any) => d.high)
+    const lows = recent.map((d: any) => d.low)
+    const resistance = Math.max(...highs)
+    const support = Math.min(...lows)
+    return [
+      { price: resistance, type: 'resistance' as const },
+      { price: support, type: 'support' as const },
+    ]
+  }, [klineData])
 
   const monitorColumns = [
     { title: '代码', dataIndex: 'symbol', key: 'symbol', width: 120, render: (s: string) => (
@@ -606,14 +653,20 @@ export default function Monitor() {
           </Card>
 
           {/* Alert rules — 由 AlertConfigPanel 接管，支持 4 种预警类型 CRUD */}
-          <div style={{ marginTop: 12 }}>
-            <AlertConfigPanel />
-          </div>
+          {/* 信息过滤：alerts 面板根据 infoFilter 配置决定是否渲染 */}
+          {isPanelVisible('alerts' as never) && (
+            <div style={{ marginTop: 12 }}>
+              <AlertConfigPanel />
+            </div>
+          )}
 
           {/* Sentiment monitoring */}
-          <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>情绪监控</span>} style={{ marginTop: 12 }}>
-            <SentimentPanel symbol={selectedSymbol} height={250} />
-          </Card>
+          {/* 信息过滤：sentiment 面板根据 infoFilter 配置决定是否渲染 */}
+          {isPanelVisible('sentiment' as never) && (
+            <Card size="small" title={<span style={{ fontSize: 12, fontWeight: 600 }}>情绪监控</span>} style={{ marginTop: 12 }}>
+              <SentimentPanel symbol={selectedSymbol} height={250} />
+            </Card>
+          )}
         </Col>
       </Row>
 
@@ -628,7 +681,13 @@ export default function Monitor() {
         {klineLoading ? (
           <div style={{ textAlign: 'center', padding: 40 }}>加载中...</div>
         ) : klineData.length > 0 ? (
-          <RealtimeKline symbol={klineSymbol!} data={klineData} height={400} />
+          <RealtimeKline
+            symbol={klineSymbol!}
+            data={klineData}
+            height={400}
+            onLoadMore={handleKlineLoadMore}
+            keyLevels={klineKeyLevels}
+          />
         ) : (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-tertiary)' }}>暂无K线数据</div>
         )}

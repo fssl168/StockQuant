@@ -259,36 +259,41 @@ body {
   --ant-color-info: #60a5fa;
 }
 
-/* ── Key-Level Flash (机构级价位突破闪烁) ─────────────────── */
+/* ── Key-Level Flash (机构级价位突破闪烁) ───────────────────
+ * P1-6: 与 styles/key-level-flash.scss 对齐
+ * - key-level-flash       绿色（上涨突破支撑位）
+ * - key-level-flash-danger 红色（下跌突破阻力位）
+ * 时长：0.8s × 3 = 2.4s（与 RealtimeKline/OrderBook 中的 FLASH_DURATION_MS 对齐）
+ */
 
 @keyframes key-level-flash {
   0%, 100% {
-    border-color: var(--color-brand-primary);
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+    border-color: transparent;
+    box-shadow: none;
   }
-  50% {
-    border-color: rgba(59, 130, 246, 0.2);
-    box-shadow: 0 0 0px transparent;
+  25%, 75% {
+    border-color: var(--color-success);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
   }
 }
 
 @keyframes key-level-flash-danger {
   0%, 100% {
-    border-color: var(--color-danger);
-    box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+    border-color: transparent;
+    box-shadow: none;
   }
-  50% {
-    border-color: rgba(239, 68, 68, 0.2);
-    box-shadow: 0 0 0px transparent;
+  25%, 75% {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
   }
 }
 
 .key-level-flash {
-  animation: key-level-flash 1.2s ease-in-out 3;
+  animation: key-level-flash 0.8s ease-in-out 3;
 }
 
 .key-level-flash-danger {
-  animation: key-level-flash-danger 1.2s ease-in-out 3;
+  animation: key-level-flash-danger 0.8s ease-in-out 3;
 }
 
 /* Splitter handle — 由 institutional-grid.scss 提供 .institutional-grid 和 [data-zone] 样式 */

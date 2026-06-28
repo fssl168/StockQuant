@@ -1,5 +1,5 @@
 /**
- * Order splitter configuration component.
+ * Order splitter configuration + execution component.
  *
  * Supports three strategies:
  * - 冰山订单 (Iceberg): showQty / hiddenQty
@@ -7,9 +7,14 @@
  * - 自定义 (Custom): free-form quantity input per slice
  *
  * Displays estimated submission count and a preview of the slice breakdown.
+ *
+ * When `orderConfig` and `placeOrder` are supplied, an "执行拆单" button is
+ * shown. Clicking it spawns an `OrderSplitterScheduler` that submits each
+ * slice sequentially; progress (filled / failed / total) is shown live.
+ * Cancel clears pending timers — an in-flight request is allowed to finish.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Card,
   Input,
@@ -22,15 +27,27 @@ import {
   Row,
   Col,
   Table,
+  Button,
+  Progress,
+  Statistic,
 } from 'antd'
 import {
   Lightning,
   Clock,
   Repeat,
   FileText,
+  Play,
+  Stop,
 } from '@phosphor-icons/react'
 import { splitIceberg, type IcebergSlice } from '@/utils/icebergOrder'
 import { splitByTime } from '@/utils/timeSlicer'
+import {
+  OrderSplitterScheduler,
+  type SplitOrderSlice,
+  type SchedulerOrderConfig,
+  type PlaceOrderFn,
+  type SplitterProgress,
+} from '@/utils/orderSplitterScheduler'
 
 const { Text } = Typography
 
@@ -42,11 +59,29 @@ interface OrderSplitterProps {
 
   /** Optional: pre-selected strategy */
   defaultStrategy?: StrategyType
+
+  /**
+   * Order config for execution. When omitted, the "执行拆单" button is
+   * hidden (config-only mode, useful for preview/planning).
+   */
+  orderConfig?: SchedulerOrderConfig
+
+  /**
+   * placeOrder function (must return a Promise resolving to `{ id }`).
+   * Required to enable execution.
+   */
+  placeOrder?: PlaceOrderFn
+
+  /** Optional callback fired when execution completes (success or cancel). */
+  onComplete?: (progress: SplitterProgress) => void
 }
 
 export default function OrderSplitter({
   totalQty,
   defaultStrategy = 'iceberg',
+  orderConfig,
+  placeOrder,
+  onComplete,
 }: OrderSplitterProps) {
   const [strategy, setStrategy] = useState<StrategyType>(defaultStrategy)
 
@@ -63,6 +98,19 @@ export default function OrderSplitter({
 
   // Custom state
   const [customQty, setCustomQty] = useState<string>('')
+
+  // --- Execution state (P2-11 integration) ---
+  const schedulerRef = useRef<OrderSplitterScheduler | null>(null)
+  const [progress, setProgress] = useState<SplitterProgress | null>(null)
+  const [running, setRunning] = useState(false)
+
+  // Cancel any pending scheduler when the component unmounts.
+  useEffect(() => {
+    return () => {
+      schedulerRef.current?.cancel()
+      schedulerRef.current = null
+    }
+  }, [])
 
   // --- Iceberg ---
   const icebergSlices = useMemo<IcebergSlice[]>(() => {
@@ -104,6 +152,58 @@ export default function OrderSplitter({
     () => customParts.reduce((sum, n) => sum + n, 0),
     [customParts],
   )
+
+  /**
+   * Build the execution slice plan from the currently-active strategy.
+   * - Iceberg: flatten to {qty} (visibility flag is informational only).
+   * - Time-sliced: pass through (already SplitOrderSlice-shaped).
+   * - Custom: wrap each qty into a slice.
+   */
+  const slicesForExecution = useMemo<readonly SplitOrderSlice[]>(() => {
+    switch (strategy) {
+      case 'iceberg':
+        return icebergSlices.map((s) => ({ qty: s.qty }))
+      case 'timeSliced':
+        return timeSlices
+      case 'custom':
+        return customParts.map((qty) => ({ qty }))
+      default:
+        return []
+    }
+  }, [strategy, icebergSlices, timeSlices, customParts])
+
+  const canExecute = !!orderConfig && !!placeOrder && slicesForExecution.length > 0 && !running
+
+  const handleExecute = () => {
+    if (!orderConfig || !placeOrder) return
+    if (slicesForExecution.length === 0) return
+    // Build a fresh scheduler — defensive copy inside the constructor.
+    const scheduler = new OrderSplitterScheduler(
+      orderConfig,
+      slicesForExecution,
+      placeOrder,
+      {
+        onProgress: (p) => setProgress(p),
+        onComplete: (p) => {
+          setProgress(p)
+          setRunning(false)
+          onComplete?.(p)
+        },
+        onError: (_err, slice) => {
+          // Surface a message but keep going — scheduler already records it.
+          console.warn('[OrderSplitter] slice failed:', slice.sequence, slice.error)
+        },
+      },
+    )
+    schedulerRef.current = scheduler
+    setRunning(true)
+    setProgress(scheduler.getProgress())
+    scheduler.start()
+  }
+
+  const handleCancel = () => {
+    schedulerRef.current?.cancel()
+  }
 
   // --- Preview table columns ---
   const icebergColumns = [
@@ -477,6 +577,114 @@ export default function OrderSplitter({
           </Space>
         )}
       </Space>
+
+      {/* --- Execution panel (P2-11) --- */}
+      {orderConfig && placeOrder && (
+        <div
+          style={{
+            marginTop: 12,
+            paddingTop: 12,
+            borderTop: '1px dashed var(--color-border-default)',
+          }}
+        >
+          <Space direction="vertical" style={{ width: '100%' }} size={8}>
+            <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+              <Text strong style={{ fontSize: 12 }}>
+                <Play size={12} weight="fill" style={{ marginRight: 4, color: 'var(--color-brand-primary)' }} />
+                执行拆单
+              </Text>
+              <Space size={6}>
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<Play size={12} weight="fill" />}
+                  disabled={!canExecute}
+                  onClick={handleExecute}
+                >
+                  执行
+                </Button>
+                <Button
+                  size="small"
+                  danger
+                  icon={<Stop size={12} weight="fill" />}
+                  disabled={!running}
+                  onClick={handleCancel}
+                >
+                  取消
+                </Button>
+              </Space>
+            </Space>
+
+            {progress && (
+              <>
+                <Progress
+                  percent={
+                    progress.totalSlices === 0
+                      ? 0
+                      : Math.round((progress.completedSlices / progress.totalSlices) * 100)
+                  }
+                  status={
+                    progress.isCancelled
+                      ? 'exception'
+                      : progress.failedSlices > 0
+                        ? 'active'
+                        : progress.completedSlices === progress.totalSlices
+                          ? 'success'
+                          : 'active'
+                  }
+                  size="small"
+                  format={() =>
+                    `${progress.completedSlices}/${progress.totalSlices} 笔` +
+                    (progress.failedSlices > 0 ? `（失败 ${progress.failedSlices}）` : '')
+                  }
+                />
+                <Row gutter={12}>
+                  <Col span={8}>
+                    <Statistic
+                      title="已成交"
+                      value={progress.filledQty}
+                      suffix="股"
+                      valueStyle={{ fontSize: 14, fontFamily: 'var(--font-mono)' }}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title="总量"
+                      value={progress.totalQty}
+                      suffix="股"
+                      valueStyle={{ fontSize: 14, fontFamily: 'var(--font-mono)' }}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title="状态"
+                      value={
+                        progress.isCancelled
+                          ? '已取消'
+                          : progress.isRunning
+                            ? '运行中'
+                            : progress.failedSlices > 0
+                              ? '部分失败'
+                              : '已完成'
+                      }
+                      valueStyle={{
+                        fontSize: 14,
+                        color: progress.isCancelled
+                          ? '#ef4444'
+                          : progress.isRunning
+                            ? '#3b82f6'
+                            : progress.failedSlices > 0
+                              ? '#f59e0b'
+                              : '#10b981',
+                      }}
+                    />
+                  </Col>
+                </Row>
+              </>
+            )}
+          </Space>
+        </div>
+      )}
     </Card>
   )
 }

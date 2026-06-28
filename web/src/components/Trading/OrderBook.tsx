@@ -1,6 +1,6 @@
-﻿
 
-import { useMemo } from 'react'
+
+import { useMemo, useEffect, useRef, useState } from 'react'
 import { Card, Typography, Row, Col } from 'antd'
 import { ArrowUp, ArrowDown } from '@phosphor-icons/react'
 
@@ -21,10 +21,26 @@ export interface OrderBookData {
   timestamp?: number       // 更新时间戳
 }
 
+/** 关键价位（与 RealtimeKline 的 KeyLevel 对齐） */
+export interface OrderBookKeyLevel {
+  price: number
+  type: 'support' | 'resistance'
+}
+
 interface OrderBookProps {
   data: OrderBookData
   height?: number
+  /** P1-6: 关键价位列表 — 当 lastPrice 突破时，匹配的盘口行应用闪烁动画 */
+  keyLevels?: OrderBookKeyLevel[]
 }
+
+/**
+ * 闪烁动画持续时间 — 与 key-level-flash.scss 对齐：
+ * `animation: key-level-flash 0.8s ease-in-out 3` = 2.4s
+ */
+const FLASH_DURATION_MS = 2400
+/** 价格匹配容差：盘口价与关键价位相差 ≤ 0.01% 视为同一价位 */
+const PRICE_MATCH_TOLERANCE = 0.0001
 
 // 模拟数据生成器（实际项目中替换为 WebSocket 推送）
 export function generateMockOrderBook(lastPrice: number = 100.0): OrderBookData {
@@ -79,7 +95,7 @@ function formatPrice(price: number | undefined): string {
   return price.toFixed(2)
 }
 
-export default function OrderBook({ data, height = 320 }: OrderBookProps) {
+export default function OrderBook({ data, height = 320, keyLevels }: OrderBookProps) {
   const { bids, asks, lastPrice, change, changePercent } = data
 
   // 计算最大累计量用于进度条宽度
@@ -94,6 +110,69 @@ export default function OrderBook({ data, height = 320 }: OrderBookProps) {
     return change > 0 ? '#e74c3c' : change < 0 ? '#27ae60' : '#666'
   }, [change])
 
+  // P1-6: 关键价位突破闪烁状态 — 记录哪些行号需要应用闪烁 class
+  // key 格式：`${'bid'|'ask'}-${index}` → 'flash' | 'flash-danger'
+  const [flashRows, setFlashRows] = useState<Record<string, 'flash' | 'flash-danger'>>({})
+  // 已闪烁过的价位集合（避免重复触发）
+  const flashedLevelsRef = useRef<Set<string>>(new Set())
+  // 行级定时器引用（key → timer），避免同一行的多个定时器冲突
+  const flashTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  // P1-6: 检测 lastPrice 突破关键价位，匹配盘口行并应用闪烁
+  useEffect(() => {
+    if (!keyLevels || keyLevels.length === 0 || lastPrice == null) return
+
+    for (const level of keyLevels) {
+      const levelKey = `${level.type}@${level.price}`
+      if (flashedLevelsRef.current.has(levelKey)) continue
+
+      // 突破判定（与 RealtimeKline 对齐）
+      const supportBreak = level.type === 'support' && lastPrice > level.price
+      const resistanceBreak = level.type === 'resistance' && lastPrice < level.price
+      if (!supportBreak && !resistanceBreak) continue
+
+      flashedLevelsRef.current.add(levelKey)
+      const flashKind: 'flash' | 'flash-danger' = supportBreak ? 'flash' : 'flash-danger'
+
+      // 在盘口中找到与该关键价位匹配的行（价格容差 0.01%）
+      const matchTolerance = Math.max(level.price * PRICE_MATCH_TOLERANCE, 0.01)
+      const lists: Array<{ type: 'bid' | 'ask'; levels: OrderBookLevel[] }> = [
+        { type: 'bid', levels: bids },
+        { type: 'ask', levels: asks },
+      ]
+      for (const { type, levels } of lists) {
+        for (let i = 0; i < levels.length; i++) {
+          if (Math.abs(levels[i].price - level.price) <= matchTolerance) {
+            const rowKey = `${type}-${i}`
+            // 清除该行可能存在的旧定时器
+            const oldTimer = flashTimersRef.current.get(rowKey)
+            if (oldTimer) clearTimeout(oldTimer)
+            // 应用闪烁 class
+            setFlashRows((prev) => ({ ...prev, [rowKey]: flashKind }))
+            // 设定定时器在动画结束后移除 class
+            const timer = setTimeout(() => {
+              setFlashRows((prev) => {
+                const next = { ...prev }
+                delete next[rowKey]
+                return next
+              })
+              flashTimersRef.current.delete(rowKey)
+            }, FLASH_DURATION_MS)
+            flashTimersRef.current.set(rowKey, timer)
+          }
+        }
+      }
+    }
+  }, [lastPrice, keyLevels, bids, asks])
+
+  // P1-6: 组件卸载时清除所有定时器
+  useEffect(() => {
+    return () => {
+      flashTimersRef.current.forEach((t) => clearTimeout(t))
+      flashTimersRef.current.clear()
+    }
+  }, [])
+
   const renderRow = (
     level: OrderBookLevel,
     type: 'bid' | 'ask',
@@ -104,10 +183,19 @@ export default function OrderBook({ data, height = 320 }: OrderBookProps) {
     const textColor = type === 'bid' ? '#e74c3c' : '#27ae60'
     const align = type === 'bid' ? 'left' : 'right'
 
+    // P1-6: 根据突破状态应用 key-level-flash class
+    const rowKey = `${type}-${index}`
+    const flashKind = flashRows[rowKey]
+    const flashClass = flashKind === 'flash'
+      ? 'key-level-flash'
+      : flashKind === 'flash-danger'
+        ? 'key-level-flash-danger'
+        : ''
+
     return (
       <Row
         key={`${type}-${index}`}
-        className="orderbook-row"
+        className={`orderbook-row${flashClass ? ` ${flashClass}` : ''}`}
         style={{ position: 'relative', margin: '2px 0' }}
       >
         {/* 背景进度条 */}
@@ -122,19 +210,19 @@ export default function OrderBook({ data, height = 320 }: OrderBookProps) {
             zIndex: 0,
           }}
         />
-        
+
         {/* 价格 */}
         <Col span={8} style={{ textAlign: align, zIndex: 1, padding: '0 8px' }}>
           <Text strong style={{ color: textColor }}>
             {formatPrice(level.price)}
           </Text>
         </Col>
-        
+
         {/* 数量 */}
         <Col span={8} style={{ textAlign: 'center', zIndex: 1 }}>
           <Text>{formatVolume(level.volume)}</Text>
         </Col>
-        
+
         {/* 累计 */}
         <Col span={8} style={{ textAlign: type === 'bid' ? 'right' : 'left', zIndex: 1, padding: '0 8px' }}>
           <Text type="secondary" style={{ fontSize: 12 }}>

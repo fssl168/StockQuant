@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactECharts from 'echarts-for-react'
 import type EChartsReact from 'echarts-for-react'
+import { useChartPreload } from '@/hooks/useChartPreload'
 
 interface KlineItem {
   date: string
@@ -54,8 +55,12 @@ const TICK_JITTER_RATIO = 0.005
 const DEFAULT_VISIBLE_BARS = 60
 /** dataZoom 起始位置 ≤ 此百分比时触发左边界加载 */
 const LOAD_MORE_THRESHOLD = 0.05
-/** 闪烁动画持续时间（与 key-level-flash.scss 中的 1.2s 对齐） */
-const FLASH_DURATION_MS = 1200
+/**
+ * 闪烁动画持续时间 — 必须与 key-level-flash.scss 实际时长对齐：
+ * `animation: key-level-flash 0.8s ease-in-out 3` = 0.8s × 3 = 2.4s = 2400ms
+ * 之前设为 1200ms 会导致动画在第 2 个循环就被移除（P1-6 修复）
+ */
+const FLASH_DURATION_MS = 2400
 
 export default function RealtimeKline({
   symbol,
@@ -68,7 +73,31 @@ export default function RealtimeKline({
   enableSegmentedLoad = true,
 }: RealtimeKlineProps) {
   const chartRef = useRef<EChartsReact>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
+  // 集成 useChartPreload：进入视口时触发 onVisible，离开触发 onHide
+  // 用 useChartPreload 的 ref 替代原 containerRef，确保可见性检测与容器绑定一致
+  const preloadedRef = useRef(false)
+  const { ref: containerRef } = useChartPreload({
+    enabled: true,
+    onVisible: () => {
+      // 图表可见时恢复动画并 resize 确保正确渲染
+      const chart = chartRef.current?.getEchartsInstance()
+      if (chart) {
+        chart.setOption({ animation: true })
+        chart.resize()
+      }
+      // 首次可见时预加载右侧（最新）数据，避免阻塞首屏渲染
+      if (preloadedRef.current) return
+      preloadedRef.current = true
+      if (onLoadMore && enableSegmentedLoad) {
+        onLoadMore('right').catch(() => { /* 预加载失败静默处理 */ })
+      }
+    },
+    onHide: () => {
+      // 图表不可见时暂停动画，节省性能
+      const chart = chartRef.current?.getEchartsInstance()
+      if (chart) chart.setOption({ animation: false })
+    },
+  })
 
   const [simPrice, setSimPrice] = useState<number | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -83,6 +112,8 @@ export default function RealtimeKline({
 
   // 已闪烁过的价位集合（避免重复闪烁）
   const flashedLevelsRef = useRef<Set<string>>(new Set())
+  // P1-6: 当前闪烁动画的定时器引用 — 重新触发前必须清除，否则旧定时器会提前移除新动画的 class
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // 基准收盘价：取日线最后一根的 close
   const baseClose = useMemo(() => {
@@ -143,15 +174,32 @@ export default function RealtimeKline({
       if (supportBreak || resistanceBreak) {
         flashedLevelsRef.current.add(key)
         const flashClass = supportBreak ? 'key-level-flash' : 'key-level-flash-danger'
+        // P1-6: 移除可能残留的旧 class，并清除上一个未完成的定时器，避免新旧动画冲突
+        container.classList.remove('key-level-flash', 'key-level-flash-danger')
+        if (flashTimerRef.current) {
+          clearTimeout(flashTimerRef.current)
+          flashTimerRef.current = null
+        }
         container.classList.add(flashClass)
-        setTimeout(() => {
+        flashTimerRef.current = setTimeout(() => {
           container.classList.remove(flashClass)
+          flashTimerRef.current = null
         }, FLASH_DURATION_MS)
         // 同一价位只闪一次
         break
       }
     }
   }, [tickPrice, keyLevels])
+
+  // P1-6: 组件卸载时清除定时器，避免内存泄漏
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) {
+        clearTimeout(flashTimerRef.current)
+        flashTimerRef.current = null
+      }
+    }
+  }, [])
 
   // MA 基于展示数据
   const maData = useMemo(() => {

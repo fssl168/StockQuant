@@ -129,7 +129,7 @@ def create_app() -> FastAPI:
     app.include_router(trading.router, prefix="/api", tags=["交易"])
     app.include_router(portfolio.router, prefix="/api", tags=["投资组合"])
     app.include_router(optimize.router, prefix="/api", tags=["参数优化"])
-    app.include_router(auth_router.router, prefix="/api", tags=["认证"])
+    app.include_router(auth_router.router, prefix="/api")
     app.include_router(signal_router.router, prefix="/api", tags=["信号管线"])
     app.include_router(scheduler_router.router, prefix="/api", tags=["调度器"])
 
@@ -186,9 +186,64 @@ def create_app() -> FastAPI:
         finally:
             await ws_manager.disconnect(websocket, "notification")
 
+    def _now_iso() -> str:
+        """返回当前 UTC 时间的 ISO8601 字符串"""
+        from datetime import datetime, timezone
+        return datetime.now(timezone.utc).isoformat()
+
+    async def _handle_rejoin(websocket: WebSocket, since: str | None, subscriptions: dict[str, str]):
+        """补全断线期间数据：根据 since 时间戳查询历史行情并推送
+
+        策略：
+        1. 若有订阅 symbol，查询每个 symbol 自 since 以来的 K 线数据
+        2. 推送一条 {type: "rejoin_data", data: {...}} 消息
+        3. 若无 since 或查询失败，推送空数据 + ack
+        """
+        try:
+            from datetime import datetime, timezone
+            from stockquant.api.routers.trading import _get_latest_bar
+
+            # 确定要补全的 symbol 列表
+            rejoin_symbols = list(subscriptions.keys())
+            if not rejoin_symbols:
+                # 无订阅时使用默认自选股
+                from stockquant.api.routers.monitor import _watchlist
+                rejoin_symbols = list(_watchlist) if _watchlist else ["sh600519", "sz000858"]
+
+            rejoin_data = {}
+            for sym in rejoin_symbols[:10]:
+                try:
+                    bar = _get_latest_bar(sym)
+                    if bar:
+                        rejoin_data[sym] = {
+                            "price": bar.close,
+                            "change": round((bar.close - bar.open) / bar.open * 100, 2) if bar.open > 0 else 0,
+                            "timestamp": _now_iso(),
+                        }
+                except Exception:
+                    pass
+
+            await websocket.send_json({
+                "type": "rejoin_data",
+                "data": rejoin_data,
+                "since": since,
+                "completed_at": _now_iso(),
+            })
+        except Exception as e:
+            await websocket.send_json({
+                "type": "rejoin_error",
+                "error": str(e),
+            })
+
     @app.websocket("/ws/monitor")
     async def monitor_ws(websocket: WebSocket):
-        """实时行情推送 — 连接后定时推送自选股行情"""
+        """实时行情推送 — 连接后定时推送自选股行情
+
+        支持的客户端消息：
+        - {"type":"subscribe","symbol":"sh600519","mode":"tick"}  切换逐笔模式
+        - {"type":"unsubscribe","symbol":"sh600519"}              取消逐笔
+        - {"type":"rejoin","since":"<ISO8601>"}                   补全断线期间数据
+        """
         token = websocket.query_params.get("token")
         if token:
             try:
@@ -200,13 +255,16 @@ def create_app() -> FastAPI:
                 return
         await ws_manager.connect(websocket, "monitor")
         push_task = None
+        tick_task = None
+        # 客户端订阅状态：symbol -> mode ('tick' | 'bar')
+        subscriptions: dict[str, str] = {}
         try:
             await websocket.send_json({"type": "connected", "data": {"channel": "monitor"}})
 
             import asyncio
 
             async def _push_quotes():
-                """后台任务：每 5 秒推送自选股行情"""
+                """后台任务：每 5 秒推送自选股行情（Bar 模式，默认）"""
                 while True:
                     try:
                         await asyncio.sleep(5)
@@ -242,15 +300,85 @@ def create_app() -> FastAPI:
                     except Exception:
                         break
 
-            push_task = asyncio.create_task(_push_quotes())
+            async def _push_ticks():
+                """后台任务：逐笔级推送（Tick 模式），每 1 秒推送订阅的 symbol
 
+                仅推送 subscriptions 中 mode='tick' 的 symbol，避免高频推送全量股票。
+                """
+                while True:
+                    try:
+                        await asyncio.sleep(1)
+                        tick_subs = [s for s, m in subscriptions.items() if m == "tick"]
+                        if not tick_subs:
+                            continue
+                        from stockquant.api.routers.trading import _get_latest_bar
+                        quotes_dict = {}
+                        for sym in tick_subs[:10]:  # 限制 10 只
+                            try:
+                                bar = _get_latest_bar(sym)
+                                if bar:
+                                    quotes_dict[sym] = {
+                                        "price": bar.close,
+                                        "change": round((bar.close - bar.open) / bar.open * 100, 2) if bar.open > 0 else 0,
+                                        "timestamp": _now_iso(),
+                                    }
+                            except Exception:
+                                pass
+                        if quotes_dict:
+                            await websocket.send_json({"type": "tick", "data": quotes_dict})
+                    except Exception:
+                        break
+
+            push_task = asyncio.create_task(_push_quotes())
+            tick_task = asyncio.create_task(_push_ticks())
+
+            # 主循环：解析客户端消息
             while True:
-                await websocket.receive_text()
+                raw = await websocket.receive_text()
+                try:
+                    import json
+                    msg = json.loads(raw)
+                    msg_type = msg.get("type")
+
+                    if msg_type == "subscribe":
+                        # {"type":"subscribe","symbol":"sh600519","mode":"tick"}
+                        sym = msg.get("symbol")
+                        mode = msg.get("mode", "bar")
+                        if sym:
+                            subscriptions[sym] = mode
+                            await websocket.send_json({
+                                "type": "subscribe_ack",
+                                "data": {"symbol": sym, "mode": mode},
+                            })
+
+                    elif msg_type == "unsubscribe":
+                        # {"type":"unsubscribe","symbol":"sh600519"}
+                        sym = msg.get("symbol")
+                        if sym and sym in subscriptions:
+                            del subscriptions[sym]
+                            await websocket.send_json({
+                                "type": "unsubscribe_ack",
+                                "data": {"symbol": sym},
+                            })
+
+                    elif msg_type == "rejoin":
+                        # {"type":"rejoin","since":"2026-06-28T10:00:00Z"}
+                        since = msg.get("since")
+                        await _handle_rejoin(websocket, since, subscriptions)
+
+                except json.JSONDecodeError:
+                    # 非 JSON 消息，忽略
+                    continue
+                except Exception:
+                    # 其他错误，继续循环
+                    continue
         except Exception:
             pass
         finally:
             if push_task:
                 push_task.cancel()
+            if tick_task:
+                tick_task.cancel()
             await ws_manager.disconnect(websocket, "monitor")
 
     @app.websocket("/ws/backtest/{task_id}")

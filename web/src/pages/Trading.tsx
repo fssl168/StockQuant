@@ -182,6 +182,7 @@ export default function Trading() {
           {institutionalEnabled ? (
             <>
               <InstitutionalOrderPanel
+                positions={positions}
                 placeOrder={async (order) => {
                   await placeOrder({
                     symbol: order.symbol,
@@ -201,7 +202,27 @@ export default function Trading() {
                   label: <span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <ShoppingCart size={14} weight="fill" style={{ color: 'var(--color-brand-primary)' }} /> 拆单策略
                   </span>,
-                  children: <OrderSplitter totalQty={quantity} />,
+                  children: (
+                    <OrderSplitter
+                      totalQty={quantity}
+                      orderConfig={{
+                        symbol,
+                        side,
+                        type: orderType === 'STOP' ? 'LIMIT' : orderType,
+                        price,
+                      }}
+                      placeOrder={async (order) => {
+                        await placeOrder({
+                          symbol: order.symbol,
+                          side: order.side,
+                          type: order.type,
+                          price: order.price,
+                          quantity: order.quantity,
+                        })
+                        return { id: `${Date.now()}` }
+                      }}
+                    />
+                  ),
                 }]}
               />
             </>

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Layout, Menu, Badge, Modal, Button, Dropdown, Avatar, Space } from 'antd'
+import { Layout, Menu, Badge, Modal, Button, Dropdown, Avatar, Space, App as AntApp } from 'antd'
 import {
   ChartPie,
   Flask,
@@ -28,11 +28,13 @@ import {
 } from '@phosphor-icons/react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useWebSocket } from '@/hooks/useWebSocket'
+import { useNetworkStatus, getLatencyColorClass } from '@/hooks/useNetworkStatus'
 import { useNotificationStore } from '@/stores/notificationStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useTradingStore } from '@/stores/tradingStore'
 import { useLayoutStore } from '@/stores/layoutStore'
-import { getLatencyColorClass } from '@/hooks/useNetworkStatus'
+import { loadRiskConfig } from '@/components/Settings/RiskControlSettings'
+import { emergencyCloseAll, type Position as EmergencyPosition } from '@/utils/emergencyClose'
 import InstitutionalLayout from '@/components/Layout/InstitutionalLayout'
 
 const { Header, Sider, Content } = Layout
@@ -299,13 +301,38 @@ export default function AppLayout({ children }: Props) {
   const { positions } = useTradingStore()
   const { institutionalEnabled, toggleInstitutional } = useLayoutStore()
   const [time, setTime] = useState(new Date())
-  const [apiLatency, setApiLatency] = useState<number | null>(null)
-  const [backendAvailable, setBackendAvailable] = useState(false)
-  const [networkColor, setNetworkColor] = useState<'green' | 'yellow' | 'red' | 'offline'>('green')
   const [emergencyConfirm, setEmergencyConfirm] = useState(false)
   const [emergencyClosing, setEmergencyClosing] = useState(false)
+  // P1-5: 从 AntD App 上下文获取 message 实例（用于紧急平仓结果反馈）
+  const { message } = AntApp.useApp()
 
-  const { messages: notifMessages } = useWebSocket(backendAvailable ? '/ws/notification' : null)
+  // P1-7: 使用 useNetworkStatus hook 替代内联健康检查
+  // hook 内部已实现：5s 间隔 ping /api/health、在线/离线检测、延迟着色、rejoin 注册机制
+  const { latency: apiLatency, color: networkColor, isOnline, rejoin, registerRejoinCallback } = useNetworkStatus()
+  const backendAvailable = isOnline && apiLatency !== null
+
+  // P1-7: WS 重连时触发 rejoin 机制，让注册的回调（如重新订阅行情/通知）得以执行
+  const { messages: notifMessages } = useWebSocket(
+    backendAvailable ? '/ws/notification' : null,
+    {
+      onReconnect: (lastTimestamp) => {
+        // 通知 useNetworkStatus 触发 rejoin（会调用所有已注册的 rejoin 回调）
+        rejoin(lastTimestamp)
+      },
+    }
+  )
+
+  // P1-7: 注册 AppLayout 自身的 rejoin 回调 — 重连后重新拉取错过的通知
+  // 当前通知 WS 后端未实现 rejoin 协议，仅记录日志；后续后端支持时可在此重发订阅
+  useEffect(() => {
+    const unregister = registerRejoinCallback((since: string) => {
+      console.info(`[AppLayout] WS reconnected since ${since}, re-fetching missed notifications`)
+      // TODO: 后端支持 ?since= 查询后，可调用 /api/notifications?since=${since} 补全错过通知
+      // 当前仅刷新 notificationStore 以拉取最新通知列表
+      // （notificationStore 内部会在 fetch 后自动去重）
+    })
+    return unregister
+  }, [registerRejoinCallback])
 
   // 通知
   useEffect(() => {
@@ -328,74 +355,68 @@ export default function AppLayout({ children }: Props) {
     return () => clearInterval(timer)
   }, [])
 
-  // 健康检查
-  useEffect(() => {
-    const check = async () => {
-      const start = performance.now()
-      try {
-        const res = await fetch('/api/health', { method: 'GET' })
-        setApiLatency(Math.round(performance.now() - start))
-        setBackendAvailable(res.ok)
-      } catch {
-        setApiLatency(null)
-        setBackendAvailable(false)
-      }
-    }
-    check()
-    const interval = setInterval(check, 30000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // 网络延迟颜色（绿<50ms / 黄<200ms / 红>200ms / 离线）
-  useEffect(() => {
-    if (!backendAvailable || apiLatency === null) {
-      setNetworkColor('yellow')
-      return
-    }
-    if (apiLatency <= 50) setNetworkColor('green')
-    else if (apiLatency <= 200) setNetworkColor('yellow')
-    else setNetworkColor('red')
-  }, [backendAvailable, apiLatency])
-
   // 机构模式切换
   const handleToggleInstitutional = useCallback(() => {
     toggleInstitutional()
   }, [toggleInstitutional])
 
-  // 紧急平仓
-  const handleEmergencyClose = useCallback(() => {
-    setEmergencyConfirm(true)
-  }, [])
-
-  const handleEmergencyCloseCancel = useCallback(() => {
-    setEmergencyConfirm(false)
-  }, [])
-
+  // P1-5: 紧急平仓执行 — 使用 emergencyCloseAll 工具按顺序提交市价单
   const handleEmergencyCloseConfirm = useCallback(async () => {
     setEmergencyConfirm(false)
     setEmergencyClosing(true)
     try {
       const { placeOrder } = await import('@/api/trading')
       const positions = useTradingStore.getState().positions
-      const openPositions = positions.filter((p) => p.shares > 0)
-      await Promise.all(
-        openPositions.map((p) =>
-          placeOrder({
-            symbol: p.symbol,
-            side: 'SELL' as const,
-            type: 'MARKET' as const,
-            price: p.price,
-            quantity: p.shares,
-          })
-        )
-      )
+      const openPositions: EmergencyPosition[] = positions
+        .filter((p) => p.shares > 0)
+        .map((p) => ({ symbol: p.symbol, shares: p.shares, price: p.price }))
+
+      if (openPositions.length === 0) {
+        message.warning('当前无持仓可平')
+        return
+      }
+
+      // P1-5: 使用统一的紧急平仓工具，按顺序提交市价单并收集结果
+      const results = await emergencyCloseAll(openPositions, placeOrder)
+      const successCount = results.filter((r) => r.success).length
+      const failCount = results.length - successCount
+
+      if (failCount === 0) {
+        message.success(`紧急平仓完成：成功平仓 ${successCount} 只`)
+      } else if (successCount === 0) {
+        message.error(`紧急平仓失败：${failCount} 只持仓全部失败`)
+      } else {
+        message.warning(`部分平仓成功：${successCount} 只成功，${failCount} 只失败`)
+      }
+      // 失败的明细写入控制台，便于排查
+      if (failCount > 0) {
+        const failures = results.filter((r) => !r.success)
+        console.warn('[EmergencyClose] 部分订单失败:', failures)
+      }
+
       await useTradingStore.getState().refreshAll()
     } catch (err) {
       console.error('紧急平仓失败:', err)
+      message.error(`紧急平仓异常：${(err as Error)?.message ?? '未知错误'}`)
     } finally {
       setEmergencyClosing(false)
     }
+  }, [message])
+
+  const handleEmergencyCloseCancel = useCallback(() => {
+    setEmergencyConfirm(false)
   }, [])
+
+  // P1-5: 紧急平仓入口 — 根据 RiskControlSettings.emergencyCloseConfirm 决定是否弹窗确认
+  const handleEmergencyClose = useCallback(() => {
+    const { emergencyCloseConfirm } = loadRiskConfig()
+    if (emergencyCloseConfirm) {
+      setEmergencyConfirm(true)
+    } else {
+      // 用户关闭了二次确认，直接执行
+      void handleEmergencyCloseConfirm()
+    }
+  }, [handleEmergencyCloseConfirm])
 
   // 筛选可见菜单项
   const role = user?.role

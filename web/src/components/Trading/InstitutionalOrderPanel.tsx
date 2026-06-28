@@ -50,7 +50,8 @@ import {
   checkTPlus1,
   type ValidationResult,
 } from './ashareValidator'
-import type { OrderSide, OrderType } from '@/types'
+import { loadRiskConfig } from '@/components/Settings/RiskControlSettings'
+import type { OrderSide, OrderType, Position } from '@/types'
 
 const { Text } = Typography
 
@@ -70,7 +71,6 @@ const SYMBOL_LIST = Object.entries(SYMBOL_MAP)
   .map(([symbol, name]) => ({ label: `${symbol}  ${name}`, value: symbol }))
 
 // ---- constants ----
-const DEFAULT_MAX_ORDER_VALUE = 500_000
 const PRICE_DEVIATION_PCT = 0.5
 
 interface InstitutionalOrderPanelProps {
@@ -83,21 +83,31 @@ interface InstitutionalOrderPanelProps {
     quantity: number
   }) => Promise<{ id: string }>
 
-  /** Max order value before confirmation; 0 to disable */
+  /** Max order value before confirmation; 0 to disable
+   *  未传入时从 localStorage 读取 RiskControlSettings 配置
+   */
   maxOrderValue?: number
 
-  /** Last traded price for deviation check */
+  /** Last traded price for deviation check
+   *  未传入时从 positions 中根据 symbol 查找
+   */
   lastTradePrice?: number
 
-  /** Position for T+1 check */
+  /** Position for T+1 check
+   *  未传入时从 positions 中根据 symbol 查找
+   */
   position?: { shares: number; buyDate?: string }
+
+  /** 持仓列表，用于根据 symbol 自动查找 lastTradePrice 和 position */
+  positions?: Position[]
 }
 
 export default function InstitutionalOrderPanel({
   placeOrder: externalPlaceOrder,
-  maxOrderValue = DEFAULT_MAX_ORDER_VALUE,
-  lastTradePrice,
-  position = { shares: 0 },
+  maxOrderValue,
+  lastTradePrice: externalLastTradePrice,
+  position: externalPosition,
+  positions = [],
 }: InstitutionalOrderPanelProps) {
   // --- state ---
   const [mode, setMode] = useState<'institutional' | 'retail'>('retail')
@@ -107,6 +117,28 @@ export default function InstitutionalOrderPanel({
   const [price, setPrice] = useState<number | null>(null)
   const [quantity, setQuantity] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  // 读取风控配置：若外部未传 maxOrderValue，从 localStorage 读取
+  const riskConfig = useMemo(() => loadRiskConfig(), [])
+  const effectiveMaxOrderValue = maxOrderValue ?? riskConfig.singleOrderRedLine
+
+  // 根据 symbol 从 positions 中查找持仓和最新价
+  const matchedPosition = useMemo(() => {
+    if (externalPosition) return externalPosition
+    if (!positions || positions.length === 0) return { shares: 0 }
+    const found = positions.find((p) => p.symbol === symbol)
+    if (!found) return { shares: 0 }
+    return { shares: found.shares, buyDate: undefined }
+  }, [externalPosition, positions, symbol])
+
+  const lastTradePrice = useMemo(() => {
+    if (externalLastTradePrice != null) return externalLastTradePrice
+    if (!positions || positions.length === 0 || !symbol) return undefined
+    const found = positions.find((p) => p.symbol === symbol)
+    return found?.price
+  }, [externalLastTradePrice, positions, symbol])
+
+  const position = matchedPosition
 
   // Validation warnings / errors
   const [orderResult, setOrderResult] = useState<ValidationResult>({
@@ -213,7 +245,7 @@ export default function InstitutionalOrderPanel({
     const value = price! * quantity!
 
     // Max order value gate
-    if (maxOrderValue > 0 && value > maxOrderValue) {
+    if (effectiveMaxOrderValue > 0 && value > effectiveMaxOrderValue) {
       setMaxValueModalOpen(true)
       return
     }
@@ -692,7 +724,7 @@ export default function InstitutionalOrderPanel({
           <Alert
             type="warning"
             showIcon
-            message={`订单金额 ¥${orderValue.toLocaleString()} 超过限额 ¥${maxOrderValue.toLocaleString()}`}
+            message={`订单金额 ¥${orderValue.toLocaleString()} 超过限额 ¥${effectiveMaxOrderValue.toLocaleString()}`}
             description={
               <div style={{ fontSize: 12 }}>
                 机构模式下单金额超过预设限额。请确认是否需要继续提交。

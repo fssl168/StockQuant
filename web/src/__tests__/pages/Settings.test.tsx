@@ -23,6 +23,10 @@ vi.mock('@/components/Settings', () => ({
   AISettings: vi.fn(() => <div data-testid="ai-settings">AISettings</div>),
   NotifierSettings: vi.fn(() => <div data-testid="notifier-settings">NotifierSettings</div>),
   BrokerSettings: vi.fn(() => <div data-testid="broker-settings">BrokerSettings</div>),
+  // P2-9 / refactoring: 新增的设置子组件 — 必须在 mock 中导出，否则 Settings.tsx 渲染时报错
+  SoundSettings: vi.fn(() => <div data-testid="sound-settings">SoundSettings</div>),
+  DisplaySettings: vi.fn(() => <div data-testid="display-settings">DisplaySettings</div>),
+  RiskControlSettings: vi.fn(() => <div data-testid="risk-control-settings">RiskControlSettings</div>),
 }))
 
 // Mock antd message to capture success/error calls

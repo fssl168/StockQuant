@@ -89,13 +89,14 @@ describe('Monitor Page', () => {
 
   it('should render alert rules section', () => {
     render(<Monitor />)
-    expect(screen.getByText('告警规则')).toBeInTheDocument()
+    // Refactored: 旧文案「告警规则」已改为「预警规则」（AlertConfigPanel 接管）
+    expect(screen.getByText('预警规则')).toBeInTheDocument()
   })
 
-  it('should render alert switches and inputs', () => {
+  it('should render create-alert button and config panel', () => {
     render(<Monitor />)
-    expect(screen.getByText('涨跌幅超限提醒')).toBeInTheDocument()
-    expect(screen.getByText('成交量异常检测')).toBeInTheDocument()
+    // Refactored: 旧的涨跌幅/成交量开关已替换为 CRUD 表格 + 「新建预警」按钮
+    expect(screen.getByRole('button', { name: /新建预警/ })).toBeInTheDocument()
   })
 
   it('should render recent signals section', () => {

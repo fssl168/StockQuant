@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Form, Input, Select, Checkbox, InputNumber, Tabs, Space, Button, message, Typography } from 'antd'
 import { useAlertStore, type AlertRule } from '@/stores/alertStore'
 import type { AlertType } from '@/types/alert'
+import type { SoundLevel } from '@/utils/soundManager'
+import { soundManager } from '@/utils/soundManager'
 
 const { Text } = Typography
 
@@ -11,6 +13,18 @@ const NOTIFY_OPTIONS = [
   { value: 'telegram', label: 'Telegram' },
   { value: 'sound', label: '声音' },
   { value: 'browser', label: '浏览器通知' },
+]
+
+/**
+ * Sound level options for the per-rule override selector.
+ * `undefined` (default) means "use the type-based default mapping".
+ */
+const SOUND_LEVEL_OPTIONS: { value: SoundLevel | ''; label: string }[] = [
+  { value: '', label: '默认（按规则类型）' },
+  { value: 'risk', label: '风险音（长下降）' },
+  { value: 'opportunity', label: '机会音（短上升）' },
+  { value: 'info', label: '信息音（双短促）' },
+  { value: 'critical', label: '紧急音（三连击）' },
 ]
 
 interface AlertRuleFormProps {
@@ -40,6 +54,8 @@ export default function AlertRuleForm({ initialData, onSubmitSuccess }: AlertRul
         indexSymbol: initialData.indexSymbol,
         sector: initialData.sector,
         notifyVia: initialData.notifyVia,
+        // P2-12: 回填每条规则的自定义音效（空字符串 = 用默认）
+        soundLevel: initialData.soundLevel ?? '',
         ...initialData.conditions,
       })
       setActiveTab(initialData.type)
@@ -59,8 +75,12 @@ export default function AlertRuleForm({ initialData, onSubmitSuccess }: AlertRul
         sector: values.sector || undefined,
         enabled: true,
         notifyVia: values.notifyVia,
+        // P2-12: 仅当用户选了具体音效时才写 soundLevel；空串 = undefined（用默认）
+        soundLevel: values.soundLevel || undefined,
         conditions: Object.fromEntries(
-          Object.entries(values).filter(([k]) => !['name', 'symbol', 'indexSymbol', 'sector', 'notifyVia'].includes(k))
+          Object.entries(values).filter(([k]) =>
+            !['name', 'symbol', 'indexSymbol', 'sector', 'notifyVia', 'soundLevel'].includes(k)
+          )
         ),
       }
 
@@ -208,6 +228,30 @@ export default function AlertRuleForm({ initialData, onSubmitSuccess }: AlertRul
         rules={[{ required: true, message: '请至少选择一个通知渠道' }]}
         valuePropName="channels">
         <Checkbox.Group options={NOTIFY_OPTIONS} />
+      </Form.Item>
+
+      {/* P2-12: Per-rule sound override — only shown when 'sound' channel is selected */}
+      <Form.Item noStyle shouldUpdate={(prev, next) => prev.notifyVia !== next.notifyVia}>
+        {({ getFieldValue }) => {
+          const notifyVia: string[] = getFieldValue('notifyVia') ?? []
+          if (!notifyVia.includes('sound')) return null
+          return (
+            <Form.Item name="soundLevel" label="触发音效" style={{ marginBottom: 20 }}
+              initialValue="" tooltip="选择具体音效以覆盖该规则类型的默认提示音">
+              <Space.Compact style={{ width: '100%' }}>
+                <Select style={{ flex: 1 }} options={SOUND_LEVEL_OPTIONS} />
+                <Button
+                  onClick={() => {
+                    const v = getFieldValue('soundLevel') as SoundLevel | ''
+                    if (v) soundManager.play(v)
+                  }}
+                >
+                  试听
+                </Button>
+              </Space.Compact>
+            </Form.Item>
+          )
+        }}
       </Form.Item>
 
       <Form.Item style={{ marginBottom: 0 }}>
