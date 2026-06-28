@@ -20,10 +20,10 @@ vi.mock('@/api/ai', () => ({
 // Mock @/stores/aiStore (AIChat.tsx L30 useAIStore.getState().init())
 vi.mock('@/stores/aiStore', () => {
   const state = {
-    messages: [],
+    messages: Array<{ role: string; content: string; timestamp: number }>(),
     setMessages: vi.fn(),
     addMessage: vi.fn((role: string, content: string) => {
-      state.messages.push({ role, content, timestamp: Date.now() })
+      state.messages.push({ role, content, timestamp: Date.now() });
     }),
     activeConversationId: 'conv-1',
     conversations: [],

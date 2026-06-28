@@ -35,6 +35,9 @@ const Comparison = lazy(() => import('./pages/Comparison'))
 const Memory = lazy(() => import('./pages/Memory'))
 const Hallucination = lazy(() => import('./pages/Hallucination'))
 const AIPipeline = lazy(() => import('./pages/AIPipeline'))
+const UserManagement = lazy(() => import('./pages/admin/UserManagement'))
+const SchedulerAdmin = lazy(() => import('./pages/admin/SchedulerAdmin'))
+const AuditLog = lazy(() => import('./pages/admin/AuditLog'))
 
 function PageLoader() {
   return (
@@ -144,6 +147,10 @@ export default function App() {
                         <Route path="/memory" element={<RoleRoute requiredRoles={['ADMIN']}><Memory /></RoleRoute>} />
                         <Route path="/hallucination" element={<RoleRoute requiredRoles={['ADMIN']}><Hallucination /></RoleRoute>} />
                         <Route path="/ai-pipeline" element={<RoleRoute requiredRoles={['ADMIN']}><AIPipeline /></RoleRoute>} />
+                        {/* 管理页面 - 仅 ADMIN 可访问 */}
+                        <Route path="/admin/users" element={<RoleRoute requiredRoles={['ADMIN']}><UserManagement /></RoleRoute>} />
+                        <Route path="/admin/scheduler" element={<RoleRoute requiredRoles={['ADMIN']}><SchedulerAdmin /></RoleRoute>} />
+                        <Route path="/admin/audit" element={<RoleRoute requiredRoles={['ADMIN']}><AuditLog /></RoleRoute>} />
                       </Routes>
                     </Suspense>
                   </AppLayout>

@@ -43,9 +43,10 @@ export default function AuditLog() {
       if (dateRange?.[0]) params.append('start_date', dateRange[0].format('YYYY-MM-DD'))
       if (dateRange?.[1]) params.append('end_date', dateRange[1].format('YYYY-MM-DD'))
 
+      const qs = params.toString()
       const endpoint = viewMode === 'all'
-        ? `/api/audit/logs/all?${params}`
-        : `/api/audit/logs?${params}`
+        ? `/api/audit/logs/all${qs ? `?${qs}` : ''}`
+        : `/api/audit/logs${qs ? `?${qs}` : ''}`
       const res = await client.get(endpoint)
       setLogs((res as unknown as AuditLog[]).slice(0, 100))
     } catch (e: any) {
@@ -61,14 +62,14 @@ export default function AuditLog() {
     { title: '信号源', dataIndex: 'source', key: 'source', width: 120, render: (s: string) => <code style={{ fontSize: 11 }}>{s}</code> },
     { title: '标的', dataIndex: 'symbol', key: 'symbol', width: 100, render: (s: string) => <code style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}>{s}</code> },
     { title: '方向', dataIndex: 'direction', key: 'direction', width: 80, render: (d: string) => (
-      <Tag color={d === 'BUY' ? 'green' : d === 'SELL' ? 'red' : 'default'}>{d || '—'}</Tag>
+      <Tag color={d === 'BUY' ? 'green' : d === 'SELL' ? 'red' : 'default'}>{d || '-'}</Tag>
     )},
     { title: 'AI 决策摘要', dataIndex: 'decision', key: 'decision', width: 200, ellipsis: true, render: (s: string) => (
       <Text style={{ fontSize: 11 }}>{s?.substring(0, 50)}{s?.length > 50 ? '...' : ''}</Text>
     )},
     { title: '最终动作', dataIndex: 'finalAction', key: 'finalAction', width: 100, render: (a: string) => (
       <Tag color={a?.toUpperCase() === 'EXECUTED' ? 'green' : a?.toUpperCase() === 'REJECTED' ? 'red' : 'default'}>
-        {a || '—'}
+        {a || '-'}
       </Tag>
     )},
     { title: '操作', key: 'action', width: 80, render: (_: any, r: any) => (

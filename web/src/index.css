@@ -258,3 +258,69 @@ body {
   --ant-color-error: #ef4444;
   --ant-color-info: #60a5fa;
 }
+
+/* ── Key-Level Flash (机构级价位突破闪烁) ─────────────────── */
+
+@keyframes key-level-flash {
+  0%, 100% {
+    border-color: var(--color-brand-primary);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    border-color: rgba(59, 130, 246, 0.2);
+    box-shadow: 0 0 0px transparent;
+  }
+}
+
+@keyframes key-level-flash-danger {
+  0%, 100% {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    border-color: rgba(239, 68, 68, 0.2);
+    box-shadow: 0 0 0px transparent;
+  }
+}
+
+.key-level-flash {
+  animation: key-level-flash 1.2s ease-in-out 3;
+}
+
+.key-level-flash-danger {
+  animation: key-level-flash-danger 1.2s ease-in-out 3;
+}
+
+/* Institutional Grid Layout */
+.institutional-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  overflow: hidden;
+  background: var(--color-border-default);
+  min-height: 100%;
+}
+
+.institutional-grid > [data-zone] {
+  background: var(--color-bg-base);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Splitter handle */
+.zone-splitter {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 150ms ease;
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 10;
+}
+
+.zone-splitter:hover {
+  background: var(--color-brand-primary);
+}
