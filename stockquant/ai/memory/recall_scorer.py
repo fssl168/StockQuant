@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""F020 FinMem 多因子召回评分器（B2 核心模块）
+"""F020 多因子召回评分器 — 日报/月报/年报三级报告体系
 
-借鉴 FinMem 论文 §3.3 的多因子召回机制，构建**相关性 + 新鲜度 + 重要性**
-三因子融合评分子系统，覆盖 L1/L2/L3 三层记忆。
+原 FinMem 论文 §3.3 多因子召回机制，现改造为支持日报(daily)/月报(monthly)/
+年报(annual) 三级报告体系的评分器，同时向后兼容旧的 working/shallow/
+intermediate/deep tier 名称。
 
 数学模型：
     final_score = α · relevance + β · recency + γ · importance
@@ -14,6 +15,7 @@
 3. 多维重要性 — 不同 tier 使用不同 importance 计算公式
 4. 可观测性 — 每次评分返回 score_breakdown 便于调试
 5. 自适应权重 — 根据查询场景动态调整三因子权重
+6. 向后兼容 — 旧 tier 名称自动映射到新的 daily/monthly/annual
 """
 from __future__ import annotations
 
@@ -29,13 +31,34 @@ logger = logging.getLogger("stockquant.ai.memory.recall_scorer")
 # ─── 分层定义 ────────────────────────────────────────────────────────
 
 
-# FinMem 论文 §3.3 表 2：分层半衰期（天）
+# 三级报告体系半衰期（天）
 TIER_HALF_LIFE_DAYS: Dict[str, int] = {
-    "working": 1,      # L1 工作记忆：1 天（极短时效）
-    "shallow": 3,       # 浅层-市场新闻：3 天（短时效，3 天后相关性减半）
-    "intermediate": 90, # 中层-季报：90 天（季度周期，覆盖财报披露间隔）
-    "deep": 365,       # 深层-年报：365 天（长期有效，年报每年才更新）
+    "daily": 3,      # 日报：3天半衰期（短时效）
+    "monthly": 90,   # 月报：90天半衰期（季度周期）
+    "annual": 365,   # 年报：365天半衰期（长期有效）
 }
+
+
+# 旧 tier 名称 → 新 tier 名称的映射（向后兼容）
+_TIER_ALIASES: Dict[str, str] = {
+    "working": "daily",
+    "shallow": "daily",
+    "intermediate": "monthly",
+    "deep": "annual",
+}
+
+
+def normalize_tier(tier: str) -> str:
+    """将 tier 标准化为 daily/monthly/annual
+
+    支持新旧名称映射：
+    - working → daily
+    - shallow → daily
+    - intermediate → monthly
+    - deep → annual
+    - daily/monthly/annual 保持不变
+    """
+    return _TIER_ALIASES.get(tier, tier)
 
 
 # 数据源权重表（FinMem 论文 §3.3 表 3）
@@ -93,6 +116,8 @@ SCENE_WEIGHTS: Dict[str, RecallWeights] = {
     "realtime":      RecallWeights(relevance=0.7, recency=0.2, importance=0.1),  # 实时交易侧重相关性
     "review":        RecallWeights(relevance=0.3, recency=0.2, importance=0.5),  # 复盘分析侧重重要性
     "historical":    RecallWeights(relevance=0.2, recency=0.6, importance=0.2),  # 历史回溯侧重新鲜度
+    "daily_report":  RecallWeights(relevance=0.4, recency=0.4, importance=0.2),  # 日报生成：平衡相关性与新鲜度
+    "monthly_report": RecallWeights(relevance=0.3, recency=0.3, importance=0.4), # 月报生成：侧重重要性（策略表现）
 }
 
 
@@ -197,27 +222,28 @@ def recency_score(
 def importance_score(item: Dict[str, Any], tier: str) -> float:
     """计算重要性因子 — 分层多维加权
 
-    分层计算公式（FinMem 论文 §3.3）：
+    三级报告体系计算公式：
 
-    - shallow (新闻):
+    - daily (日报):
         importance = 0.4·source_weight + 0.3·|sentiment| + 0.3·scope
         scope: 全市场=1.0, 行业=0.7, 个股=0.4
 
-    - intermediate (季报):
-        importance = 0.5·event_weight + 0.5·|metric_change_pct|
-        event_weight: 业绩预增=1.0, 业绩预减=0.9, 分红=0.7, 高管变动=0.6, 其他=0.3
+    - monthly (月报):
+        importance = 0.5·strategy_performance_score + 0.5·|pnl_change_pct|
 
-    - deep (年报):
+    - annual (年报):
         importance = 0.6·key_event_count_normalized + 0.4·is_core_holding
         key_event_count 归一化: min(event_count / 10, 1.0)
 
-    - working (L1):
-        importance = item.importance_score 字段（如果存在），否则 0.5
+    兼容旧 tier 名称：working/shallow → daily, intermediate → monthly, deep → annual
 
     Returns:
         归一化重要性 [0, 1]
     """
-    if tier == "shallow":
+    # 标准化 tier
+    tier = normalize_tier(tier)
+
+    if tier == "daily":
         source_w = get_source_weight(item.get("source") or item.get("source_type"))
         sentiment = float(item.get("sentiment_score", 0.0) or 0.0)
         sentiment_abs = min(abs(sentiment), 1.0)
@@ -227,25 +253,15 @@ def importance_score(item: Dict[str, Any], tier: str) -> float:
 
         return max(0.0, min(1.0, 0.4 * source_w + 0.3 * sentiment_abs + 0.3 * scope_score))
 
-    if tier == "intermediate":
-        # 事件类型权重
-        event_type = item.get("event_type", "other")
-        event_weights = {
-            "profit_warning_up": 1.0,    # 业绩预增
-            "profit_warning_down": 0.9,  # 业绩预减
-            "dividend":          0.7,    # 分红
-            "management_change": 0.6,    # 高管变动
-            "other":             0.3,
-        }
-        event_w = event_weights.get(event_type, 0.3)
+    if tier == "monthly":
+        # 策略表现评分 + PnL 变动幅度
+        strategy_perf = float(item.get("strategy_performance_score", 0.5) or 0.5)
+        pnl_change = float(item.get("pnl_change_pct", 0.0) or 0.0)
+        pnl_abs = min(abs(pnl_change), 1.0)
 
-        # 财务指标变动幅度
-        metric_change = float(item.get("metric_change_pct", 0.0) or 0.0)
-        metric_abs = min(abs(metric_change), 1.0)
+        return max(0.0, min(1.0, 0.5 * strategy_perf + 0.5 * pnl_abs))
 
-        return max(0.0, min(1.0, 0.5 * event_w + 0.5 * metric_abs))
-
-    if tier == "deep":
+    if tier == "annual":
         # 年度关键事件数
         event_count = int(item.get("key_event_count", 0) or 0)
         event_normalized = min(event_count / 10.0, 1.0)
@@ -254,10 +270,6 @@ def importance_score(item: Dict[str, Any], tier: str) -> float:
         is_core = 1.0 if item.get("is_core_holding") else 0.0
 
         return max(0.0, min(1.0, 0.6 * event_normalized + 0.4 * is_core))
-
-    if tier == "working":
-        # L1 工作记忆：使用条目自带的 importance_score，否则默认 0.5
-        return float(item.get("importance_score", 0.5) or 0.5)
 
     # 未知 tier：使用条目已有的 importance_score 字段（向后兼容）
     return float(item.get("importance_score", 0.5) or 0.5)

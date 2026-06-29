@@ -1,84 +1,152 @@
 # -*- coding: utf-8 -*-
-"""F020 遗忘机制 — 时间遗忘 + 置信度遗忘 + 冗余压缩"""
+"""F020 遗忘机制 — 基于 report_type 的过期策略（日报/月报/年报三级报告体系）
+
+改造自原有 L1/L2/L3 遗忘机制，现基于报告类型执行过期策略：
+- 日报：保留 30 天后自动清理
+- 月报：保留 1 年后自动清理
+- 年报：永久保留
+
+保留旧接口 forget(l2_store, l3_store) 供向后兼容。
+"""
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 logger = logging.getLogger("stockquant.ai.memory.forgetting")
 
 
 class ForgettingMechanism:
-    """遗忘机制
+    """遗忘机制 — 基于 report_type 的过期策略
 
-    三种遗忘策略:
-    1. 时间遗忘: 删除过期条目
-    2. 置信度遗忘: 删除低置信度条目
-    3. 冗余压缩: 合并相似条目
+    报告保留策略:
+    - daily: 保留 30 天（超过 30 天的日报可被清理）
+    - monthly: 保留 365 天（超过 1 年的月报可被清理）
+    - annual: 永久保留（不过期）
+
+    同时保留置信度遗忘：低置信度报告也可被清理。
     """
 
-    # 默认置信度阈值，低于此值的条目将被遗忘
+    # 默认置信度阈值
     DEFAULT_CONFIDENCE_THRESHOLD = 0.3
 
-    def forget(self, l2_store: Any, l3_store: Any) -> Dict[str, int]:
-        """执行全部遗忘策略
+    # 各类型报告保留天数
+    RETENTION_DAYS = {
+        "daily": 30,     # 日报保留 30 天
+        "monthly": 365,  # 月报保留 1 年
+        "annual": None,  # 年报永久保留
+    }
+
+    def forget(self, report_store: Any) -> Dict[str, int]:
+        """执行报告过期策略
 
         Args:
-            l2_store: L2Store 实例
-            l3_store: L3Store 实例
+            report_store: ReportSystem 实例（需要 report_system.store 可用）
 
         Returns:
-            各层删除的条目数
+            各类型删除的报告数 {"daily": n, "monthly": n, "annual": 0}
+        """
+        result: Dict[str, int] = {"daily": 0, "monthly": 0, "annual": 0}
+
+        for report_type, retention_days in self.RETENTION_DAYS.items():
+            if retention_days is None:
+                # annual: 永不自动清理
+                continue
+
+            deleted = self._expire_by_type(report_store, report_type, retention_days)
+            result[report_type] = deleted
+
+        total = sum(result.values())
+        if total > 0:
+            logger.info("报告过期清理: daily=%d, monthly=%d", result["daily"], result["monthly"])
+
+        return result
+
+    def _expire_by_type(self, report_store: Any, report_type: str, retention_days: int) -> int:
+        """清理过期报告
+
+        Args:
+            report_store: ReportSystem 实例
+            report_type: 报告类型（daily/monthly）
+            retention_days: 保留天数
+
+        Returns:
+            删除的报告数
+        """
+        if report_store is None or report_store.store is None:
+            return 0
+
+        try:
+            cutoff_date = (datetime.now() - timedelta(days=retention_days)).strftime("%Y-%m-%d")
+        except Exception as exc:
+            logger.warning("计算过期截止日期失败: %s", exc)
+            return 0
+
+        deleted = 0
+        try:
+            # 获取所有该类型的报告
+            if report_type == "daily":
+                reports = report_store.list_daily_reports(end=cutoff_date, limit=500)
+            elif report_type == "monthly":
+                reports = report_store.list_monthly_reports(end=cutoff_date, limit=120)
+            else:
+                return 0
+
+            for report in reports:
+                report_date = report.get("report_date", "")
+                if report_date and report_date < cutoff_date:
+                    report_id = report.get("id")
+                    if report_id:
+                        try:
+                            if report_store.delete_report(report_id):
+                                deleted += 1
+                        except Exception:
+                            pass
+        except Exception as exc:
+            logger.warning("清理过期 %s 报告失败: %s", report_type, exc)
+
+        return deleted
+
+    # ── 旧接口（向后兼容） ──
+
+    def forget_old(self, l2_store: Any, l3_store: Any) -> Dict[str, int]:
+        """旧接口: L2/L3 遗忘（向后兼容）
+
+        保留旧的签名和逻辑，供可能仍在使用旧接口的调用方使用。
         """
         result: Dict[str, int] = {"l2": 0, "l3": 0}
 
         # L2 遗忘
-        result["l2"] += self._time_forget_l2(l2_store)
-        result["l2"] += self._confidence_forget_l2(l2_store)
-
-        # L3 遗忘
-        result["l3"] += self._confidence_forget_l3(l3_store)
-
-        return result
-
-    def _time_forget_l2(self, l2_store: Any) -> int:
-        """时间遗忘: 清理 L2 过期条目"""
         try:
-            return l2_store.cleanup_expired()
+            result["l2"] += l2_store.cleanup_expired()
         except Exception as exc:
             logger.warning("L2 时间遗忘失败: %s", exc)
-            return 0
 
-    def _confidence_forget_l2(self, l2_store: Any, threshold: float = 0.0) -> int:
-        """置信度遗忘: 删除 L2 低置信度条目"""
-        threshold = threshold or self.DEFAULT_CONFIDENCE_THRESHOLD
-        deleted = 0
+        # L2 置信度遗忘
         try:
             items = l2_store.get_all()
             for item in items:
-                if item.get("confidence", 1.0) < threshold:
+                if item.get("confidence", 1.0) < self.DEFAULT_CONFIDENCE_THRESHOLD:
                     if l2_store.delete(item["id"]):
-                        deleted += 1
+                        result["l2"] += 1
         except Exception as exc:
             logger.warning("L2 置信度遗忘失败: %s", exc)
-        return deleted
 
-    def _confidence_forget_l3(self, l3_store: Any, threshold: float = 0.0) -> int:
-        """置信度遗忘: 删除 L3 低置信度条目
-
-        L3 的置信度阈值比 L2 更低，因为进入 L3 的条目已经过验证。
-        """
-        threshold = threshold or self.DEFAULT_CONFIDENCE_THRESHOLD * 0.5
-        deleted = 0
+        # L3 置信度遗忘
         try:
             items = l3_store.get_all(limit=5000)
+            threshold = self.DEFAULT_CONFIDENCE_THRESHOLD * 0.5
             for item in items:
                 if item.get("confidence", 1.0) < threshold:
                     if l3_store.delete(item["id"]):
-                        deleted += 1
+                        result["l3"] += 1
         except Exception as exc:
             logger.warning("L3 置信度遗忘失败: %s", exc)
-        return deleted
+
+        return result
+
+    # ── 通用方法 ──
 
     def redundancy_compress(self, items: List[Dict[str, Any]], similarity_threshold: float = 0.9) -> List[Dict[str, Any]]:
         """冗余压缩: 合并相似条目

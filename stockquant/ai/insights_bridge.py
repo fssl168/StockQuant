@@ -155,6 +155,14 @@ class InsightsBridge:
                 clustered.append(item)
         return clustered
 
+    def _is_report_system(self, memory_system: Any) -> bool:
+        """检测是否为 ReportSystem（新报告体系）"""
+        return (
+            hasattr(memory_system, "search_reports")
+            and hasattr(memory_system, "list_daily_reports")
+            and not hasattr(memory_system, "l1")
+        )
+
     def _retrieve_memory(
         self,
         memory_system: Any,
@@ -162,10 +170,31 @@ class InsightsBridge:
     ) -> List[Dict[str, Any]]:
         """三层历史记忆检索
 
-        优先调用 MemorySystem.search_by_layer(layer="all")（B3 多因子召回）；
+        ReportSystem: 调用 search_reports 统一检索；
+        MemorySystem: 优先调用 search_by_layer(layer="all")（B3 多因子召回），
         若方法不存在则降级到 search_long_term + search_short_term。
         """
         results: List[Dict[str, Any]] = []
+
+        # ReportSystem 新体系：通过 search_reports 统一检索
+        if self._is_report_system(memory_system):
+            try:
+                items = memory_system.search_reports(
+                    keyword=symbol,
+                    report_type="",
+                    limit=self._top_k * 2,
+                )
+                for item in items:
+                    if isinstance(item, dict):
+                        item_symbol = item.get("symbol", "")
+                        if not item_symbol or item_symbol == symbol:
+                            results.append(item)
+                return results[: self._top_k * 2]
+            except Exception as exc:
+                logger.debug("ReportSystem search_reports 失败: %s", exc)
+                return []
+
+        # MemorySystem 旧体系
         try:
             if hasattr(memory_system, "search_by_layer"):
                 # B3: 跨层检索 + RecallScorer 排序
@@ -213,14 +242,22 @@ class InsightsBridge:
     ) -> tuple[str, str]:
         """调用 WorkingMemory.reflect() 生成阶段反思
 
+        ReportSystem 没有 L1 WorkingMemory，直接跳过反思。
+        MemorySystem 通过 l1.reflect() 生成反思文本。
+
         Args:
-            memory_system: MemorySystem 实例
+            memory_system: MemorySystem 或 ReportSystem 实例
             symbol: 标的代码
             insights: 当前批次洞察（注入到 WorkingMemory 触发反思）
 
         Returns:
             (反思文本, 置信度) 元组；失败时返回 ("", "low")
         """
+        # ReportSystem 新体系：无 WorkingMemory，跳过反思
+        if self._is_report_system(memory_system):
+            logger.debug("ReportSystem 无 WorkingMemory，跳过反思")
+            return "", "low"
+
         l1 = getattr(memory_system, "l1", None)
         if l1 is None:
             return "", "low"

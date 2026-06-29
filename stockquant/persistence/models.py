@@ -121,6 +121,94 @@ class UserProfileHistory(Base):
     )
 
 
+# ─── RBAC 权限模型 ──────────────────────────────────────────────────
+
+
+class RoleModel(Base):
+    """角色定义 — RBAC 核心表"""
+    __tablename__ = "rbac_roles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(
+        String(50), nullable=False, unique=True
+    )  # admin/trader/researcher/viewer
+    display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    is_system: Mapped[bool] = mapped_column(
+        Integer, nullable=False, default=0
+    )  # 系统内置角色不可删除
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+
+
+class PermissionModel(Base):
+    """权限定义 — RBAC 细粒度权限"""
+    __tablename__ = "rbac_permissions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(
+        String(100), nullable=False, unique=True
+    )  # 如 "trade:place_order"
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    module: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # trade/backtest/ai/data/system/user
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+
+
+class RolePermissionModel(Base):
+    """角色-权限关联表 — 多对多"""
+    __tablename__ = "rbac_role_permissions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    role_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("rbac_roles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    permission_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("rbac_permissions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("role_id", "permission_id", name="uq_role_permission"),
+    )
+
+
+class UserRoleModel(Base):
+    """用户-角色关联表 — 多对多"""
+    __tablename__ = "rbac_user_roles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(
+        String(50),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("rbac_roles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "role_id", name="uq_user_role"),
+    )
+
+
 class BacktestResult(Base):
     """回测结果持久化"""
     __tablename__ = "backtest_results"
@@ -348,6 +436,51 @@ class L3Memory(Base):
         Index("ix_l3_user_id", "user_id"),
         Index("ix_l3_tier", "tier"),
         Index("ix_l3_symbol_tier", "symbol", "tier"),
+    )
+
+
+class Report(Base):
+    """报告 — 日报/月报/年报统一模型（三级报告体系）
+
+    替代原有 L1/L2/L3 三级记忆系统，采用日报/月报/年报三级报告体系。
+    每份报告包含四大板块：市场回顾、交易记录、策略表现、AI 洞察。
+    """
+    __tablename__ = "reports"
+
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    report_type: Mapped[str] = mapped_column(String(10), nullable=False)  # daily/monthly/annual
+    report_date: Mapped[str] = mapped_column(String(10), nullable=False)  # YYYY-MM-DD（日报日期 / 月报月末日 / 年报12-31）
+    report_period_start: Mapped[str] = mapped_column(String(10), nullable=False)  # 报告覆盖的起始日期
+    report_period_end: Mapped[str] = mapped_column(String(10), nullable=False)  # 报告覆盖的截止日期
+
+    # 四大板块
+    market_review: Mapped[str] = mapped_column(Text, nullable=False, default="")  # 市场回顾
+    trading_record: Mapped[str] = mapped_column(Text, nullable=False, default="")  # 交易记录
+    strategy_performance: Mapped[str] = mapped_column(Text, nullable=False, default="")  # 策略表现
+    ai_insights: Mapped[str] = mapped_column(Text, nullable=False, default="")  # AI 洞察
+
+    # 结构化数据
+    metrics_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")  # 关键指标 JSON
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")  # 扩展元数据
+
+    # 全文检索用
+    full_content: Mapped[str] = mapped_column(Text, nullable=False, default="")  # 四大板块拼接全文
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")  # 摘要
+
+    # pgvector 向量
+    embedding = Column(_VectorClass, nullable=True)
+
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    importance_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    last_accessed_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(30), nullable=False)
+    updated_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+
+    __table_args__ = (
+        Index("ix_report_type_date", "report_type", "report_date"),
+        Index("ix_report_user_id", "user_id"),
+        Index("ix_report_period", "report_period_start", "report_period_end"),
     )
 
 
