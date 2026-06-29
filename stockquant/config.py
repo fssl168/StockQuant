@@ -174,6 +174,21 @@ class RedisSettings(BaseModel):
     max_connections: int = Field(default=20)
 
 
+class RateLimitSettings(BaseModel):
+    """API 速率限制配置（#3 P0 任务）"""
+    enabled: bool = Field(default=True, description="是否启用速率限制")
+    # 全局默认限制：每分钟最大请求数
+    global_limit: int = Field(default=100, ge=1, description="全局每分钟最大请求数")
+    # 按路由前缀的差异化限制
+    auth_limit: int = Field(default=5, ge=1, description="认证接口每分钟最大请求数（防暴力破解）")
+    backtest_limit: int = Field(default=10, ge=1, description="回测接口每分钟最大请求数")
+    ai_chat_limit: int = Field(default=20, ge=1, description="AI 对话接口每分钟最大请求数")
+    trading_limit: int = Field(default=30, ge=1, description="交易接口每分钟最大请求数")
+    data_limit: int = Field(default=60, ge=1, description="数据接口每分钟最大请求数")
+    # 窗口大小（秒）
+    window_seconds: int = Field(default=60, ge=1, le=3600, description="滑动窗口大小（秒）")
+
+
 # ====================================================================
 # Root Settings
 # ====================================================================
@@ -189,6 +204,7 @@ class Settings(BaseSettings):
     trading: TradingSettings = Field(default_factory=TradingSettings)
     ai: AISettings = Field(default_factory=AISettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
+    rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
 
     model_config = {
         "extra": "allow",

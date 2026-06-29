@@ -37,6 +37,8 @@ from stockquant.api.routers import hallucination_verify as hallucination_verify_
 from stockquant.api.routers import profiling as profiling_router
 # 三角色前端重构：用户管理 API
 from stockquant.api.routers import user_admin as user_admin_router
+# RBAC 权限管理 API
+from stockquant.api.routers import rbac as rbac_router
 from stockquant.api.websocket import ws_manager
 from stockquant.config import get_config
 
@@ -52,7 +54,6 @@ from stockquant.persistence.persistent_store import (
     OrderAuditStore,
 )
 
-USE_RATE_LIMIT = False
 _APP_VERSION = "2.0.0-dev"
 logger = logging.getLogger("stockquant.api")
 
@@ -117,7 +118,24 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # 速率限制（已禁用，避免 Windows GBK 编码问题）
+    # 速率限制中间件（#3 P0 任务：自研滑动窗口限速器）
+    cfg = get_config()
+    rate_cfg = cfg.rate_limit
+    if rate_cfg.enabled:
+        from stockquant.api.middleware import RateLimitMiddleware
+        app.add_middleware(
+            RateLimitMiddleware,
+            enabled=rate_cfg.enabled,
+            global_limit=rate_cfg.global_limit,
+            window_seconds=rate_cfg.window_seconds,
+        )
+        logger.info("速率限制中间件已注册")
+
+    # 全局异常处理中间件（#13 P0 任务：结构化错误响应）
+    from stockquant.api.middleware import GlobalExceptionHandlerMiddleware
+    app.add_middleware(GlobalExceptionHandlerMiddleware)
+    logger.info("全局异常处理中间件已注册")
+
     # 注册路由
     app.include_router(backtest.router, prefix="/api", tags=["回测"])
     app.include_router(strategy.router, prefix="/api", tags=["策略"])
@@ -153,6 +171,8 @@ def create_app() -> FastAPI:
     app.include_router(profiling_router.router, prefix="/api", tags=["用户风险偏好"])
     # 三角色前端重构：用户管理
     app.include_router(user_admin_router.router, prefix="/api", tags=["用户管理 (ADMIN)"])
+    # RBAC 权限管理
+    app.include_router(rbac_router.router, prefix="/api", tags=["RBAC权限管理"])
 
     # WebSocket 端点 — 统一路径 /ws/*
     @app.websocket("/ws")
@@ -508,17 +528,26 @@ def create_app() -> FastAPI:
     except Exception as e:
         logger.warning("Orchestrator 初始化失败（非致命）: %s", e)
 
-    # 初始化记忆系统（如果 PostgreSQL 不可用则降级）
+    # 初始化报告系统（ReportSystem，兼容旧 MemorySystem 接口）
     _memory_system = None
     try:
-        from stockquant.ai.memory.system import MemorySystem
-        _memory_system = MemorySystem()
+        from stockquant.ai.memory.system import ReportSystem
+        _memory_system = ReportSystem()
         memory_router.init_memory(_memory_system)
-        logger.info("记忆系统已初始化 (L1=in-memory, L2/L3=%s)", "PostgreSQL" if "pgvector" in str(_memory_system.l2.__class__.__module__) else "fallback")
-    except ImportError as e:
-        logger.warning("记忆系统未安装（非致命）: %s", e)
+        logger.info("报告系统已初始化 (ReportSystem)")
+    except ImportError:
+        # ReportSystem 不存在时，尝试降级到旧 MemorySystem
+        try:
+            from stockquant.ai.memory.system import MemorySystem
+            _memory_system = MemorySystem()
+            memory_router.init_memory(_memory_system)
+            logger.info("记忆系统已初始化 (MemorySystem 兼容模式, L1=in-memory, L2/L3=%s)", "PostgreSQL" if "pgvector" in str(_memory_system.l2.__class__.__module__) else "fallback")
+        except ImportError as e:
+            logger.warning("报告系统/记忆系统未安装（非致命）: %s", e)
+        except Exception as e:
+            logger.warning("记忆系统初始化失败（降级为 SQLite）: %s", e)
     except Exception as e:
-        logger.warning("记忆系统初始化失败（降级为 SQLite）: %s", e)
+        logger.warning("报告系统初始化失败: %s", e)
 
     # 初始化反幻觉数据库
     try:

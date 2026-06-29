@@ -16,14 +16,17 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from stockquant.models.order import Order, OrderSide, OrderType
 from stockquant.events import EventType as OrderStatus, EventType
-from stockquant.models.bar import BarData
 from stockquant.models.trade import TradeData
-from stockquant.engine.broker import Broker, OrderAuditLog
+from stockquant.execution.gateway_base import (
+    BaseGateway,
+    GatewayConfig,
+    GatewayEvent,
+    GatewayState,
+)
 
 logger = logging.getLogger("stockquant.execution.xtp")
 
@@ -41,10 +44,14 @@ except ImportError:
     logger.info("XTP SDK 未安装，XTP Broker 将以模拟模式运行")
 
 
-class XTPBroker(Broker):
-    """XTP 券商 Broker — 中泰证券 XTP 极速交易系统，通过 XTP SDK 连接中泰证券交易网关，支持 A 股实盘交易。
+class XTPBroker(BaseGateway):
+    """XTP 券商 Broker — 中泰证券 XTP 极速交易系统
+
+    通过 BaseGateway 统一生命周期管理，使用 XTP SDK 连接中泰证券交易网关，
+    支持 A 股实盘交易。
 
     参数:
+        config: GatewayConfig 配置
         user: XTP 资金账号
         password: XTP 交易密码
         app_id: XTP 应用 ID（由中泰证券分配）
@@ -67,14 +74,17 @@ class XTPBroker(Broker):
 
     def __init__(
         self,
+        config: GatewayConfig = None,
         user: str = "",
         password: str = "",
         app_id: int = 0,
         client_id: int = 0,
         server_addr: str = "",
         software_key: str = "",
-        _mock_api: Any = None,  # 测试用：注入 Mock SDK
+        _mock_api: Any = None,
     ):
+        super().__init__(config=config)
+
         self._user = user
         self._password = password
         self._app_id = app_id
@@ -84,27 +94,25 @@ class XTPBroker(Broker):
         self._xtp_api = _mock_api  # 测试用 mock SDK（可替换真实 SDK）
         self._spi = None
         self._session_id = 0
-        self._connected = False
-        self._logged_in = False
-        self._order_log: List[OrderAuditLog] = []
-        self._open_orders: Dict[str, Order] = {}
         self._xtp_order_map: Dict[int, str] = {}  # xtp_order_id -> order_id
-        self._trade_results: Dict[str, Dict] = {}  # order_id -> trade info
-        self._lock = threading.Lock()
         self._positions_cache: Dict[str, Any] = {}
         self._asset_cache: Dict[str, Any] = {}
 
+        # Mock SDK 模式：注入 _mock_api 时直接设为 LOGGED_IN 状态
         if self._xtp_api is not None and user and server_addr:
-            # Mock SDK 模式：模拟连接
-            self._connected = True
-            self._logged_in = True
+            self._state = GatewayState.LOGGED_IN
             self._session_id = 1
             logger.info("XTP Broker 使用 Mock SDK，连接成功")
         elif XTP_AVAILABLE and user and server_addr:
             self.connect()
 
-    def connect(self) -> bool:
-        """连接 XTP 交易网关
+    # ── 抽象方法实现 ─────────────────────────────────────────────────
+
+    def _do_connect(self) -> bool:
+        """执行 XTP 连接
+
+        创建 TraderApi 实例，注册 SPI 回调，设置前置机地址，
+        启动连接并等待回调完成。
 
         Returns:
             True 连接成功，False 连接失败或 SDK 不可用
@@ -114,7 +122,6 @@ class XTPBroker(Broker):
             return True
         if not XTP_AVAILABLE:
             logger.warning("XTP SDK 未安装，无法连接 XTP 网关，降级为模拟模式")
-            self._connected = False
             return False
 
         try:
@@ -146,23 +153,52 @@ class XTPBroker(Broker):
             # 启动连接
             self._xtp_api.Init()
 
-            # 等待连接回调（最多 10 秒）
-            for _ in range(100):
-                if self._connected:
-                    break
+            # 等待 SPI OnFrontConnected 回调（最多 10 秒）
+            deadline = time.time() + self._config.connect_timeout
+            while time.time() < deadline:
+                if self._state in (GatewayState.CONNECTED, GatewayState.LOGGED_IN):
+                    return True
                 time.sleep(0.1)
 
-            if not self._connected:
-                logger.warning("XTP 连接超时")
-                return False
+            logger.warning("XTP 连接超时")
+            return False
 
-            # 登录
+        except Exception as e:
+            logger.warning("XTP 连接失败: %s，降级为模拟模式", e)
+            return False
+
+    def _do_disconnect(self) -> None:
+        """执行 XTP 断开连接
+
+        释放 SDK 资源并清理内部状态。
+        """
+        if self._xtp_api:
+            try:
+                self._xtp_api.Release()
+            except Exception as e:
+                logger.warning("XTP Release 异常: %s", e)
+            finally:
+                self._xtp_api = None
+                self._spi = None
+
+    def _do_login(self) -> bool:
+        """执行 XTP 登录认证
+
+        Returns:
+            True 登录成功（session_id > 0），False 登录失败
+        """
+        if self._xtp_api is not None and not hasattr(self._xtp_api, 'Login'):
+            # Mock SDK 模式，已在 __init__ 中设为 LOGGED_IN
+            return True
+        if not self._xtp_api:
+            return False
+
+        try:
             self._session_id = self._xtp_api.Login(
                 self._user, self._password, self._app_id
             )
 
             if self._session_id > 0:
-                self._logged_in = True
                 logger.info(
                     "XTP 登录成功: user=%s, session_id=%s, client_id=%s",
                     self._user, self._session_id, self._client_id,
@@ -170,73 +206,55 @@ class XTPBroker(Broker):
                 return True
             else:
                 logger.warning("XTP 登录失败: session_id=%s", self._session_id)
-                self._connected = False
                 return False
 
         except Exception as e:
-            logger.warning("XTP 连接失败: %s，降级为模拟模式", e)
-            self._connected = False
+            logger.warning("XTP 登录异常: %s", e)
             return False
 
-    def disconnect(self) -> None:
-        """断开 XTP 连接"""
-        if self._xtp_api and self._logged_in:
+    def _do_heartbeat(self) -> None:
+        """XTP 心跳保活
+
+        XTP 没有独立的心跳接口，通过查询资产（QueryAsset）实现心跳。
+        """
+        if self._xtp_api and hasattr(self._xtp_api, 'QueryAsset'):
             try:
-                self._xtp_api.Logout(self._session_id)
-                self._xtp_api.Release()
-                self._logged_in = False
-                self._connected = False
-                logger.info("XTP 已断开连接: user=%s", self._user)
+                self._xtp_api.QueryAsset(self._session_id)
             except Exception as e:
-                logger.warning("XTP 断开连接异常: %s", e)
-            finally:
-                self._xtp_api = None
-                self._spi = None
+                logger.warning("XTP 心跳（QueryAsset）异常: %s", e)
 
-    @property
-    def connected(self) -> bool:
-        return self._connected and self._logged_in
+    # ── 可选方法覆盖 ─────────────────────────────────────────────────
 
-    def place_order(self, order: Order, bar: BarData) -> Optional[TradeData]:
+    def _do_place_order(self, order: Order) -> Optional[tuple]:
         """通过 XTP 下单
 
         将 Order 模型转换为 XTP 格式并提交。
-        如 XTP 未连接，降级为模拟模式执行。
+        包含 A 股 100 股整数倍校验。
+
+        Args:
+            order: 订单对象
+
+        Returns:
+            (xtp_order_id_str: str, True) 成功
+            (xtp_order_id_str: str, False) 失败
         """
         # A 股 100 股整数倍校验
         if order.quantity % 100 != 0:
-            order.update_status(OrderStatus.ORDER_REJECTED.value)
-            self._log_order(order, "REJECTED", "quantity not multiple of 100")
-            return None
+            return (f"0", False)
 
-        if not self.connected:
-            # 降级为模拟模式
-            logger.warning("XTP 未连接，订单 %s 以模拟模式执行", order.order_id)
-            order.update_status(OrderStatus.ORDER_SUBMITTED.value)
-            trade = TradeData(
-                trade_id=f"{order.order_id}_sim",
-                order_id=order.order_id,
-                symbol=order.symbol,
-                side=order.side.value,
-                price=order.price,
-                quantity=order.quantity,
-            )
-            self._log_order(order, "SIMULATED", "XTP not connected, simulated execution")
-            return trade
+        # XTP 侧单方向映射
+        side = self.XTP_SIDE_BUY if order.side == OrderSide.BUY else self.XTP_SIDE_SELL
 
+        # XTP 订单类型映射
+        if order.order_type == OrderType.LIMIT:
+            price_type = self.XTP_PRICE_LIMIT
+        elif order.order_type == OrderType.MARKET:
+            price_type = self.XTP_PRICE_MARKET
+        else:
+            price_type = self.XTP_PRICE_BEST5_OR_CANCEL
+
+        # 构建 XTP 订单请求
         try:
-            # XTP 侧单方向映射
-            side = self.XTP_SIDE_BUY if order.side == OrderSide.BUY else self.XTP_SIDE_SELL
-
-            # XTP 订单类型映射
-            if order.order_type == OrderType.LIMIT:
-                price_type = self.XTP_PRICE_LIMIT
-            elif order.order_type == OrderType.MARKET:
-                price_type = self.XTP_PRICE_MARKET
-            else:
-                price_type = self.XTP_PRICE_BEST5_OR_CANCEL
-
-            # 构建 XTP 订单请求
             if self._xtp_api is not None and hasattr(self._xtp_api, 'MockXTPOrderInsertInfo'):
                 req = self._xtp_api.MockXTPOrderInsertInfo()
             else:
@@ -246,79 +264,70 @@ class XTPBroker(Broker):
             req.price_type = price_type
             req.quantity = int(order.quantity)
             req.price = float(order.price)
+        except Exception as e:
+            logger.warning("构建 XTP 订单请求失败: %s", e)
+            return (str(0), False)
 
-            # 提交订单
+        # 提交订单
+        try:
             if self._xtp_api is not None and hasattr(self._xtp_api, 'InsertOrder'):
                 # Mock SDK，调用 InsertOrder
                 xtp_order_id = self._xtp_api.InsertOrder(req, self._session_id)
             else:
-                # 降级为模拟模式
-                xtp_order_id = 12345
+                # 降级：返回失败
+                xtp_order_id = -1
 
             if xtp_order_id > 0:
-                # 下单成功
+                # 下单成功，记录 xtp_order_id -> order_id 映射
                 with self._lock:
                     self._xtp_order_map[xtp_order_id] = order.order_id
-                    self._open_orders[order.order_id] = order
-
-                order.update_status(OrderStatus.ORDER_SUBMITTED.value)
-                self._log_order(
-                    order, "SUBMITTED",
-                    f"XTP order submitted, xtp_order_id={xtp_order_id}"
-                )
-
-                return TradeData(
-                    trade_id=f"{order.order_id}_submitted",
-                    order_id=order.order_id,
-                    symbol=order.symbol,
-                    side=order.side.value,
-                    price=order.price,
-                    quantity=order.quantity,
-                )
+                return (str(xtp_order_id), True)
             else:
-                # 下单失败
-                order.update_status(OrderStatus.ORDER_REJECTED.value)
-                self._log_order(order, "REJECTED", f"XTP InsertOrder failed, xtp_order_id={xtp_order_id}")
-                return None
+                return (str(xtp_order_id), False)
 
         except Exception as e:
-            order.update_status(OrderStatus.ORDER_REJECTED.value)
-            self._log_order(order, "REJECTED", str(e))
-            return None
+            logger.warning("XTP InsertOrder 异常: %s", e)
+            return (str(0), False)
 
-    def cancel_order(self, order: Order) -> bool:
-        """通过 XTP 撤单"""
-        if order.status in (EventType.ORDER_PENDING.value, EventType.ORDER_SUBMITTED.value, "QUEUED"):
-            order.update_status(OrderStatus.ORDER_CANCELLED.value)
-            self._open_orders.pop(order.order_id, None)
+    def _do_cancel_order(self, order: Order) -> bool:
+        """通过 XTP 撤单
 
-            if self.connected and self._xtp_api:
-                try:
-                    # 查找 XTP 订单 ID
-                    xtp_order_id = None
-                    with self._lock:
-                        for xid, oid in self._xtp_order_map.items():
-                            if oid == order.order_id:
-                                xtp_order_id = xid
-                                break
+        Args:
+            order: 要撤销的订单
 
-                    if xtp_order_id is not None:
-                        self._xtp_api.CancelOrder(xtp_order_id, self._session_id)
-                except Exception as e:
-                    logger.warning("XTP 撤单异常: %s", e)
+        Returns:
+            True 撤单请求已发送，False 撤单失败
+        """
+        if not self._xtp_api:
+            return False
 
-            self._log_order(order, "CANCELLED", "user cancel request")
-            return True
-        return False
+        try:
+            # 查找 XTP 订单 ID
+            xtp_order_id = None
+            with self._lock:
+                for xid, oid in self._xtp_order_map.items():
+                    if oid == order.order_id:
+                        xtp_order_id = xid
+                        break
 
-    def get_positions(self, portfolio=None) -> Dict[str, Any]:
+            if xtp_order_id is not None:
+                self._xtp_api.CancelOrder(xtp_order_id, self._session_id)
+                return True
+            else:
+                logger.warning("未找到订单 %s 对应的 XTP 订单 ID", order.order_id)
+                return False
+
+        except Exception as e:
+            logger.warning("XTP 撤单异常: %s", e)
+            return False
+
+    def _do_query_positions(self) -> dict:
         """查询 XTP 持仓
 
         Returns:
             持仓字典 {symbol: {"quantity": int, "price": float, ...}}
-            如 XTP 未连接，返回空字典
         """
-        if self.connected and self._xtp_api:
+        if self._xtp_api and hasattr(self._xtp_api, 'QueryPositions'):
             try:
                 positions = self._xtp_api.QueryPositions(self._session_id)
                 result = {}
@@ -338,14 +347,13 @@ class XTPBroker(Broker):
                 return self._positions_cache
         return {}
 
-    def get_balance(self, account=None) -> Dict[str, Any]:
+    def _do_query_balance(self) -> dict:
         """查询 XTP 账户余额
 
         Returns:
             余额字典 {"live": True, "api": "xtp", "cash": float, ...}
-            如 XTP 未连接，返回默认值
         """
-        if self.connected and self._xtp_api:
+        if self._xtp_api and hasattr(self._xtp_api, 'QueryAsset'):
             try:
                 asset = self._xtp_api.QueryAsset(self._session_id)
                 result = {
@@ -365,71 +373,120 @@ class XTPBroker(Broker):
                 return self._asset_cache
         return {"live": True, "api": "xtp", "cash": 0, "frozen": 0, "equity": 0}
 
-    def get_history(self, symbol: str, bar_count: int, data_feeds: list = None) -> List[BarData]:
-        """获取历史 K 线 — XTP 不提供历史数据接口，返回空列表"""
-        return []
+    def _do_query_orders(self) -> list:
+        """通过 XTP SDK 查询挂单
 
-    def _log_order(self, order: Order, status: str, reason: str = "") -> OrderAuditLog:
-        entry = OrderAuditLog(
-            order_id=order.order_id,
-            symbol=order.symbol,
-            side=order.side.value,
-            price=order.price,
-            quantity=order.quantity,
-            status=status,
-            timestamp=datetime.now(),
-            reason=reason,
-        )
-        self._order_log.append(entry)
-        return entry
+        Returns:
+            订单状态列表，每项包含 order_id 和 status 字段
+        """
+        if not self._xtp_api or not hasattr(self._xtp_api, 'QueryOrders'):
+            return []
 
-    @property
-    def order_audit_log(self) -> List[OrderAuditLog]:
-        return self._order_log.copy()
+        try:
+            orders = self._xtp_api.QueryOrders(self._session_id)
+            result = []
+            for o in orders:
+                # 将 XTP 订单 ID 映射回内部 order_id
+                xtp_id = o.order_xtp_id
+                with self._lock:
+                    internal_id = self._xtp_order_map.get(xtp_id)
+
+                if internal_id:
+                    # XTP 订单状态映射
+                    status_map = {
+                        1: OrderStatus.ORDER_SUBMITTED.value,   # XTP_ORDER_STATUS_INIT
+                        2: OrderStatus.ORDER_FILLED.value,      # XTP_ORDER_STATUS_ALLTRADED
+                        3: OrderStatus.ORDER_PARTIAL_FILL.value,  # XTP_ORDER_STATUS_PARTTRADED
+                        4: OrderStatus.ORDER_CANCELLED.value,    # XTP_ORDER_STATUS_CANCELED
+                        5: OrderStatus.ORDER_REJECTED.value,     # XTP_ORDER_STATUS_REJECTED
+                        6: OrderStatus.ORDER_PARTIAL_FILL.value,  # XTP_ORDER_STATUS_PARTTRADEDPARTCANCELED
+                    }
+                    xtp_status = getattr(o, 'order_status', 0)
+                    result.append({
+                        "order_id": internal_id,
+                        "status": status_map.get(xtp_status, OrderStatus.ORDER_SUBMITTED.value),
+                        "xtp_status": xtp_status,
+                    })
+            return result
+        except Exception as e:
+            logger.warning("XTP 查询挂单失败: %s", e)
+            return []
+
+    def _do_logout(self) -> None:
+        """执行 XTP 登出"""
+        if self._xtp_api and hasattr(self._xtp_api, 'Logout'):
+            try:
+                self._xtp_api.Logout(self._session_id)
+                logger.info("XTP 已登出: user=%s", self._user)
+            except Exception as e:
+                logger.warning("XTP 登出异常: %s", e)
+
+    # ── 工具方法 ────────────────────────────────────────────────────
 
     @staticmethod
     def _parse_addr(addr: str) -> tuple:
-        """解析 ip:port 格式的服务器地址"""
+        """解析 ip:port 格式的服务器地址
+
+        Args:
+            addr: 服务器地址字符串
+
+        Returns:
+            (ip: str, port: str) 元组
+        """
         parts = addr.rsplit(":", 1)
         if len(parts) == 2:
             return parts[0], parts[1]
         return addr, "6002"  # XTP 默认端口
 
+    def __repr__(self) -> str:
+        return (
+            f"XTPBroker(state={self._state.value}, "
+            f"user={self._user}, "
+            f"session={self._session_id}, "
+            f"orders={len(self._open_orders)})"
+        )
+
 
 class _XTPTaderSpi:
-    """XTP 交易回调 SPI — 处理异步回调事件"""
+    """XTP 交易回调 SPI — 处理异步回调事件
+
+    通过 BaseGateway 的事件系统（emit_event）将 XTP 异步回调
+    转换为统一的 GatewayEvent 事件，交由上层处理。
+    """
 
     def __init__(self, broker: XTPBroker):
         self._broker = broker
 
     def OnFrontConnected(self):
-        """连接成功回调"""
-        self._broker._connected = True
+        """连接成功回调 — 转换状态为 CONNECTED"""
+        # _do_connect 中通过轮询 self._state 判断连接成功，
+        # 此处由 BaseGateway 的 connect() 方法负责状态转换。
         logger.info("XTP 前置连接成功")
 
     def OnFrontDisconnected(self, reason: int):
-        """连接断开回调"""
-        self._broker._connected = False
-        self._broker._logged_in = False
+        """连接断开回调 — 触发 BaseGateway 错误状态"""
         logger.warning("XTP 前置连接断开: reason=%s", reason)
+        self._broker.emit_event(GatewayEvent.DISCONNECTED, {"reason": reason})
 
     def OnLogin(self, session_id: int, error_info: Any):
         """登录回调"""
         if error_info and hasattr(error_info, 'error_id') and error_info.error_id != 0:
             logger.error("XTP 登录失败: %s", error_info.error_msg)
-            self._broker._logged_in = False
+            self._broker.emit_event(
+                GatewayEvent.LOGIN_FAILED,
+                {"reason": error_info.error_msg},
+            )
         else:
-            self._broker._logged_in = True
             self._broker._session_id = session_id
             logger.info("XTP 登录成功: session_id=%s", session_id)
 
     def OnLogout(self, session_id: int, error_info: Any):
         """登出回调"""
-        self._broker._logged_in = False
         logger.info("XTP 已登出: session_id=%s", session_id)
+        self._broker.emit_event(GatewayEvent.DISCONNECTED, {"reason": "logout"})
 
     def OnOrderEvent(self, order_info: Any, error_info: Any, session_id: int):
-        """订单状态变更回调"""
+        """订单状态变更回调 — 通过 BaseGateway 事件系统分发"""
         try:
             xtp_order_id = order_info.order_xtp_id
             with self._broker._lock:
@@ -438,64 +495,84 @@ class _XTPTaderSpi:
             if not order_id:
                 return
 
-            order = self._broker._open_orders.get(order_id)
-            if not order:
-                return
-
-            # 更新订单状态
+            # XTP 订单状态映射
             status_map = {
-                1: OrderStatus.ORDER_SUBMITTED.value,    # XTP_ORDER_STATUS_INIT
-                2: OrderStatus.ORDER_SUBMITTED.value,    # XTP_ORDER_STATUS_ALLTRADED
-                3: OrderStatus.ORDER_PARTIAL_FILL.value,      # XTP_ORDER_STATUS_PARTTRADED
-                4: OrderStatus.ORDER_CANCELLED.value,    # XTP_ORDER_STATUS_CANCELED
-                5: OrderStatus.ORDER_REJECTED.value,     # XTP_ORDER_STATUS_REJECTED
-                6: OrderStatus.ORDER_PARTIAL_FILL.value,      # XTP_ORDER_STATUS_PARTTRADEDPARTCANCELED
+                1: (OrderStatus.ORDER_SUBMITTED.value, GatewayEvent.ORDER_SUBMITTED),
+                2: (OrderStatus.ORDER_FILLED.value, GatewayEvent.ORDER_FILLED),
+                3: (OrderStatus.ORDER_PARTIAL_FILL.value, GatewayEvent.ORDER_PARTIAL_FILL),
+                4: (OrderStatus.ORDER_CANCELLED.value, GatewayEvent.ORDER_CANCELLED),
+                5: (OrderStatus.ORDER_REJECTED.value, GatewayEvent.ORDER_REJECTED),
+                6: (OrderStatus.ORDER_PARTIAL_FILL.value, GatewayEvent.ORDER_PARTIAL_FILL),
             }
             xtp_status = getattr(order_info, 'order_status', 0)
-            new_status = status_map.get(xtp_status, OrderStatus.ORDER_SUBMITTED.value)
-            order.update_status(new_status)
+            mapped = status_map.get(xtp_status)
+            if not mapped:
+                logger.warning("未知 XTP 订单状态: %s", xtp_status)
+                return
 
-            self._broker._log_order(
-                order, new_status,
-                f"XTP order event, xtp_status={xtp_status}"
-            )
+            new_status, event_type = mapped
 
-            # 如果全部成交或撤单，从挂单中移除
-            if new_status in (OrderStatus.ORDER_FILLED.value, OrderStatus.ORDER_CANCELLED.value, OrderStatus.ORDER_REJECTED.value):
-                self._broker._open_orders.pop(order_id, None)
+            # 更新本地缓存中的订单状态
+            local_order = self._broker._open_orders.get(order_id)
+            if local_order:
+                local_order.update_status(new_status)
+
+                # 终态事件：从挂单列表移除
+                if event_type in (
+                    GatewayEvent.ORDER_FILLED,
+                    GatewayEvent.ORDER_CANCELLED,
+                    GatewayEvent.ORDER_REJECTED,
+                ):
+                    self._broker._open_orders.pop(order_id, None)
+
+            # 通过 BaseGateway 事件系统通知上层
+            self._broker.emit_event(event_type, {
+                "order_id": order_id,
+                "xtp_order_id": xtp_order_id,
+                "xtp_status": xtp_status,
+            })
 
         except Exception as e:
             logger.error("XTP OnOrderEvent 处理异常: %s", e)
 
     def OnTradeEvent(self, trade_info: Any, session_id: int):
-        """成交回调"""
+        """成交回调 — 通过 BaseGateway TRADE 事件通知"""
         try:
             xtp_order_id = trade_info.order_xtp_id
             with self._broker._lock:
                 order_id = self._broker._xtp_order_map.get(xtp_order_id)
 
-            if order_id:
-                self._broker._trade_results[order_id] = {
-                    "trade_id": trade_info.exec_id,
-                    "price": trade_info.price,
-                    "quantity": trade_info.quantity,
-                    "trade_time": trade_info.trade_time,
-                }
-                logger.info(
-                    "XTP 成交: order_id=%s, price=%.2f, qty=%d",
-                    order_id, trade_info.price, trade_info.quantity,
-                )
+            if not order_id:
+                return
+
+            trade_data = {
+                "trade_id": trade_info.exec_id,
+                "order_id": order_id,
+                "price": trade_info.price,
+                "quantity": trade_info.quantity,
+                "trade_time": trade_info.trade_time,
+            }
+
+            self._broker.emit_event(GatewayEvent.TRADE, trade_data)
+            logger.info(
+                "XTP 成交: order_id=%s, price=%.2f, qty=%d",
+                order_id, trade_info.price, trade_info.quantity,
+            )
+
         except Exception as e:
             logger.error("XTP OnTradeEvent 处理异常: %s", e)
 
     def OnCancelOrderError(self, cancel_info: Any, error_info: Any, session_id: int):
         """撤单失败回调"""
         logger.warning("XTP 撤单失败: %s", getattr(error_info, 'error_msg', str(error_info)))
+        self._broker.emit_event(GatewayEvent.ERROR, {
+            "reason": f"cancel failed: {getattr(error_info, 'error_msg', str(error_info))}",
+        })
 
     def OnQueryPosition(self, position_info: Any, error_info: Any, request_id: int, is_last: bool):
-        """持仓查询回调"""
-        pass  # 已在 get_positions 中同步处理
+        """持仓查询回调（同步模式，忽略异步回调）"""
+        pass
 
     def OnQueryAsset(self, asset_info: Any, error_info: Any, request_id: int, is_last: bool):
-        """资产查询回调"""
-        pass  # 已在 get_balance 中同步处理
+        """资产查询回调（同步模式，忽略异步回调）"""
+        pass
