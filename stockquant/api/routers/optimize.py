@@ -10,8 +10,10 @@ import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from stockquant.api.deps import get_current_user
+from stockquant.api.schemas import UserToken
 from stockquant.api.websocket import ws_manager
 from stockquant.api.routers.settings import build_data_feed
 from stockquant.persistence.persistent_store import OptimizeTaskStore
@@ -221,7 +223,10 @@ async def _run_optimize(task_id: str, payload: dict) -> None:
 # ====================================================================
 
 @router.post("/backtest/optimize", summary="提交参数优化任务")
-async def submit_optimize(payload: dict) -> Dict[str, Any]:
+async def submit_optimize(
+    payload: dict,
+    _user: UserToken = Depends(get_current_user),
+) -> Dict[str, Any]:
     """提交参数优化任务，异步执行 Cerebro.optstrategy()"""
     task_id = f"OPT-{uuid.uuid4().hex[:8].upper()}"
     now = datetime.now().isoformat()
@@ -253,7 +258,10 @@ async def submit_optimize(payload: dict) -> Dict[str, Any]:
 
 
 @router.get("/backtest/optimize/{task_id}", summary="查询优化状态/结果")
-async def get_optimize_status(task_id: str):
+async def get_optimize_status(
+    task_id: str,
+    _user: UserToken = Depends(get_current_user),
+):
     """查询参数优化任务状态和结果"""
     task = _optimize_tasks.get(task_id)
     if not task:

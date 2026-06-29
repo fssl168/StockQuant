@@ -194,8 +194,8 @@ def chat_sse(payload: ChatRequest, _user: UserToken = Depends(get_current_user))
     try:
         from stockquant.config import get_config
         db_url = get_config().database.url
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("加载数据库配置失败: %s", e)
 
     def event_generator():
         reply = ""
@@ -205,8 +205,8 @@ def chat_sse(payload: ChatRequest, _user: UserToken = Depends(get_current_user))
             _repo = Repository.instance()
             if db_url:
                 _repo.save_chat_message(engine_url=db_url, conversation_id=conversation_id, role="user", content=message)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("保存用户消息失败: %s", e)
 
         # 优先使用 AIService
         ai_svc = _ai_service()
@@ -242,8 +242,8 @@ def chat_sse(payload: ChatRequest, _user: UserToken = Depends(get_current_user))
                 _repo = Repository.instance()
                 if db_url:
                     _repo.save_chat_message(engine_url=db_url, conversation_id=conversation_id, role="assistant", content=reply)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("保存助手消息失败: %s", e)
 
         yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
 
@@ -288,13 +288,13 @@ def chat_complete(payload: ChatRequest, _user: UserToken = Depends(get_current_u
         try:
             from stockquant.config import get_config
             db_url = get_config().database.url
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("加载数据库配置失败: %s", e)
         if db_url:
             _repo.save_chat_message(engine_url=db_url, conversation_id=conversation_id, role="user", content=message)
             _repo.save_chat_message(engine_url=db_url, conversation_id=conversation_id, role="assistant", content=reply)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("保存对话消息失败: %s", e)
 
     # 获取历史
     history = []
@@ -304,8 +304,8 @@ def chat_complete(payload: ChatRequest, _user: UserToken = Depends(get_current_u
             _repo = Repository.instance()
             raw = _repo.get_chat_messages(db_url, conversation_id, limit=10)
             history = raw
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("获取对话历史失败: %s", e)
     elif ai_svc:
         history = ai_svc.get_history(limit=10)
 
@@ -326,8 +326,8 @@ def list_conversations() -> Dict[str, Any]:
         try:
             from stockquant.config import get_config
             db_url = get_config().database.url
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("加载数据库配置失败: %s", e)
         if db_url:
             sessions = _repo.list_chat_sessions(engine_url=db_url)
             return {"conversations": sessions}
@@ -346,8 +346,8 @@ def get_conversation(conversation_id: str, limit: int = 50) -> Dict[str, Any]:
         try:
             from stockquant.config import get_config
             db_url = get_config().database.url
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("加载数据库配置失败: %s", e)
         if db_url:
             messages = _repo.get_chat_messages(db_url, conversation_id, limit=limit)
             return {"conversationId": conversation_id, "messages": messages}
@@ -369,8 +369,8 @@ def save_message(
         try:
             from stockquant.config import get_config
             db_url = get_config().database.url
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("加载数据库配置失败: %s", e)
         if db_url:
             from stockquant.persistence.repository_v2 import Repository
             _repo = Repository.instance()
@@ -394,8 +394,8 @@ def clear_conversation(conversation_id: str) -> Dict[str, Any]:
         try:
             from stockquant.config import get_config
             db_url = get_config().database.url
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("加载数据库配置失败: %s", e)
         if db_url:
             from stockquant.persistence.repository_v2 import Repository
             _repo = Repository.instance()
