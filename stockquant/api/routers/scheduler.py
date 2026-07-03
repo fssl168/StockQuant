@@ -3,7 +3,7 @@
 
 import logging
 import os
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -71,8 +71,8 @@ class TaskCreate(BaseModel):
 # 端点
 # ====================================================================
 
-@router.get("/scheduler/tasks", summary="列出所有定时任务")
-async def list_tasks(_user: UserToken = Depends(get_current_user)) -> Dict[str, Any]:
+@router.get("/scheduler/tasks", summary="列出所有定时任务", response_model=List[Dict[str, Any]])
+async def list_tasks(_user: UserToken = Depends(get_current_user)) -> List[Dict[str, Any]]:
     """获取所有已注册的定时任务"""
     sched = _get_scheduler()
     tasks = []

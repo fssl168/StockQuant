@@ -22,3 +22,6 @@ stockquant_config.yaml
 web/.env.production
 web/tsconfig.tsbuildinfo
 node_modules/
+test_*.py
+fetch_*.py
+save_*.py

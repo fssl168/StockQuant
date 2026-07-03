@@ -22,6 +22,12 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
         ws: true,
+        configure: (proxy, _options) => {
+          proxy.on('error', (err) => console.log('[ws proxy error]', err))
+          proxy.on('connect', (req, socket, _head) => {
+            console.log('[ws proxy] Proxying WebSocket connection:', req.url)
+          })
+        },
       },
     },
   },

@@ -255,7 +255,7 @@ async def delete_backtest(task_id: str, _user: UserToken = Depends(get_trader_us
 @router.get("/backtest/{task_id}/report", summary="导出回测报告")
 async def get_backtest_report(
     task_id: str,
-    format: str = Query("html", regex="^(html|json|pdf)$", description="报告格式: html|json|pdf"),
+    format: str = Query("html", pattern="^(html|json|pdf)$", description="报告格式: html|json|pdf"),
 ):
     """生成回测报告（HTML / JSON / PDF）"""
     task = _tasks.get(task_id)

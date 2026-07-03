@@ -177,7 +177,7 @@ export default function Settings() {
         backendValues['system'] = systemValues
       }
 
-      await client.post('/api/settings', backendValues)
+      await client.post('/api/settings/save', backendValues)
       setInitialValues(JSON.parse(JSON.stringify(values)))
       setToast({ type: 'success', message: '设置已保存，部分配置重启后生效' })
       message.success('设置已保存')

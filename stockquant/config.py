@@ -264,6 +264,9 @@ def _load_settings() -> Settings:
         db_url = os.getenv("DATABASE_URL")
         if db_url:
             settings.database.url = db_url
+        else:
+            # 默认降级到 SQLite（PostgreSQL 未配置时的降级策略）
+            settings.database.url = "sqlite:///./stockquant.db"
 
         jwt_secret = os.getenv("JWT_SECRET_KEY")
         if jwt_secret:

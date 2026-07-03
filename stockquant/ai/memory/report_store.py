@@ -37,50 +37,34 @@ def _get_report_table(base):
     使用函数封装延迟导入，避免循环依赖。
     """
     from sqlalchemy import (
-        Column, Float, Index, Integer, String, Text, UniqueConstraint,
+        Column, DateTime, Float, Index, Integer, String, Text, UniqueConstraint,
+        func,
     )
-    from sqlalchemy.orm import Mapped, mapped_column
 
     class ReportModel(base):
         """AI 报告模型 -- 日报/月报/年报统一存储"""
         __tablename__ = _REPORT_TABLE_NAME
 
-        id: Mapped[str] = mapped_column(String(100), primary_key=True)
-        user_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-        report_type: Mapped[str] = mapped_column(
-            String(20), nullable=False, index=True,
-        )  # daily | monthly | annual
-        report_date: Mapped[str] = mapped_column(
-            String(10), nullable=False, index=True,
-        )  # YYYY-MM-DD
-        report_period_start: Mapped[Optional[str]] = mapped_column(
-            String(10), nullable=True,
-        )
-        report_period_end: Mapped[Optional[str]] = mapped_column(
-            String(10), nullable=True,
-        )
-        market_review: Mapped[str] = mapped_column(Text, nullable=False, default="")
-        trading_record: Mapped[str] = mapped_column(Text, nullable=False, default="")
-        strategy_performance: Mapped[str] = mapped_column(
-            Text, nullable=False, default="",
-        )
-        ai_insights: Mapped[str] = mapped_column(Text, nullable=False, default="")
-        full_content: Mapped[str] = mapped_column(Text, nullable=False, default="")
-        summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
-        confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.8)
-        importance_score: Mapped[float] = mapped_column(
-            Float, nullable=False, default=0.5,
-        )
-        metrics_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
-        metadata_json: Mapped[str] = mapped_column(
-            Text, nullable=False, default="{}",
-        )
-        created_at: Mapped[str] = mapped_column(
-            String(30), nullable=False,
-        )
-        last_accessed_at: Mapped[Optional[str]] = mapped_column(
-            String(30), nullable=True,
-        )
+        __mapper_args__ = {"eager_defaults": True}
+
+        id = Column(String(100), primary_key=True)
+        user_id = Column(String(50), nullable=False, index=True)
+        report_type = Column(String(20), nullable=False, index=True)
+        report_date = Column(String(10), nullable=False, index=True)
+        report_period_start = Column(String(10), nullable=True)
+        report_period_end = Column(String(10), nullable=True)
+        market_review = Column(Text, nullable=False, server_default="")
+        trading_record = Column(Text, nullable=False, server_default="")
+        strategy_performance = Column(Text, nullable=False, server_default="")
+        ai_insights = Column(Text, nullable=False, server_default="")
+        full_content = Column(Text, nullable=False, server_default="")
+        summary = Column(Text, nullable=False, server_default="")
+        confidence = Column(Float, nullable=False, server_default="0.8")
+        importance_score = Column(Float, nullable=False, server_default="0.5")
+        metrics_json = Column(Text, nullable=False, server_default="{}")
+        metadata_json = Column(Text, nullable=False, server_default="{}")
+        created_at = Column(String(30), nullable=False, server_default=func.now())
+        last_accessed_at = Column(String(30), nullable=True)
         embedding = Column(_ReportVectorClass, nullable=True)
 
         __table_args__ = (
@@ -237,7 +221,7 @@ class ReportStore:
         # 创建表（如果不存在）
         async with self._engine.begin() as conn:
             try:
-                from sqlalchemy.ext.declarative import DeclarativeBase
+                from sqlalchemy.orm import DeclarativeBase
 
                 class _ReportBase(DeclarativeBase):
                     pass
@@ -455,7 +439,7 @@ class ReportStore:
 
     def _get_report_model(self):
         """获取 ReportModel 类（延迟导入，避免在非 PG 模式下触发依赖）"""
-        from sqlalchemy.ext.declarative import DeclarativeBase
+        from sqlalchemy.orm import DeclarativeBase
 
         class _ReportBase(DeclarativeBase):
             pass
